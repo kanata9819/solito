@@ -1,9 +1,10 @@
 use portable_pty::{Child, CommandBuilder, ExitStatus, MasterPty, PtyPair, PtySize, SlavePty};
 use std::borrow::Cow;
 use std::io::{Read, Write};
-use std::sync::mpsc::Receiver;
 use std::sync::mpsc::channel;
+use std::sync::mpsc::{Receiver, Sender};
 use std::thread::{self, JoinHandle};
+use std::time;
 
 // mpsc pair
 type TReader = Box<dyn Read + Send>;
@@ -14,37 +15,61 @@ type TSlave = Box<dyn SlavePty + Send>;
 // spawned child
 type TChild = Box<dyn Child + Send + Sync>;
 
-pub struct Runtime {}
+pub struct Runtime {
+    child: TChild,
+    input_tx: Sender<String>,
+    input_rx: Receiver<String>,
+    reader: TReader,
+    writer: TWriter,
+}
+
 impl Runtime {
-    pub fn run_session(mut child: TChild, master: TMaster) {
-        let (sender, receiver) = channel::<String>();
-        let (reader, writer) = Self::get_reader_and_writer(master);
+    pub fn new() -> Self {
+        let pty_pair: PtyPair = Self::pty_pair();
+        let child: TChild = Self::spawn_command(pty_pair.slave);
+        let (input_tx, input_rx) = channel::<String>();
+        let (reader, writer) = Self::get_reader_and_writer(pty_pair.master);
 
+        Self {
+            child,
+            input_tx,
+            input_rx,
+            reader,
+            writer,
+        }
+    }
+
+    pub fn run_session(mut self) {
         // Thread to read output from the PTY.
-        let _ = Self::spawn_output_thread(reader);
-
+        Self::spawn_reading_thread(self.reader);
         // Thread to write input into the PTY.
-        let tx_writer: JoinHandle<()> = Self::spawn_input_thread(receiver, writer);
+        Self::spawn_writing_thread(self.input_rx, self.writer);
 
         println!("You can now type commands for Bash (type 'exit' to quit):");
 
         // Main thread sends user input to the writer thread.
         loop {
             let mut input: String = String::new();
-            std::io::stdin().read_line(&mut input).unwrap();
+            if let Err(err) = std::io::stdin().read_line(&mut input) {
+                eprintln!("read line error: {}", err);
+            };
 
             if input.trim() == "exit" {
                 break;
+            } else if input.is_empty() {
+                continue;
             }
 
-            sender.send(input).unwrap();
+            if let Err(err) = self.input_tx.send(input) {
+                eprintln!("send error occured: {}", err);
+                break;
+            };
         }
 
-        drop(sender);
-        tx_writer.join().unwrap();
+        drop(self.input_tx);
 
         println!("Waiting for Bash to exit...");
-        let status: ExitStatus = child.wait().unwrap();
+        let status: ExitStatus = self.child.wait().unwrap();
         println!("Bash exited with status: {:?}", status);
     }
 
@@ -60,7 +85,7 @@ impl Runtime {
     }
 
     pub fn spawn_command(slave: TSlave) -> TChild {
-        let cmd: CommandBuilder = CommandBuilder::new("nu");
+        let cmd: CommandBuilder = CommandBuilder::new("cmd");
         let slave: TSlave = slave;
         let child: TChild = slave.spawn_command(cmd).expect("failed to spawn command");
 
@@ -74,14 +99,23 @@ impl Runtime {
         (reader, writer)
     }
 
-    fn spawn_output_thread(mut reader: TReader) -> JoinHandle<()> {
+    fn spawn_reading_thread(mut reader: TReader) -> JoinHandle<()> {
         thread::spawn(move || {
             let mut buffer: [u8; 1024] = [0u8; 1024];
+            let mut retry_count: u32 = 0;
             loop {
                 match reader.read(&mut buffer) {
                     Ok(0) => {
-                        println!("EOF");
-                        break;
+                        // Waiting 2s
+                        if retry_count == 100 {
+                            println!("EOF");
+                            break;
+                        }
+
+                        thread::sleep(time::Duration::from_millis(20));
+                        retry_count += 1;
+                        println!("retrying... count: {}", retry_count);
+                        continue;
                     }
                     Ok(n) => {
                         let output: Cow<'_, str> = String::from_utf8_lossy(&buffer[..n]);
@@ -95,13 +129,15 @@ impl Runtime {
         })
     }
 
-    fn spawn_input_thread(receiver: Receiver<String>, mut writer: TWriter) -> JoinHandle<()> {
+    fn spawn_writing_thread(receiver: Receiver<String>, mut writer: TWriter) -> JoinHandle<()> {
         thread::spawn(move || {
-            for input in receiver.iter() {
-                if let Err(err) = writer.write_all(input.as_bytes()) {
+            while let Ok(bytes) = receiver.recv() {
+                if let Err(err) = writer.write_all(&bytes.as_bytes()) {
                     eprintln!("Error writing to PTY: {}", err);
                     break;
                 }
+
+                writer.flush().expect("flush error");
             }
         })
     }

@@ -10,19 +10,28 @@ use winit::{
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let pty_pair = Runtime::pty_pair();
-    let child = Runtime::spawn_command(pty_pair.slave);
-    Runtime::run_session(child, pty_pair.master);
-    create_window()?;
+    run_session();
+
+    if let Err(err) = run_app() {
+        eprintln!("run app error occured: {}", err);
+    };
+
     Ok(())
 }
 
-fn create_window() -> Result<(), Box<dyn Error>> {
+fn run_app() -> Result<(), Box<dyn Error>> {
     let event_loop: EventLoop<()> = EventLoop::new()?;
     let mut hito = HitoApplication::new();
     event_loop.run_app(&mut hito)?;
 
     Ok(())
+}
+
+fn run_session() {
+    std::thread::spawn(move || {
+        let runtime: Runtime = Runtime::new();
+        runtime.run_session();
+    });
 }
 
 struct HitoApplication {
