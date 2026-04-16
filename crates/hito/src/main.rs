@@ -1,9 +1,9 @@
 mod app;
 mod session;
 
-use session::session::SessionRuntime;
+use session::runtime::SessionRuntime;
 use std::error::Error;
-use tracing::level_filters::LevelFilter;
+use tracing::{error, level_filters::LevelFilter};
 use winit::event_loop::EventLoop;
 
 use crate::app::core::HitoApplication;
@@ -25,7 +25,9 @@ fn init_tracing() {
 fn run_session() {
     std::thread::spawn(move || {
         let runtime: SessionRuntime = SessionRuntime::new();
-        runtime.run_session();
+        if let Err(err) = runtime.run_session() {
+            error!("run session failed: {}", err);
+        };
     });
 }
 
