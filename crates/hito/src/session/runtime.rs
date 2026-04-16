@@ -114,6 +114,7 @@ impl SessionRuntime {
                     }
                     Ok(n) => {
                         let output: Cow<'_, str> = String::from_utf8_lossy(&buffer[..n]);
+
                         info!("{}", output);
                     }
                     Err(err) => {

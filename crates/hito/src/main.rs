@@ -13,6 +13,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     run_session();
     run_app()?;
 
+    vte::Parser::new();
     Ok(())
 }
 
