@@ -19,8 +19,7 @@ pub struct Runtime {
     child: TChild,
     input_tx: Sender<String>,
     input_rx: Receiver<String>,
-    reader: TReader,
-    writer: TWriter,
+    master: TMaster,
 }
 
 impl Runtime {
@@ -28,22 +27,23 @@ impl Runtime {
         let pty_pair: PtyPair = Self::pty_pair();
         let child: TChild = Self::spawn_command(pty_pair.slave);
         let (input_tx, input_rx) = channel::<String>();
-        let (reader, writer) = Self::get_reader_and_writer(pty_pair.master);
 
         Self {
             child,
             input_tx,
             input_rx,
-            reader,
-            writer,
+            master: pty_pair.master,
         }
     }
 
     pub fn run_session(mut self) {
+        let reader: TReader = self.master.try_clone_reader().unwrap();
+        let writer: TWriter = self.master.take_writer().unwrap();
+
         // Thread to read output from the PTY.
-        Self::spawn_reading_thread(self.reader);
+        Self::spawn_reading_thread(reader);
         // Thread to write input into the PTY.
-        Self::spawn_writing_thread(self.input_rx, self.writer);
+        Self::spawn_writing_thread(self.input_rx, writer);
 
         println!("You can now type commands for Bash (type 'exit' to quit):");
 
@@ -92,13 +92,6 @@ impl Runtime {
         child
     }
 
-    fn get_reader_and_writer(master: TMaster) -> (TReader, TWriter) {
-        let reader: TReader = master.try_clone_reader().unwrap();
-        let writer: TWriter = master.take_writer().unwrap();
-
-        (reader, writer)
-    }
-
     fn spawn_reading_thread(mut reader: TReader) -> JoinHandle<()> {
         thread::spawn(move || {
             let mut buffer: [u8; 1024] = [0u8; 1024];
@@ -129,9 +122,9 @@ impl Runtime {
         })
     }
 
-    fn spawn_writing_thread(receiver: Receiver<String>, mut writer: TWriter) -> JoinHandle<()> {
+    fn spawn_writing_thread(input_rx: Receiver<String>, mut writer: TWriter) -> JoinHandle<()> {
         thread::spawn(move || {
-            while let Ok(bytes) = receiver.recv() {
+            while let Ok(bytes) = input_rx.recv() {
                 if let Err(err) = writer.write_all(&bytes.as_bytes()) {
                     eprintln!("Error writing to PTY: {}", err);
                     break;
