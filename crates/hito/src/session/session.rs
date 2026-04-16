@@ -15,14 +15,14 @@ type TSlave = Box<dyn SlavePty + Send>;
 // spawned child
 type TChild = Box<dyn Child + Send + Sync>;
 
-pub struct Runtime {
+pub struct SessionRuntime {
     child: TChild,
     input_tx: Sender<String>,
     input_rx: Receiver<String>,
     master: TMaster,
 }
 
-impl Runtime {
+impl SessionRuntime {
     pub fn new() -> Self {
         let pty_pair: PtyPair = Self::pty_pair();
         let child: TChild = Self::spawn_command(pty_pair.slave);

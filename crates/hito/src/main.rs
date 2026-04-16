@@ -1,8 +1,8 @@
-mod pty;
+mod session;
 
-use pty::runtime::Runtime;
+use session::session::SessionRuntime;
 use std::{collections::HashMap, error::Error};
-use tracing::error;
+use tracing::{error, level_filters::LevelFilter};
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
@@ -22,7 +22,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn init_tracing() {
-    tracing_subscriber::fmt().init();
+    tracing_subscriber::fmt()
+        .with_max_level(LevelFilter::INFO)
+        .init();
 }
 
 fn run_app() -> Result<(), Box<dyn Error>> {
@@ -35,7 +37,7 @@ fn run_app() -> Result<(), Box<dyn Error>> {
 
 fn run_session() {
     std::thread::spawn(move || {
-        let runtime: Runtime = Runtime::new();
+        let runtime: SessionRuntime = SessionRuntime::new();
         runtime.run_session();
     });
 }
