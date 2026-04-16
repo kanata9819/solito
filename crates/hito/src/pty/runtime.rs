@@ -85,7 +85,7 @@ impl Runtime {
     }
 
     pub fn spawn_command(slave: TSlave) -> TChild {
-        let cmd: CommandBuilder = CommandBuilder::new("cmd");
+        let cmd: CommandBuilder = CommandBuilder::new("nu");
         let slave: TSlave = slave;
         let child: TChild = slave.spawn_command(cmd).expect("failed to spawn command");
 
@@ -112,7 +112,7 @@ impl Runtime {
                     }
                     Ok(n) => {
                         let output: Cow<'_, str> = String::from_utf8_lossy(&buffer[..n]);
-                        println!("{}", output);
+                        println!("{:#?}", output);
                     }
                     Err(err) => {
                         eprintln!("error occured at reader.read() {}", err)
@@ -124,10 +124,19 @@ impl Runtime {
 
     fn spawn_writing_thread(input_rx: Receiver<String>, mut writer: TWriter) -> JoinHandle<()> {
         thread::spawn(move || {
-            while let Ok(bytes) = input_rx.recv() {
-                if let Err(err) = writer.write_all(&bytes.as_bytes()) {
+            // At first, the shell needs to know where cursor position is.
+            // so I send \x1b[1;1R, it means the cursor position is now x: 0 y:0.
+            if let Err(err) = writer.write_all(b"\x1b[1;1R") {
+                eprintln!("initial write was failed: {}", err);
+            };
+
+            // after responed to the shell, we can communicate with it to use commands.
+            while let Ok(str) = input_rx.recv() {
+                if let Err(err) = writer.write_all(&str.as_bytes()) {
                     eprintln!("Error writing to PTY: {}", err);
                     break;
+                } else {
+                    println!("wrote: {}", str);
                 }
 
                 writer.flush().expect("flush error");
