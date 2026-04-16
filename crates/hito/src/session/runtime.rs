@@ -64,7 +64,7 @@ impl SessionRuntime {
         true
     }
 
-    pub fn pty_pair() -> PtyPair {
+    fn pty_pair() -> PtyPair {
         portable_pty::native_pty_system()
             .openpty(PtySize {
                 rows: 24,
@@ -75,7 +75,7 @@ impl SessionRuntime {
             .expect("failed to create pty pair")
     }
 
-    pub fn spawn_command(slave: TSlave) -> TChild {
+    fn spawn_command(slave: TSlave) -> TChild {
         let cmd: CommandBuilder = CommandBuilder::new("nu");
         let slave: TSlave = slave;
         let child: TChild = slave.spawn_command(cmd).expect("failed to spawn command");
