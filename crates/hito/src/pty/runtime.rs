@@ -4,6 +4,7 @@ use std::io::{Read, Write};
 use std::sync::mpsc::channel;
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread::{self, JoinHandle};
+use tracing::{error, info};
 
 // mpsc pair
 type TReader = Box<dyn Read + Send>;
@@ -44,13 +45,13 @@ impl Runtime {
         // Thread to write input into the PTY.
         Self::spawn_writing_thread(self.input_rx, writer);
 
-        println!("You can now type commands for Bash (type 'exit' to quit):");
+        info!("You can now type commands for Bash (type 'exit' to quit):");
 
         // Main thread sends user input to the writer thread.
         loop {
             let mut input: String = String::new();
             if let Err(err) = std::io::stdin().read_line(&mut input) {
-                eprintln!("read line error: {}", err);
+                error!("read line error: {}", err);
             };
 
             if input.trim() == "exit" {
@@ -60,16 +61,16 @@ impl Runtime {
             }
 
             if let Err(err) = self.input_tx.send(input) {
-                eprintln!("send error occured: {}", err);
+                error!("send error occured: {}", err);
                 break;
             };
         }
 
         drop(self.input_tx);
 
-        println!("Waiting for Bash to exit...");
+        info!("Waiting for Bash to exit...");
         let status: ExitStatus = self.child.wait().unwrap();
-        println!("Bash exited with status: {:?}", status);
+        info!("Bash exited with status: {:?}", status);
     }
 
     pub fn pty_pair() -> PtyPair {
@@ -98,15 +99,15 @@ impl Runtime {
             loop {
                 match reader.read(&mut buffer) {
                     Ok(0) => {
-                        println!("EOF");
+                        info!("EOF");
                         break;
                     }
                     Ok(n) => {
                         let output: Cow<'_, str> = String::from_utf8_lossy(&buffer[..n]);
-                        println!("{:#?}", output);
+                        info!("{}", output);
                     }
                     Err(err) => {
-                        eprintln!("error occured at reader.read() {}", err)
+                        error!("error occured at reader.read() {}", err)
                     }
                 }
             }
@@ -118,16 +119,16 @@ impl Runtime {
             // At first, the shell needs to know where cursor position is.
             // so I send \x1b[1;1R, it means the cursor position is now x: 0 y:0.
             if let Err(err) = writer.write_all(b"\x1b[1;1R") {
-                eprintln!("initial write was failed: {}", err);
+                error!("initial write was failed: {}", err);
             };
 
             // after responed to the shell, we can communicate with it to use commands.
             while let Ok(str) = input_rx.recv() {
                 if let Err(err) = writer.write_all(&str.as_bytes()) {
-                    eprintln!("Error writing to PTY: {}", err);
+                    error!("Error writing to PTY: {}", err);
                     break;
                 } else {
-                    println!("wrote: {}", str);
+                    info!("wrote: {}", str);
                 }
 
                 writer.flush().expect("flush error");

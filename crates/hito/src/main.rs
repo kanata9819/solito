@@ -2,6 +2,7 @@ mod pty;
 
 use pty::runtime::Runtime;
 use std::{collections::HashMap, error::Error};
+use tracing::error;
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
@@ -10,13 +11,18 @@ use winit::{
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
+    init_tracing();
     run_session();
 
     if let Err(err) = run_app() {
-        eprintln!("run app error occured: {}", err);
+        error!("run app error occured: {}", err);
     };
 
     Ok(())
+}
+
+fn init_tracing() {
+    tracing_subscriber::fmt().init();
 }
 
 fn run_app() -> Result<(), Box<dyn Error>> {
