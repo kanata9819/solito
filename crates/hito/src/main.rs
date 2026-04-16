@@ -1,22 +1,17 @@
+mod app;
 mod session;
 
 use session::session::SessionRuntime;
-use std::{collections::HashMap, error::Error};
-use tracing::{error, level_filters::LevelFilter};
-use winit::{
-    application::ApplicationHandler,
-    event::WindowEvent,
-    event_loop::{ActiveEventLoop, EventLoop},
-    window::{Window, WindowAttributes, WindowId},
-};
+use std::error::Error;
+use tracing::level_filters::LevelFilter;
+use winit::event_loop::EventLoop;
+
+use crate::app::core::HitoApplication;
 
 fn main() -> Result<(), Box<dyn Error>> {
     init_tracing();
     run_session();
-
-    if let Err(err) = run_app() {
-        error!("run app error occured: {}", err);
-    };
+    run_app()?;
 
     Ok(())
 }
@@ -27,14 +22,6 @@ fn init_tracing() {
         .init();
 }
 
-fn run_app() -> Result<(), Box<dyn Error>> {
-    let event_loop: EventLoop<()> = EventLoop::new()?;
-    let mut hito = HitoApplication::new();
-    event_loop.run_app(&mut hito)?;
-
-    Ok(())
-}
-
 fn run_session() {
     std::thread::spawn(move || {
         let runtime: SessionRuntime = SessionRuntime::new();
@@ -42,47 +29,10 @@ fn run_session() {
     });
 }
 
-struct HitoApplication {
-    pub window: HashMap<WindowId, Window>,
-}
+fn run_app() -> Result<(), Box<dyn Error>> {
+    let event_loop: EventLoop<()> = EventLoop::new()?;
+    let mut hito = HitoApplication::new();
+    event_loop.run_app(&mut hito)?;
 
-impl HitoApplication {
-    fn new() -> Self {
-        Self {
-            window: HashMap::new(),
-        }
-    }
-
-    fn create_window(&mut self, event_loop: &ActiveEventLoop) {
-        let window_attributes: WindowAttributes = WindowAttributes::default().with_title("Hito");
-
-        let window: Window = event_loop
-            .create_window(window_attributes)
-            .expect("failed to create window");
-
-        let window_id: WindowId = window.id();
-        self.window.insert(window_id, window);
-    }
-}
-
-impl ApplicationHandler for HitoApplication {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        self.create_window(event_loop);
-    }
-
-    fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {}
-
-    fn window_event(
-        &mut self,
-        _event_loop: &ActiveEventLoop,
-        window_id: WindowId,
-        event: WindowEvent,
-    ) {
-        match event {
-            WindowEvent::CloseRequested => {
-                let _ = self.window.remove(&window_id);
-            }
-            _ => {}
-        }
-    }
+    Ok(())
 }
