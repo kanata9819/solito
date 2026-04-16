@@ -4,7 +4,6 @@ use std::io::{Read, Write};
 use std::sync::mpsc::channel;
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread::{self, JoinHandle};
-use std::time;
 
 // mpsc pair
 type TReader = Box<dyn Read + Send>;
@@ -95,20 +94,12 @@ impl Runtime {
     fn spawn_reading_thread(mut reader: TReader) -> JoinHandle<()> {
         thread::spawn(move || {
             let mut buffer: [u8; 1024] = [0u8; 1024];
-            let mut retry_count: u32 = 0;
+
             loop {
                 match reader.read(&mut buffer) {
                     Ok(0) => {
-                        // Waiting 2s
-                        if retry_count == 100 {
-                            println!("EOF");
-                            break;
-                        }
-
-                        thread::sleep(time::Duration::from_millis(20));
-                        retry_count += 1;
-                        println!("retrying... count: {}", retry_count);
-                        continue;
+                        println!("EOF");
+                        break;
                     }
                     Ok(n) => {
                         let output: Cow<'_, str> = String::from_utf8_lossy(&buffer[..n]);
