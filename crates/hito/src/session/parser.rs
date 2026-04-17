@@ -30,13 +30,23 @@ impl Perform for EscParser {
     fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, _byte: u8) {
         debug!("parser csi_dispatch: {:?}", _byte);
     }
-    fn execute(&mut self, _byte: u8) {}
-    fn hook(&mut self, _params: &vte::Params, _intermediates: &[u8], _ignore: bool, _action: char) {
+    fn execute(&mut self, _byte: u8) {
+        debug!("parser excute: {:?}", _byte);
     }
-    fn osc_dispatch(&mut self, _params: &[&[u8]], _bell_terminated: bool) {}
-    fn put(&mut self, _byte: u8) {}
+    fn hook(&mut self, _params: &vte::Params, _intermediates: &[u8], _ignore: bool, _action: char) {
+        debug!("parser hook: {:?}", _params);
+    }
+    fn osc_dispatch(&mut self, _params: &[&[u8]], _bell_terminated: bool) {
+        debug!("parser osc_dispatch: {:?}", _params);
+    }
+    fn put(&mut self, _byte: u8) {
+        debug!("parser csi_dispatch: {:?}", _byte);
+    }
     fn terminated(&self) -> bool {
+        debug!("parser terminated");
         true
     }
-    fn unhook(&mut self) {}
+    fn unhook(&mut self) {
+        debug!("parser unhook");
+    }
 }
