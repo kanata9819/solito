@@ -13,13 +13,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     run_session();
     run_app()?;
 
-    vte::Parser::new();
     Ok(())
 }
 
 fn init_tracing() {
     tracing_subscriber::fmt()
-        .with_max_level(LevelFilter::INFO)
+        .with_max_level(LevelFilter::DEBUG)
         .init();
 }
 
