@@ -1,4 +1,5 @@
 mod app;
+mod renderer;
 mod session;
 
 use session::runtime::SessionRuntime;
@@ -6,9 +7,10 @@ use std::error::Error;
 use tracing::{error, level_filters::LevelFilter};
 use winit::event_loop::EventLoop;
 
-use crate::app::core::HitoApplication;
+use crate::app::application::HitoApplication;
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     init_tracing();
     run_session();
     run_app()?;
