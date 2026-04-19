@@ -1,5 +1,8 @@
 use std::{error::Error, sync::Arc};
-use wgpu::{Adapter, Device, Instance, Queue, Surface, SurfaceConfiguration};
+use wgpu::{
+    Adapter, CommandEncoder, Device, Instance, Queue, Surface, SurfaceConfiguration,
+    SurfaceTexture, TextureView,
+};
 use winit::{dpi::PhysicalSize, event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 
 pub struct State {
@@ -51,28 +54,29 @@ impl State {
             })
             .await?;
 
-        let surface_caps = surface.get_capabilities(&adapter);
+        let surface_caps: wgpu::SurfaceCapabilities = surface.get_capabilities(&adapter);
 
         // Shader code in this tutorial assumes an sRGB surface texture. Using a different
         // one will result in all the colors coming out darker. If you want to support non
         // sRGB surfaces, you'll need to account for that when drawing to the frame.
-        let surface_format = surface_caps
+        let surface_format: wgpu::TextureFormat = surface_caps
             .formats
             .iter()
             .find(|f| f.is_srgb())
             .copied()
             .unwrap_or(surface_caps.formats[0]);
 
-        let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface_format,
-            width: size.width,
-            height: size.height,
-            present_mode: surface_caps.present_modes[0],
-            alpha_mode: surface_caps.alpha_modes[0],
-            view_formats: vec![],
-            desired_maximum_frame_latency: 2,
-        };
+        let config: wgpu::wgt::SurfaceConfiguration<Vec<wgpu::TextureFormat>> =
+            wgpu::SurfaceConfiguration {
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                format: surface_format,
+                width: size.width,
+                height: size.height,
+                present_mode: surface_caps.present_modes[0],
+                alpha_mode: surface_caps.alpha_modes[0],
+                view_formats: vec![],
+                desired_maximum_frame_latency: 2,
+            };
 
         Ok(Self {
             surface,
@@ -118,7 +122,7 @@ impl State {
             return Ok(());
         }
 
-        let output = match self.surface.get_current_texture() {
+        let output: SurfaceTexture = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
             wgpu::CurrentSurfaceTexture::Suboptimal(surface_texture) => {
                 self.surface.configure(&self.device, &self.config);
@@ -143,18 +147,18 @@ impl State {
 
         // This line creates a TextureView with default settings.
         // We need to do this because we want to control how the render code interacts with the texture.
-        let view = output
+        let view: TextureView = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         // We also need to create a CommandEncoder to create the actual commands to send to the GPU.
         // Most modern graphics frameworks expect commands to be stored in a command buffer before being sent to the GPU.
         // The encoder builds a command buffer that we can then send to the GPU.
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
+        let mut encoder: CommandEncoder =
+            self.device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Render Encoder"),
+                });
 
         {
             // First things first, let's talk about the extra block ({}) around encoder.begin_render_pass(...).

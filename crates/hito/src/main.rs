@@ -7,10 +7,9 @@ use std::error::Error;
 use tracing::{error, level_filters::LevelFilter};
 use winit::event_loop::EventLoop;
 
-use crate::app::application::HitoApplication;
+use crate::app::core::HitoApplication;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     init_tracing();
     run_session();
     run_app()?;
@@ -20,7 +19,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 fn init_tracing() {
     tracing_subscriber::fmt()
-        .with_max_level(LevelFilter::DEBUG)
+        .with_max_level(LevelFilter::ERROR)
         .init();
 }
 
@@ -35,7 +34,7 @@ fn run_session() {
 
 fn run_app() -> Result<(), Box<dyn Error>> {
     let event_loop: EventLoop<()> = EventLoop::new()?;
-    let mut hito = HitoApplication::new();
+    let mut hito: HitoApplication = HitoApplication::new();
     event_loop.run_app(&mut hito)?;
 
     Ok(())
