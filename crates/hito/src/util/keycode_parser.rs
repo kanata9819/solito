@@ -1,0 +1,65 @@
+use winit::keyboard::KeyCode;
+
+pub enum ParseError {
+    InvalidCode,
+}
+
+pub enum CodeKind {
+    Char(char),
+    Special(char),
+    Function(char),
+}
+
+pub enum ParseResult {
+    Ok(CodeKind),
+    Err(ParseError),
+}
+
+pub fn parse_to_char(code: &KeyCode, is_pressed: bool) -> ParseResult {
+    match (code, is_pressed) {
+        (KeyCode::KeyA, true) => return ParseResult::Ok(CodeKind::Char('A')),
+        (KeyCode::KeyB, true) => return ParseResult::Ok(CodeKind::Char('B')),
+        (KeyCode::KeyC, true) => return ParseResult::Ok(CodeKind::Char('C')),
+        (KeyCode::KeyD, true) => return ParseResult::Ok(CodeKind::Char('D')),
+        (KeyCode::KeyE, true) => return ParseResult::Ok(CodeKind::Char('E')),
+        (KeyCode::KeyF, true) => return ParseResult::Ok(CodeKind::Char('F')),
+        (KeyCode::KeyG, true) => return ParseResult::Ok(CodeKind::Char('G')),
+        (KeyCode::KeyH, true) => return ParseResult::Ok(CodeKind::Char('H')),
+        (KeyCode::KeyI, true) => return ParseResult::Ok(CodeKind::Char('I')),
+        (KeyCode::KeyJ, true) => return ParseResult::Ok(CodeKind::Char('J')),
+        (KeyCode::KeyK, true) => return ParseResult::Ok(CodeKind::Char('K')),
+        (KeyCode::KeyL, true) => return ParseResult::Ok(CodeKind::Char('L')),
+        (KeyCode::KeyM, true) => return ParseResult::Ok(CodeKind::Char('M')),
+        (KeyCode::KeyN, true) => return ParseResult::Ok(CodeKind::Char('N')),
+        (KeyCode::KeyO, true) => return ParseResult::Ok(CodeKind::Char('O')),
+        (KeyCode::KeyP, true) => return ParseResult::Ok(CodeKind::Char('P')),
+        (KeyCode::KeyQ, true) => return ParseResult::Ok(CodeKind::Char('Q')),
+        (KeyCode::KeyR, true) => return ParseResult::Ok(CodeKind::Char('R')),
+        (KeyCode::KeyS, true) => return ParseResult::Ok(CodeKind::Char('S')),
+        (KeyCode::KeyT, true) => return ParseResult::Ok(CodeKind::Char('T')),
+        (KeyCode::KeyU, true) => return ParseResult::Ok(CodeKind::Char('U')),
+        (KeyCode::KeyV, true) => return ParseResult::Ok(CodeKind::Char('V')),
+        (KeyCode::KeyW, true) => return ParseResult::Ok(CodeKind::Char('W')),
+        (KeyCode::KeyX, true) => return ParseResult::Ok(CodeKind::Char('X')),
+        (KeyCode::KeyY, true) => return ParseResult::Ok(CodeKind::Char('Y')),
+        (KeyCode::KeyZ, true) => return ParseResult::Ok(CodeKind::Char('Z')),
+        (KeyCode::Digit0, true) => return ParseResult::Ok(CodeKind::Char('0')),
+        (KeyCode::Digit1, true) => return ParseResult::Ok(CodeKind::Char('1')),
+        (KeyCode::Digit2, true) => return ParseResult::Ok(CodeKind::Char('2')),
+        (KeyCode::Digit3, true) => return ParseResult::Ok(CodeKind::Char('3')),
+        (KeyCode::Digit4, true) => return ParseResult::Ok(CodeKind::Char('4')),
+        (KeyCode::Digit5, true) => return ParseResult::Ok(CodeKind::Char('5')),
+        (KeyCode::Digit6, true) => return ParseResult::Ok(CodeKind::Char('6')),
+        (KeyCode::Digit7, true) => return ParseResult::Ok(CodeKind::Char('7')),
+        (KeyCode::Digit8, true) => return ParseResult::Ok(CodeKind::Char('8')),
+        (KeyCode::Digit9, true) => return ParseResult::Ok(CodeKind::Char('9')),
+        (KeyCode::Space, true) => return ParseResult::Ok(CodeKind::Char(' ')),
+        (KeyCode::Comma, true) => return ParseResult::Ok(CodeKind::Char(',')),
+        (KeyCode::Period, true) => return ParseResult::Ok(CodeKind::Char('.')),
+        (KeyCode::NumpadAdd, true) => return ParseResult::Ok(CodeKind::Char('+')),
+        (KeyCode::NumpadSubtract, true) => return ParseResult::Ok(CodeKind::Char('-')),
+        (KeyCode::NumpadMultiply, true) => return ParseResult::Ok(CodeKind::Char('*')),
+        (KeyCode::NumpadDivide, true) => return ParseResult::Ok(CodeKind::Char('/')),
+        _ => return ParseResult::Err(ParseError::InvalidCode),
+    }
+}

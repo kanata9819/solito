@@ -1,16 +1,15 @@
 use std::{collections::HashMap, error::Error, sync::Arc};
 
+use crate::app::event as AppEvent;
+use crate::renderer::state::State;
 use tracing::error;
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
-    event::{KeyEvent, WindowEvent},
+    event::WindowEvent,
     event_loop::ActiveEventLoop,
-    keyboard::PhysicalKey,
     window::{Window, WindowAttributes, WindowId},
 };
-
-use crate::renderer::state::State;
 
 pub struct HitoApplication {
     pub windows: HashMap<WindowId, Arc<Window>>,
@@ -54,8 +53,6 @@ impl ApplicationHandler for HitoApplication {
         };
     }
 
-    fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {}
-
     fn window_event(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -67,32 +64,10 @@ impl ApplicationHandler for HitoApplication {
             None => return,
         };
 
-        match event {
-            WindowEvent::CloseRequested => {
-                let _ = self.windows.remove(&window_id);
-                event_loop.exit();
-            }
-            WindowEvent::RedrawRequested => {
-                self.windows[&window_id].set_blur(true);
-                state.update();
-                if let Err(e) = state.render() {
-                    error!("{e}");
-                    event_loop.exit();
-                }
-            }
-            WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        physical_key: PhysicalKey::Code(code),
-                        state: key_state,
-                        ..
-                    },
-                ..
-            } => state.handle_key(event_loop, code, key_state.is_pressed()),
-            WindowEvent::Resized(size) => {
-                state.resize(size);
-            }
-            _ => {}
-        }
+        if let Err(err) =
+            AppEvent::event_handler(&mut self.windows, window_id, state, event_loop, event)
+        {
+            error!("event handle error: {}", err);
+        };
     }
 }

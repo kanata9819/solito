@@ -1,6 +1,7 @@
 mod app;
 mod renderer;
 mod session;
+mod util;
 
 use session::runtime::SessionRuntime;
 use std::error::Error;
@@ -19,7 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn init_tracing() {
     tracing_subscriber::fmt()
-        .with_max_level(LevelFilter::ERROR)
+        .with_max_level(LevelFilter::DEBUG)
         .init();
 }
 

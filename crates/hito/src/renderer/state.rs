@@ -1,9 +1,12 @@
 use std::{error::Error, sync::Arc};
+use tracing::debug;
 use wgpu::{
     Adapter, CommandEncoder, Device, Instance, Queue, ShaderModule, Surface, SurfaceConfiguration,
     SurfaceTexture, TextureView,
 };
-use winit::{dpi::PhysicalSize, event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
+use winit::{dpi::PhysicalSize, window::Window};
+
+use crate::renderer::buffer::InputBuffer;
 
 pub struct State {
     surface: Surface<'static>,
@@ -13,6 +16,7 @@ pub struct State {
     is_surface_configured: bool,
     render_pipeline: wgpu::RenderPipeline,
     window: Arc<Window>,
+    buffer: InputBuffer,
 }
 
 impl State {
@@ -174,6 +178,7 @@ impl State {
             is_surface_configured: false,
             render_pipeline,
             window: windows,
+            buffer: InputBuffer::new(),
         })
     }
 
@@ -193,14 +198,6 @@ impl State {
             self.config.height = size.height;
             self.surface.configure(&self.device, &self.config);
             self.is_surface_configured = true;
-        }
-    }
-
-    /// This is where we'll handle keyboard events.
-    pub fn handle_key(&self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
-        match (code, is_pressed) {
-            (KeyCode::Escape, true) => event_loop.exit(),
-            _ => {}
         }
     }
 
@@ -298,7 +295,8 @@ impl State {
         Ok(())
     }
 
-    pub fn update(&mut self) {
-        // remove `todo!()`
+    pub fn add_char_to_buffer(&mut self, char: char) {
+        self.buffer.push(char);
+        debug!("buffer: {}", self.buffer.get_string());
     }
 }
