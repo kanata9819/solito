@@ -3,12 +3,7 @@ use wgpu::{
     Adapter, CommandEncoder, Device, Instance, Queue, ShaderModule, Surface, SurfaceConfiguration,
     SurfaceTexture, TextureView,
 };
-use winit::{
-    dpi::{LogicalSize, PhysicalSize, Size},
-    event_loop::ActiveEventLoop,
-    keyboard::KeyCode,
-    window::Window,
-};
+use winit::{dpi::PhysicalSize, event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 
 pub struct State {
     surface: Surface<'static>,
