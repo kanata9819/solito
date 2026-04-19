@@ -3,7 +3,12 @@ use wgpu::{
     Adapter, CommandEncoder, Device, Instance, Queue, ShaderModule, Surface, SurfaceConfiguration,
     SurfaceTexture, TextureView,
 };
-use winit::{dpi::PhysicalSize, event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
+use winit::{
+    dpi::{LogicalSize, PhysicalSize, Size},
+    event_loop::ActiveEventLoop,
+    keyboard::KeyCode,
+    window::Window,
+};
 
 pub struct State {
     surface: Surface<'static>,
@@ -186,10 +191,11 @@ impl State {
     /// This is where we configure the surface.
     /// We need the surface to be configured before we can do anything with it.
     /// We set the is_surface_configured flag to true here and we'll check it in the render() function.
-    pub fn resize(&mut self, width: u32, height: u32) {
-        if width > 0 && height > 0 {
-            self.config.width = width;
-            self.config.height = height;
+    pub fn resize(&mut self, size: PhysicalSize<u32>) {
+        let size: PhysicalSize<u32> = size;
+        if size.width > 0 && size.height > 0 {
+            self.config.width = size.width;
+            self.config.height = size.height;
             self.surface.configure(&self.device, &self.config);
             self.is_surface_configured = true;
         }

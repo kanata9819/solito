@@ -3,6 +3,7 @@ use std::{collections::HashMap, error::Error, sync::Arc};
 use tracing::error;
 use winit::{
     application::ApplicationHandler,
+    dpi::LogicalSize,
     event::{KeyEvent, WindowEvent},
     event_loop::ActiveEventLoop,
     keyboard::PhysicalKey,
@@ -25,7 +26,9 @@ impl HitoApplication {
     }
 
     fn create_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), Box<dyn Error>> {
-        let window_attributes: WindowAttributes = WindowAttributes::default().with_title("Hito");
+        let window_attributes: WindowAttributes = WindowAttributes::default()
+            .with_inner_size(LogicalSize::new(1200.0, 750.0))
+            .with_title("Hito");
 
         let window: Arc<Window> = Arc::new(
             event_loop
@@ -49,10 +52,6 @@ impl ApplicationHandler for HitoApplication {
         if let Err(err) = self.create_window(event_loop) {
             error!("create window error occured: {}", err)
         };
-
-        if let Some(state) = &mut self.state {
-            state.resize(1200, 750);
-        }
     }
 
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {}
@@ -74,6 +73,7 @@ impl ApplicationHandler for HitoApplication {
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
+                self.windows[&window_id].set_blur(true);
                 state.update();
                 if let Err(e) = state.render() {
                     error!("{e}");
@@ -89,51 +89,10 @@ impl ApplicationHandler for HitoApplication {
                     },
                 ..
             } => state.handle_key(event_loop, code, key_state.is_pressed()),
+            WindowEvent::Resized(size) => {
+                state.resize(size);
+            }
             _ => {}
         }
     }
 }
-
-// impl ApplicationHandler<State> for HitoApplication {
-//     fn resumed(&mut self, _event_loop: &ActiveEventLoop) {
-//         // remove `todo!()`
-//     }
-
-//     fn window_event(
-//         &mut self,
-//         event_loop: &ActiveEventLoop,
-//         _window_id: winit::window::WindowId,
-//         event: WindowEvent,
-//     ) {
-//         let state: &mut State = match &mut self.state {
-//             Some(canvas) => canvas,
-//             None => return,
-//         };
-
-//         match event {
-//             // ...
-//             WindowEvent::KeyboardInput {
-//                 event:
-//                     KeyEvent {
-//                         physical_key: PhysicalKey::Code(code),
-//                         state: key_state,
-//                         ..
-//                     },
-//                 ..
-//             } => state.handle_key(event_loop, code, key_state.is_pressed()),
-
-//             WindowEvent::RedrawRequested => {
-//                 state.update();
-//                 match state.render() {
-//                     Ok(_) => {}
-//                     Err(e) => {
-//                         // Log the error and exit gracefully
-//                         error!("{e}");
-//                         event_loop.exit();
-//                     }
-//                 }
-//             }
-//             _ => {}
-//         }
-//     }
-// }
