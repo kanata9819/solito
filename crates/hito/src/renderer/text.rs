@@ -42,12 +42,6 @@ impl InputBuffer {
 
         text_buffer.shape_until_scroll(&mut font_system, false);
 
-        let inner_buffer: String = text_buffer
-            .lines
-            .iter()
-            .map(|line| format!("{}{}", line.text(), line.ending().as_str()))
-            .collect::<String>();
-
         Self {
             text_buffer,
             text_renderer: renderer,
@@ -55,7 +49,7 @@ impl InputBuffer {
             viewport,
             swash_cache,
             atlas,
-            inner_buffer,
+            inner_buffer: String::new(),
         }
     }
 
