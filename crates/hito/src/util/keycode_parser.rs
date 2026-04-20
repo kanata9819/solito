@@ -6,7 +6,7 @@ pub enum ParseError {
 
 pub enum CodeKind {
     Char(char),
-    Special(char),
+    Special,
     Function(char),
 }
 
@@ -15,7 +15,7 @@ pub enum ParseResult {
     Err(ParseError),
 }
 
-pub fn parse_to_char(code: &KeyCode, is_pressed: bool) -> ParseResult {
+pub fn parse(code: &KeyCode, is_pressed: bool) -> ParseResult {
     match (code, is_pressed) {
         (KeyCode::KeyA, true) => return ParseResult::Ok(CodeKind::Char('A')),
         (KeyCode::KeyB, true) => return ParseResult::Ok(CodeKind::Char('B')),
@@ -60,6 +60,22 @@ pub fn parse_to_char(code: &KeyCode, is_pressed: bool) -> ParseResult {
         (KeyCode::NumpadSubtract, true) => return ParseResult::Ok(CodeKind::Char('-')),
         (KeyCode::NumpadMultiply, true) => return ParseResult::Ok(CodeKind::Char('*')),
         (KeyCode::NumpadDivide, true) => return ParseResult::Ok(CodeKind::Char('/')),
+        (KeyCode::NumpadEnter, true) => return ParseResult::Ok(CodeKind::Char('\n')),
+        (KeyCode::NumpadDecimal, true) => return ParseResult::Ok(CodeKind::Char('.')),
+        (KeyCode::Backspace, true) => return ParseResult::Ok(CodeKind::Char('\u{8}')),
+        (KeyCode::Escape, true) => return ParseResult::Ok(CodeKind::Char('\u{1B}')),
+        (KeyCode::Tab, true) => return ParseResult::Ok(CodeKind::Char('\t')),
+        (KeyCode::Enter, true) => return ParseResult::Ok(CodeKind::Char('\n')),
+        (KeyCode::Delete, true) => return ParseResult::Ok(CodeKind::Char('\u{7F}')),
+        (KeyCode::Insert, true) => return ParseResult::Ok(CodeKind::Char('\u{0C}')),
+        (KeyCode::ShiftLeft, true)
+        | (KeyCode::ShiftRight, true)
+        | (KeyCode::Hiragana, true)
+        | (KeyCode::KanaMode, true)
+        | (KeyCode::Katakana, true)
+        | (KeyCode::CapsLock, true) => {
+            return ParseResult::Ok(CodeKind::Special);
+        }
         _ => return ParseResult::Err(ParseError::InvalidCode),
     }
 }

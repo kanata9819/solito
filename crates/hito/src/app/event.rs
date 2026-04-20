@@ -59,13 +59,13 @@ pub fn handle_key(
     code: KeyCode,
     is_pressed: bool,
 ) {
-    match util::keycode_parser::parse_to_char(&code, is_pressed) {
+    match util::keycode_parser::parse(&code, is_pressed) {
         ParseResult::Ok(kind) => match kind {
             CodeKind::Char(char) => {
                 state.add_char_to_buffer(char);
             }
             CodeKind::Function(_) => {}
-            CodeKind::Special(_) => {}
+            CodeKind::Special => {}
         },
         ParseResult::Err(ParseError::InvalidCode) => {}
     }
