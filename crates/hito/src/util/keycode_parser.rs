@@ -7,7 +7,7 @@ pub enum ParseError {
 pub enum CodeKind {
     Char(char),
     Special,
-    Function(char),
+    Function,
 }
 
 pub enum ParseResult {
@@ -76,6 +76,15 @@ pub fn parse(code: &KeyCode, is_pressed: bool) -> ParseResult {
         | (KeyCode::CapsLock, true) => {
             return ParseResult::Ok(CodeKind::Special);
         }
+        (KeyCode::F1, true)
+        | (KeyCode::F2, true)
+        | (KeyCode::F3, true)
+        | (KeyCode::F4, true)
+        | (KeyCode::F5, true)
+        | (KeyCode::F6, true)
+        | (KeyCode::F7, true)
+        | (KeyCode::F8, true)
+        | (KeyCode::F9, true) => return ParseResult::Ok(CodeKind::Function),
         _ => return ParseResult::Err(ParseError::InvalidCode),
     }
 }

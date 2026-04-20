@@ -34,6 +34,7 @@ pub fn event_handler(
                 error!("{e}");
                 event_loop.exit();
             }
+            state.redraw()?;
         }
         WindowEvent::KeyboardInput {
             event:
@@ -64,7 +65,7 @@ pub fn handle_key(
             CodeKind::Char(char) => {
                 state.add_char_to_buffer(char);
             }
-            CodeKind::Function(_) => {}
+            CodeKind::Function => {}
             CodeKind::Special => {}
         },
         ParseResult::Err(ParseError::InvalidCode) => {}

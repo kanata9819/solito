@@ -1,12 +1,13 @@
+use glyphon::{Color, Resolution, TextArea, TextBounds};
 use std::{error::Error, sync::Arc};
-use tracing::debug;
 use wgpu::{
-    Adapter, CommandEncoder, Device, Instance, Queue, ShaderModule, Surface, SurfaceConfiguration,
-    SurfaceTexture, TextureView,
+    Adapter, CommandEncoder, CommandEncoderDescriptor, Device, Instance, LoadOp, Operations, Queue,
+    RenderPassColorAttachment, RenderPassDescriptor, Surface, SurfaceConfiguration, SurfaceTexture,
+    TextureFormat, TextureView, TextureViewDescriptor,
 };
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::renderer::buffer::InputBuffer;
+use crate::renderer::{pipeline::Pipeline, text::InputBuffer};
 
 pub struct State {
     surface: Surface<'static>,
@@ -14,14 +15,15 @@ pub struct State {
     queue: Queue,
     config: SurfaceConfiguration,
     is_surface_configured: bool,
-    render_pipeline: wgpu::RenderPipeline,
-    window: Arc<Window>,
+    render_pipeline: Pipeline,
     buffer: InputBuffer,
+    instance: Instance,
+    window: Arc<Window>,
 }
 
 impl State {
-    pub async fn new(windows: Arc<Window>) -> Result<Self, Box<dyn Error>> {
-        let size: PhysicalSize<u32> = windows.inner_size();
+    pub async fn new(window: Arc<Window>) -> Result<Self, Box<dyn Error>> {
+        let size: PhysicalSize<u32> = window.inner_size();
         let instance: Instance = Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
             flags: Default::default(),
@@ -30,10 +32,7 @@ impl State {
             display: None,
         });
 
-        // Current window API doesn't have 'clone()'.
-        // I guess it will cause panic...
-        let surface: Surface<'_> = instance.create_surface(windows.clone())?;
-
+        let surface: Surface<'_> = instance.create_surface(window.clone())?;
         let adapter: Adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
@@ -83,92 +82,10 @@ impl State {
                 desired_maximum_frame_latency: 2,
             };
 
-        let shader: ShaderModule =
-            device.create_shader_module(wgpu::include_wgsl!("../shader/shader.wgsl"));
-
-        let render_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[],
-                immediate_size: 0,
-            });
-
-        //Several things to note here:
-        // 1.Here you can specify which function inside the shader should be the entry_point.
-        //  These are the functions we marked with @vertex and @fragment
-        //
-        // 2.The buffers field tells wgpu what type of vertices we want to pass to the vertex shader.
-        //  We're specifying the vertices in the vertex shader itself,
-        //  so we'll leave this empty. We'll put something there in the next tutorial.
-        //
-        // 3.The fragment is technically optional, so you have to wrap it in Some().
-        //  We need it if we want to store color data to the surface.
-        //
-        // 4.The targets field tells wgpu what color outputs it should set up. Currently,
-        //  we only need one for the surface.
-        //  We use the surface's format so that copying to it is easy,
-        //  and we specify that the blending should just replace old pixel data with new data.
-        //  We also tell wgpu to write to all colors: red, blue, green, and alpha.
-        //  We'll talk more about color_state when we talk about textures.
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
-            layout: Some(&render_pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"), // 1.
-                buffers: &[],                 // 2.
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                // 3.
-                module: &shader,
-                entry_point: Some("fs_main"),
-                targets: &[Some(wgpu::ColorTargetState {
-                    // 4.
-                    format: config.format,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            }),
-            // The primitive field describes how to interpret our vertices when converting them into triangles.
-            // 1.Using PrimitiveTopology::TriangleList means that every three vertices will correspond to one triangle.
-            // 2.The front_face and cull_mode fields tell wgpu how to determine whether a given triangle is facing forward or not.
-            //  FrontFace::Ccw means that a triangle is facing forward if the vertices are arranged in a counter-clockwise direction.
-            //  Triangles that are not considered facing forward are culled (not included in the render) as specified by CullMode::Back.
-            //  We'll cover culling a bit more when we cover Buffers.
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList, // 1.
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw, // 2.
-                cull_mode: Some(wgpu::Face::Back),
-                // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
-                polygon_mode: wgpu::PolygonMode::Fill,
-                // Requires Features::DEPTH_CLIP_CONTROL
-                unclipped_depth: false,
-                // Requires Features::CONSERVATIVE_RASTERIZATION
-                conservative: false,
-            },
-            // The rest of the method is pretty simple:
-            // 1.We're not using a depth/stencil buffer currently,
-            //  so we leave depth_stencil as None. This will change later.
-            // 2. count determines how many samples the pipeline will use.
-            //  Multisampling is a complex topic, so we won't get into it here.
-            // 3.mask specifies which samples should be active. In this case, we are using all of them.
-            // 4.alpha_to_coverage_enabled has to do with anti-aliasing.
-            //  We're not covering anti-aliasing here, so we'll leave this as false now.
-            //5.multiview indicates how many array layers the render attachments can have.
-            //  We won't be rendering to array textures, so we can set this to None.
-            //6.cache allows wgpu to cache shader compilation data. Only really useful for Android build targets.
-            depth_stencil: None, // 1.
-            multisample: wgpu::MultisampleState {
-                count: 1,                         // 2.
-                mask: !0,                         // 3.
-                alpha_to_coverage_enabled: false, // 4.
-            },
-            multiview_mask: None, // 5.
-            cache: None,          // 6.
-        });
+        let render_pipeline: Pipeline = Pipeline::new(&device, config.clone());
+        let swapchain_format: TextureFormat = TextureFormat::Bgra8UnormSrgb;
+        let buffer: InputBuffer =
+            InputBuffer::new(&device.clone(), &queue.clone(), swapchain_format, size, 1.0);
 
         Ok(Self {
             surface,
@@ -177,8 +94,9 @@ impl State {
             config,
             is_surface_configured: false,
             render_pipeline,
-            window: windows,
-            buffer: InputBuffer::new(),
+            buffer,
+            instance,
+            window,
         })
     }
 
@@ -281,7 +199,7 @@ impl State {
                     depth_stencil_attachment: None,
                 });
 
-            render_pass.set_pipeline(&self.render_pipeline); // 2.
+            render_pass.set_pipeline(&self.render_pipeline.render_pipeline()); // 2.
             render_pass.draw(0..3, 0..1); // 3.
         }
 
@@ -295,8 +213,98 @@ impl State {
         Ok(())
     }
 
+    pub fn redraw(&mut self) -> Result<(), Box<dyn Error>> {
+        self.buffer.viewport.update(
+            &self.queue,
+            Resolution {
+                width: self.config.width,
+                height: self.config.height,
+            },
+        );
+
+        self.buffer
+            .text_renderer
+            .prepare(
+                &self.device,
+                &self.queue,
+                &mut self.buffer.font_system,
+                &mut self.buffer.atlas,
+                &self.buffer.viewport,
+                [TextArea {
+                    buffer: &self.buffer.text_buffer,
+                    left: 10.0,
+                    top: 10.0,
+                    scale: 1.0,
+                    bounds: TextBounds {
+                        left: 0,
+                        top: 0,
+                        right: 600,
+                        bottom: 160,
+                    },
+                    default_color: Color::rgb(255, 255, 255),
+                    custom_glyphs: &[],
+                }],
+                &mut self.buffer.swash_cache,
+            )
+            .unwrap();
+
+        let frame = match self.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(frame) => frame,
+            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+                // Try again later
+                self.window.request_redraw();
+                return Ok(());
+            }
+            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Suboptimal(_) => {
+                self.surface.configure(&self.device, &self.config);
+                self.window.request_redraw();
+                return Ok(());
+            }
+            wgpu::CurrentSurfaceTexture::Lost => {
+                self.surface = self.instance.create_surface(self.window.clone())?;
+                self.surface.configure(&self.device, &self.config);
+                self.window.request_redraw();
+                return Ok(());
+            }
+            wgpu::CurrentSurfaceTexture::Validation => panic!("validation error"),
+        };
+        let view = frame.texture.create_view(&TextureViewDescriptor::default());
+        let mut encoder = self
+            .device
+            .create_command_encoder(&CommandEncoderDescriptor { label: None });
+        {
+            let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: None,
+                color_attachments: &[Some(RenderPassColorAttachment {
+                    view: &view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+
+            self.buffer
+                .text_renderer
+                .render(&self.buffer.atlas, &self.buffer.viewport, &mut pass)
+                .unwrap();
+        }
+
+        self.queue.submit(Some(encoder.finish()));
+        frame.present();
+
+        self.buffer.atlas.trim();
+
+        Ok(())
+    }
+
     pub fn add_char_to_buffer(&mut self, char: char) {
-        self.buffer.push(char);
-        debug!("buffer: {}", self.buffer.get_string());
+        self.buffer.set_text(char);
     }
 }
