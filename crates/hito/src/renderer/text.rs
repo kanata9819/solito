@@ -24,11 +24,11 @@ impl InputBuffer {
     ) -> Self {
         let mut font_system: FontSystem = FontSystem::new();
         let swash_cache: SwashCache = SwashCache::new();
-        let cache: Cache = Cache::new(&device);
-        let viewport: Viewport = Viewport::new(&device, &cache);
-        let mut atlas: TextAtlas = TextAtlas::new(&device, &queue, &cache, swapchain_format);
+        let cache: Cache = Cache::new(device);
+        let viewport: Viewport = Viewport::new(device, &cache);
+        let mut atlas: TextAtlas = TextAtlas::new(device, queue, &cache, swapchain_format);
         let renderer: TextRenderer =
-            TextRenderer::new(&mut atlas, &device, MultisampleState::default(), None);
+            TextRenderer::new(&mut atlas, device, MultisampleState::default(), None);
         let mut text_buffer: Buffer = Buffer::new(&mut font_system, Metrics::new(30.0, 42.0));
 
         let physical_width: f32 = (physical_size.width as f64 * scale_factor) as f32;
