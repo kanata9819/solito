@@ -4,6 +4,14 @@ pub enum ParseError {
     InvalidCode,
 }
 
+// impl std::error::Error for ParseError {
+//     fn description(&self) -> &str {
+//         match self {
+//             ParseError::InvalidCode => "Invalid Code",
+//         }
+//     }
+// }
+
 pub enum CodeKind {
     Char(char),
     Special,
@@ -73,9 +81,7 @@ pub fn parse(code: &KeyCode, is_pressed: bool) -> ParseResult {
         | (KeyCode::Hiragana, true)
         | (KeyCode::KanaMode, true)
         | (KeyCode::Katakana, true)
-        | (KeyCode::CapsLock, true) => {
-            ParseResult::Ok(CodeKind::Special)
-        }
+        | (KeyCode::CapsLock, true) => ParseResult::Ok(CodeKind::Special),
         (KeyCode::F1, true)
         | (KeyCode::F2, true)
         | (KeyCode::F3, true)

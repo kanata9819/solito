@@ -2,7 +2,6 @@ use portable_pty::{Child, CommandBuilder, ExitStatus, MasterPty, PtyPair, PtySiz
 use std::borrow::Cow;
 use std::error::Error;
 use std::io::{Read, Write};
-use std::sync::mpsc::channel;
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread::{self, JoinHandle};
 use tracing::{error, info};
@@ -20,23 +19,22 @@ type TChild = Box<dyn Child + Send + Sync>;
 
 pub struct SessionRuntime {
     child: TChild,
-    input_tx: Sender<String>,
     input_rx: Receiver<String>,
+    output_tx: Sender<String>,
     master: TMaster,
     parser: EscParser,
 }
 
 impl SessionRuntime {
-    pub fn new() -> Self {
+    pub fn new(input_rx: Receiver<String>, output_tx: Sender<String>) -> Self {
         let pty_pair: PtyPair = Self::pty_pair();
         let child: TChild = Self::spawn_command(pty_pair.slave);
-        let (input_tx, input_rx) = channel::<String>();
         let parser: EscParser = EscParser::new();
 
         Self {
             child,
-            input_tx,
             input_rx,
+            output_tx,
             master: pty_pair.master,
             parser,
         }
@@ -47,26 +45,14 @@ impl SessionRuntime {
         let writer: TWriter = self.master.take_writer()?;
 
         // Thread to read output from the PTY.
-        Self::spawn_reading_thread(self.parser, reader);
+        Self::spawn_reading_thread(self.parser, reader, self.output_tx);
         // Thread to write input into the PTY.
         Self::spawn_writing_thread(self.input_rx, writer);
-        // Main thread sends user input to the writer thread.
-        Self::run_main_loop(self.input_tx);
 
-        info!("Waiting for Bash to exit...");
         let status: ExitStatus = self.child.wait()?;
-        info!("Bash exited with status: {:?}", status);
+        info!("exited with status: {:?}", status);
 
         Ok(())
-    }
-
-    fn validate_input(input: impl AsRef<str>) -> bool {
-        let input: &str = input.as_ref();
-        if input.is_empty() || input.trim() == "exit" {
-            return false;
-        }
-
-        true
     }
 
     fn pty_pair() -> PtyPair {
@@ -88,26 +74,11 @@ impl SessionRuntime {
         child
     }
 
-    fn run_main_loop(input_tx: Sender<String>) {
-        info!("You can now type commands for Bash (type 'exit' to quit):");
-        // Send user input to input receiver,
-        // and then receiver send the command to pty.
-        loop {
-            let mut input: String = String::new();
-            if let Err(err) = std::io::stdin().read_line(&mut input) {
-                error!("read line error: {}", err);
-            };
-
-            Self::validate_input(&input);
-
-            if let Err(err) = input_tx.send(input) {
-                error!("send error occured: {}", err);
-                break;
-            };
-        }
-    }
-
-    fn spawn_reading_thread(mut parser: EscParser, mut reader: TReader) -> JoinHandle<()> {
+    fn spawn_reading_thread(
+        mut parser: EscParser,
+        mut reader: TReader,
+        output_tx: Sender<String>,
+    ) -> JoinHandle<()> {
         thread::spawn(move || {
             let mut buffer: [u8; 1024] = [0u8; 1024];
 
@@ -120,7 +91,9 @@ impl SessionRuntime {
                     Ok(n) => {
                         let output: Cow<'_, str> = String::from_utf8_lossy(&buffer[..n]);
                         parser.parse(output.as_bytes());
-                        info!("{}", output);
+                        if let Err(err) = output_tx.send(output.to_string()) {
+                            error!("error occured at output_tx.send() {}", err);
+                        };
                     }
                     Err(err) => {
                         error!("error occured at reader.read() {}", err)

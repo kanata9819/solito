@@ -1,8 +1,15 @@
-use std::{collections::HashMap, error::Error, sync::Arc};
+use std::{
+    collections::HashMap,
+    error::Error,
+    sync::{
+        Arc,
+        mpsc::{Receiver, Sender},
+    },
+};
 
 use crate::app::event as AppEvent;
 use crate::renderer::state::State;
-use tracing::error;
+use tracing::{debug, error};
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
@@ -14,13 +21,17 @@ use winit::{
 pub struct HitoApplication {
     pub windows: HashMap<WindowId, Arc<Window>>,
     state: Option<State>,
+    input_tx: Sender<String>,
 }
 
 impl HitoApplication {
-    pub fn new() -> Self {
+    pub fn new(input_tx: Sender<String>, output_rx: Receiver<String>) -> Self {
+        Self::spawn_receive_thread(output_rx);
+
         Self {
             windows: HashMap::new(),
             state: None,
+            input_tx,
         }
     }
 
@@ -38,11 +49,26 @@ impl HitoApplication {
         let window_id: WindowId = window.id();
         self.windows.insert(window_id, window.clone());
 
-        let mut state: State = pollster::block_on(State::new(window))?;
+        let mut state: State = pollster::block_on(State::new(window, self.input_tx.clone()))?;
         state.render()?;
         self.state = Some(state);
 
         Ok(())
+    }
+
+    pub fn spawn_receive_thread(output_rx: Receiver<String>) {
+        std::thread::spawn(move || {
+            loop {
+                match output_rx.try_recv() {
+                    Ok(output) => {
+                        debug!("output: {}", output);
+                    }
+                    Err(err) => {
+                        error!("error: {}", err);
+                    }
+                };
+            }
+        });
     }
 }
 

@@ -44,7 +44,7 @@ pub fn event_handler(
                     ..
                 },
             ..
-        } => handle_key(state, event_loop, code, key_state.is_pressed()),
+        } => handle_key(state, &event_loop, code, key_state.is_pressed())?,
         WindowEvent::Resized(size) => {
             state.resize(size);
         }
@@ -59,15 +59,16 @@ pub fn handle_key(
     _event_loop: &ActiveEventLoop,
     code: KeyCode,
     is_pressed: bool,
-) {
+) -> Result<(), Box<dyn Error>> {
     match util::keycode_parser::parse(&code, is_pressed) {
         ParseResult::Ok(kind) => match kind {
             CodeKind::Char(char) => {
-                state.add_char_to_buffer(char);
+                state.add_char_to_buffer(char)?;
+                Ok(())
             }
-            CodeKind::Function => {}
-            CodeKind::Special => {}
+            CodeKind::Function => Ok(()),
+            CodeKind::Special => Ok(()),
         },
-        ParseResult::Err(ParseError::InvalidCode) => {}
+        ParseResult::Err(ParseError::InvalidCode) => Err(("Invalid Code".to_string()).into()),
     }
 }

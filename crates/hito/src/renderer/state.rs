@@ -1,5 +1,8 @@
 use glyphon::{Color, Resolution, TextArea, TextBounds};
-use std::{error::Error, sync::Arc};
+use std::{
+    error::Error,
+    sync::{Arc, mpsc::Sender},
+};
 use wgpu::{
     Adapter, CommandEncoder, CommandEncoderDescriptor, Device, Instance, LoadOp, Operations, Queue,
     RenderPassColorAttachment, RenderPassDescriptor, Surface, SurfaceConfiguration, SurfaceTexture,
@@ -19,10 +22,14 @@ pub struct State {
     buffer: InputBuffer,
     instance: Instance,
     window: Arc<Window>,
+    input_tx: Sender<String>,
 }
 
 impl State {
-    pub async fn new(window: Arc<Window>) -> Result<Self, Box<dyn Error>> {
+    pub async fn new(
+        window: Arc<Window>,
+        input_tx: Sender<String>,
+    ) -> Result<Self, Box<dyn Error>> {
         let size: PhysicalSize<u32> = window.inner_size();
         let instance: Instance = Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
@@ -97,6 +104,7 @@ impl State {
             buffer,
             instance,
             window,
+            input_tx,
         })
     }
 
@@ -238,8 +246,7 @@ impl State {
                     bounds: TextBounds {
                         left: 0,
                         top: 0,
-                        right: 600,
-                        bottom: 160,
+                        ..Default::default()
                     },
                     default_color: Color::rgb(255, 255, 255),
                     custom_glyphs: &[],
@@ -304,7 +311,10 @@ impl State {
         Ok(())
     }
 
-    pub fn add_char_to_buffer(&mut self, char: char) {
+    pub fn add_char_to_buffer(&mut self, char: char) -> Result<(), Box<dyn Error>> {
         self.buffer.set_text(char);
+        self.input_tx.send(char.to_string())?;
+
+        Ok(())
     }
 }
