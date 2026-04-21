@@ -2,6 +2,7 @@ use glyphon::{
     Attrs, Buffer, Cache, Family, FontSystem, Metrics, Shaping, SwashCache, TextAtlas,
     TextRenderer, Viewport,
 };
+use tracing::debug;
 use wgpu::MultisampleState;
 
 pub struct InputBuffer {
@@ -55,6 +56,7 @@ impl InputBuffer {
 
     pub fn set_text(&mut self, c: char) {
         self.inner_buffer.push(c);
+        debug!("input buffer: {}", self.inner_buffer);
 
         self.text_buffer.set_text(
             &mut self.font_system,

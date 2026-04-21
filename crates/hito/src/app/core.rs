@@ -65,6 +65,10 @@ impl HitoApplication {
         state.render()?;
         self.state = Some(state);
 
+        if let Err(err) = self.drain_output() {
+            error!("drain output error occured: {}", err);
+        };
+
         Ok(())
     }
 }
@@ -82,10 +86,6 @@ impl ApplicationHandler for HitoApplication {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        if let Err(err) = self.drain_output() {
-            error!("drain output error occured: {}", err);
-        };
-
         let state: &mut State = match &mut self.state {
             Some(canvas) => canvas,
             None => return,

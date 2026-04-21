@@ -20,7 +20,6 @@ type TChild = Box<dyn Child + Send + Sync>;
 pub struct SessionRuntime {
     child: TChild,
     input_rx: Receiver<Vec<u8>>,
-    output_tx: Sender<Vec<u8>>,
     master: TMaster,
     parser: EscParser,
 }
@@ -29,12 +28,11 @@ impl SessionRuntime {
     pub fn new(input_rx: Receiver<Vec<u8>>, output_tx: Sender<Vec<u8>>) -> Self {
         let pty_pair: PtyPair = Self::pty_pair();
         let child: TChild = Self::spawn_command(pty_pair.slave);
-        let parser: EscParser = EscParser::new();
+        let parser: EscParser = EscParser::new(output_tx);
 
         Self {
             child,
             input_rx,
-            output_tx,
             master: pty_pair.master,
             parser,
         }
@@ -45,7 +43,7 @@ impl SessionRuntime {
         let writer: TWriter = self.master.take_writer()?;
 
         // Thread to read output from the PTY.
-        Self::spawn_reading_thread(self.parser, reader, self.output_tx);
+        Self::spawn_reading_thread(self.parser, reader);
         // Thread to write input into the PTY.
         Self::spawn_writing_thread(self.input_rx, writer);
 
@@ -74,11 +72,7 @@ impl SessionRuntime {
         child
     }
 
-    fn spawn_reading_thread(
-        mut parser: EscParser,
-        mut reader: TReader,
-        output_tx: Sender<Vec<u8>>,
-    ) -> JoinHandle<()> {
+    fn spawn_reading_thread(mut parser: EscParser, mut reader: TReader) -> JoinHandle<()> {
         thread::spawn(move || {
             let mut buffer: [u8; 1024] = [0u8; 1024];
 
@@ -91,9 +85,6 @@ impl SessionRuntime {
                     Ok(n) => {
                         let output: Cow<'_, str> = String::from_utf8_lossy(&buffer[..n]);
                         parser.parse(output.as_bytes());
-                        if let Err(err) = output_tx.send(output.as_bytes().to_vec()) {
-                            error!("error occured at output_tx.send() {}", err);
-                        };
                     }
                     Err(err) => {
                         error!("error occured at reader.read() {}", err)

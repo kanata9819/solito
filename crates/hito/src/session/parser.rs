@@ -1,11 +1,15 @@
-use tracing::debug;
+use std::sync::mpsc::Sender;
+
+use tracing::{debug, error};
 use vte::{Parser, Perform};
 
-pub struct EscParser {}
+pub struct EscParser {
+    output_tx: Sender<Vec<u8>>,
+}
 
 impl EscParser {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(output_tx: Sender<Vec<u8>>) -> Self {
+        Self { output_tx }
     }
 
     pub fn parse(&mut self, bytes: impl AsRef<[u8]>) {
@@ -15,8 +19,11 @@ impl EscParser {
 }
 
 impl Perform for EscParser {
-    fn print(&mut self, _c: char) {
-        debug!("parser print: {:?}", _c);
+    fn print(&mut self, c: char) {
+        debug!("parser print: {:?}", c);
+        if let Err(err) = self.output_tx.send(c.to_string().as_bytes().to_vec()) {
+            error!("error occured at output_tx.send() {}", err);
+        };
     }
     fn csi_dispatch(
         &mut self,

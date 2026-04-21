@@ -9,7 +9,8 @@ use std::{
 };
 
 use session::runtime::SessionRuntime;
-use tracing::{error, level_filters::LevelFilter};
+use tracing::error;
+use tracing_subscriber::EnvFilter;
 use winit::event_loop::EventLoop;
 
 use crate::app::core::HitoApplication;
@@ -26,8 +27,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn init_tracing() {
+    const FILTER: &str = "error";
+    let env_filter: String = format!("error,hito={}", FILTER);
     tracing_subscriber::fmt()
-        .with_max_level(LevelFilter::ERROR)
+        .with_env_filter(EnvFilter::new(env_filter))
         .init();
 }
 
