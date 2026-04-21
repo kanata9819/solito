@@ -269,7 +269,7 @@ impl State {
             .device
             .create_command_encoder(&CommandEncoderDescriptor { label: None });
         {
-            let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
+            let mut pass: wgpu::RenderPass<'_> = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: None,
                 color_attachments: &[Some(RenderPassColorAttachment {
                     view: &view,

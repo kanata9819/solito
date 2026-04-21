@@ -49,7 +49,7 @@ pub fn event_handler(
                     ..
                 },
             ..
-        } => handle_key(state, &event_loop, code, key_state.is_pressed(), input_tx)?,
+        } => handle_key(state, event_loop, code, key_state.is_pressed(), input_tx)?,
         WindowEvent::Resized(size) => {
             state.resize(size);
         }

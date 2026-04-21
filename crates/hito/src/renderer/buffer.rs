@@ -59,7 +59,7 @@ impl InputBuffer {
         self.text_buffer.set_text(
             &mut self.font_system,
             &self.inner_buffer,
-            &Attrs::new().family(Family::Fantasy),
+            &Attrs::new().family(Family::Name("Cascadia Mono")),
             Shaping::Advanced,
             None,
         );
