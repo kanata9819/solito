@@ -9,7 +9,7 @@ use std::{
 
 use crate::app::event as AppEvent;
 use crate::renderer::state::State;
-use tracing::{debug, error};
+use tracing::error;
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
@@ -21,18 +21,30 @@ use winit::{
 pub struct HitoApplication {
     pub windows: HashMap<WindowId, Arc<Window>>,
     state: Option<State>,
-    input_tx: Sender<String>,
+    input_tx: Sender<Vec<u8>>,
+    output_rx: Receiver<Vec<u8>>,
 }
 
 impl HitoApplication {
-    pub fn new(input_tx: Sender<String>, output_rx: Receiver<String>) -> Self {
-        Self::spawn_receive_thread(output_rx);
-
+    pub fn new(input_tx: Sender<Vec<u8>>, output_rx: Receiver<Vec<u8>>) -> Self {
         Self {
             windows: HashMap::new(),
             state: None,
             input_tx,
+            output_rx,
         }
+    }
+
+    fn drain_output(&mut self) -> Result<(), Box<dyn Error>> {
+        while let Ok(output) = self.output_rx.try_recv() {
+            if let Some(state) = &mut self.state {
+                let output: std::borrow::Cow<'_, str> = String::from_utf8_lossy(&output);
+                if let Some(char) = output.chars().next() {
+                    state.add_char_to_buffer(char)?;
+                };
+            }
+        }
+        Ok(())
     }
 
     fn create_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), Box<dyn Error>> {
@@ -49,26 +61,11 @@ impl HitoApplication {
         let window_id: WindowId = window.id();
         self.windows.insert(window_id, window.clone());
 
-        let mut state: State = pollster::block_on(State::new(window, self.input_tx.clone()))?;
+        let mut state: State = pollster::block_on(State::new(window))?;
         state.render()?;
         self.state = Some(state);
 
         Ok(())
-    }
-
-    pub fn spawn_receive_thread(output_rx: Receiver<String>) {
-        std::thread::spawn(move || {
-            loop {
-                match output_rx.try_recv() {
-                    Ok(output) => {
-                        debug!("output: {}", output);
-                    }
-                    Err(err) => {
-                        error!("error: {}", err);
-                    }
-                };
-            }
-        });
     }
 }
 
@@ -85,14 +82,23 @@ impl ApplicationHandler for HitoApplication {
         window_id: WindowId,
         event: WindowEvent,
     ) {
+        if let Err(err) = self.drain_output() {
+            error!("drain output error occured: {}", err);
+        };
+
         let state: &mut State = match &mut self.state {
             Some(canvas) => canvas,
             None => return,
         };
 
-        if let Err(err) =
-            AppEvent::event_handler(&mut self.windows, window_id, state, event_loop, event)
-        {
+        if let Err(err) = AppEvent::event_handler(
+            &mut self.windows,
+            window_id,
+            state,
+            event_loop,
+            event,
+            &self.input_tx,
+        ) {
             error!("event handle error: {}", err);
         };
     }

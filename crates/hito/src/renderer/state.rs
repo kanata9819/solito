@@ -1,8 +1,5 @@
 use glyphon::{Color, Resolution, TextArea, TextBounds};
-use std::{
-    error::Error,
-    sync::{Arc, mpsc::Sender},
-};
+use std::{error::Error, sync::Arc};
 use wgpu::{
     Adapter, CommandEncoder, CommandEncoderDescriptor, Device, Instance, LoadOp, Operations, Queue,
     RenderPassColorAttachment, RenderPassDescriptor, Surface, SurfaceConfiguration, SurfaceTexture,
@@ -10,7 +7,7 @@ use wgpu::{
 };
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::renderer::{pipeline::Pipeline, text::InputBuffer};
+use crate::renderer::{buffer::InputBuffer, pipeline::Pipeline};
 
 pub struct State {
     surface: Surface<'static>,
@@ -22,14 +19,10 @@ pub struct State {
     buffer: InputBuffer,
     instance: Instance,
     window: Arc<Window>,
-    input_tx: Sender<String>,
 }
 
 impl State {
-    pub async fn new(
-        window: Arc<Window>,
-        input_tx: Sender<String>,
-    ) -> Result<Self, Box<dyn Error>> {
+    pub async fn new(window: Arc<Window>) -> Result<Self, Box<dyn Error>> {
         let size: PhysicalSize<u32> = window.inner_size();
         let instance: Instance = Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
@@ -104,7 +97,6 @@ impl State {
             buffer,
             instance,
             window,
-            input_tx,
         })
     }
 
@@ -255,7 +247,7 @@ impl State {
             )
             .unwrap();
 
-        let frame = match self.surface.get_current_texture() {
+        let frame: SurfaceTexture = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame) => frame,
             wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
                 // Try again later
@@ -275,8 +267,8 @@ impl State {
             }
             wgpu::CurrentSurfaceTexture::Validation => panic!("validation error"),
         };
-        let view = frame.texture.create_view(&TextureViewDescriptor::default());
-        let mut encoder = self
+        let view: TextureView = frame.texture.create_view(&TextureViewDescriptor::default());
+        let mut encoder: CommandEncoder = self
             .device
             .create_command_encoder(&CommandEncoderDescriptor { label: None });
         {
@@ -313,7 +305,6 @@ impl State {
 
     pub fn add_char_to_buffer(&mut self, char: char) -> Result<(), Box<dyn Error>> {
         self.buffer.set_text(char);
-        self.input_tx.send(char.to_string())?;
 
         Ok(())
     }

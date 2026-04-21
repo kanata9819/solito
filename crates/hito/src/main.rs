@@ -3,17 +3,20 @@ mod renderer;
 mod session;
 mod util;
 
+use std::{
+    error::Error,
+    sync::mpsc::{Receiver, Sender, channel},
+};
+
 use session::runtime::SessionRuntime;
-use std::error::Error;
-use std::sync::mpsc::{Receiver, Sender, channel};
 use tracing::{error, level_filters::LevelFilter};
 use winit::event_loop::EventLoop;
 
 use crate::app::core::HitoApplication;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let (input_tx, input_rx): (Sender<String>, Receiver<String>) = channel::<String>();
-    let (output_tx, output_rx): (Sender<String>, Receiver<String>) = channel::<String>();
+    let (input_tx, input_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel::<Vec<u8>>();
+    let (output_tx, output_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel::<Vec<u8>>();
 
     init_tracing();
     run_session(input_rx, output_tx);
@@ -28,7 +31,7 @@ fn init_tracing() {
         .init();
 }
 
-fn run_session(input_rx: Receiver<String>, output_tx: Sender<String>) {
+fn run_session(input_rx: Receiver<Vec<u8>>, output_tx: Sender<Vec<u8>>) {
     std::thread::spawn(move || {
         let runtime: SessionRuntime = SessionRuntime::new(input_rx, output_tx);
         if let Err(err) = runtime.run_session() {
@@ -37,7 +40,7 @@ fn run_session(input_rx: Receiver<String>, output_tx: Sender<String>) {
     });
 }
 
-fn run_app(input_tx: Sender<String>, output_rx: Receiver<String>) -> Result<(), Box<dyn Error>> {
+fn run_app(input_tx: Sender<Vec<u8>>, output_rx: Receiver<Vec<u8>>) -> Result<(), Box<dyn Error>> {
     let event_loop: EventLoop<()> = EventLoop::new()?;
     let mut hito: HitoApplication = HitoApplication::new(input_tx, output_rx);
     event_loop.run_app(&mut hito)?;

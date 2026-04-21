@@ -1,4 +1,8 @@
-use std::{collections::HashMap, error::Error, sync::Arc};
+use std::{
+    collections::HashMap,
+    error::Error,
+    sync::{Arc, mpsc::Sender},
+};
 
 use tracing::error;
 use winit::{
@@ -22,6 +26,7 @@ pub fn event_handler(
     state: &mut State,
     event_loop: &ActiveEventLoop,
     event: WindowEvent,
+    input_tx: &Sender<Vec<u8>>,
 ) -> Result<(), Box<dyn Error>> {
     match event {
         WindowEvent::CloseRequested => {
@@ -44,7 +49,7 @@ pub fn event_handler(
                     ..
                 },
             ..
-        } => handle_key(state, &event_loop, code, key_state.is_pressed())?,
+        } => handle_key(state, &event_loop, code, key_state.is_pressed(), input_tx)?,
         WindowEvent::Resized(size) => {
             state.resize(size);
         }
@@ -59,10 +64,12 @@ pub fn handle_key(
     _event_loop: &ActiveEventLoop,
     code: KeyCode,
     is_pressed: bool,
+    input_tx: &Sender<Vec<u8>>,
 ) -> Result<(), Box<dyn Error>> {
     match util::keycode_parser::parse(&code, is_pressed) {
         ParseResult::Ok(kind) => match kind {
             CodeKind::Char(char) => {
+                input_tx.send(char.to_string().into_bytes())?;
                 state.add_char_to_buffer(char)?;
                 Ok(())
             }

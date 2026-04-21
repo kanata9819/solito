@@ -19,14 +19,14 @@ type TChild = Box<dyn Child + Send + Sync>;
 
 pub struct SessionRuntime {
     child: TChild,
-    input_rx: Receiver<String>,
-    output_tx: Sender<String>,
+    input_rx: Receiver<Vec<u8>>,
+    output_tx: Sender<Vec<u8>>,
     master: TMaster,
     parser: EscParser,
 }
 
 impl SessionRuntime {
-    pub fn new(input_rx: Receiver<String>, output_tx: Sender<String>) -> Self {
+    pub fn new(input_rx: Receiver<Vec<u8>>, output_tx: Sender<Vec<u8>>) -> Self {
         let pty_pair: PtyPair = Self::pty_pair();
         let child: TChild = Self::spawn_command(pty_pair.slave);
         let parser: EscParser = EscParser::new();
@@ -77,7 +77,7 @@ impl SessionRuntime {
     fn spawn_reading_thread(
         mut parser: EscParser,
         mut reader: TReader,
-        output_tx: Sender<String>,
+        output_tx: Sender<Vec<u8>>,
     ) -> JoinHandle<()> {
         thread::spawn(move || {
             let mut buffer: [u8; 1024] = [0u8; 1024];
@@ -91,7 +91,7 @@ impl SessionRuntime {
                     Ok(n) => {
                         let output: Cow<'_, str> = String::from_utf8_lossy(&buffer[..n]);
                         parser.parse(output.as_bytes());
-                        if let Err(err) = output_tx.send(output.to_string()) {
+                        if let Err(err) = output_tx.send(output.as_bytes().to_vec()) {
                             error!("error occured at output_tx.send() {}", err);
                         };
                     }
@@ -103,7 +103,7 @@ impl SessionRuntime {
         })
     }
 
-    fn spawn_writing_thread(input_rx: Receiver<String>, mut writer: TWriter) -> JoinHandle<()> {
+    fn spawn_writing_thread(input_rx: Receiver<Vec<u8>>, mut writer: TWriter) -> JoinHandle<()> {
         thread::spawn(move || {
             // At first, the shell needs to know where cursor position is.
             // so I send \x1b[1;1R, it means the cursor position is now x: 0 y:0.
@@ -112,12 +112,12 @@ impl SessionRuntime {
             };
 
             // after responed to the shell, we can communicate with it to use commands.
-            while let Ok(str) = input_rx.recv() {
-                if let Err(err) = writer.write_all(str.as_bytes()) {
+            while let Ok(bytes) = input_rx.recv() {
+                if let Err(err) = writer.write_all(&bytes) {
                     error!("Error writing to PTY: {}", err);
                     break;
                 } else {
-                    info!("wrote: {}", str);
+                    info!("wrote: {}", String::from_utf8_lossy(&bytes));
                 }
 
                 writer.flush().expect("flush error");
