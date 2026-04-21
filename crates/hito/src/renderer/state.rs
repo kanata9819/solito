@@ -222,30 +222,27 @@ impl State {
             },
         );
 
-        self.buffer
-            .text_renderer
-            .prepare(
-                &self.device,
-                &self.queue,
-                &mut self.buffer.font_system,
-                &mut self.buffer.atlas,
-                &self.buffer.viewport,
-                [TextArea {
-                    buffer: &self.buffer.text_buffer,
-                    left: 10.0,
-                    top: 10.0,
-                    scale: 1.0,
-                    bounds: TextBounds {
-                        left: 0,
-                        top: 0,
-                        ..Default::default()
-                    },
-                    default_color: Color::rgb(255, 255, 255),
-                    custom_glyphs: &[],
-                }],
-                &mut self.buffer.swash_cache,
-            )
-            .unwrap();
+        self.buffer.text_renderer.prepare(
+            &self.device,
+            &self.queue,
+            &mut self.buffer.font_system,
+            &mut self.buffer.atlas,
+            &self.buffer.viewport,
+            [TextArea {
+                buffer: &self.buffer.text_buffer,
+                left: 10.0,
+                top: 10.0,
+                scale: 1.0,
+                bounds: TextBounds {
+                    left: 0,
+                    top: 0,
+                    ..Default::default()
+                },
+                default_color: Color::rgb(255, 255, 255),
+                custom_glyphs: &[],
+            }],
+            &mut self.buffer.swash_cache,
+        )?;
 
         let frame: SurfaceTexture = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame) => frame,
@@ -289,10 +286,11 @@ impl State {
                 multiview_mask: None,
             });
 
-            self.buffer
-                .text_renderer
-                .render(&self.buffer.atlas, &self.buffer.viewport, &mut pass)
-                .unwrap();
+            self.buffer.text_renderer.render(
+                &self.buffer.atlas,
+                &self.buffer.viewport,
+                &mut pass,
+            )?;
         }
 
         self.queue.submit(Some(encoder.finish()));
