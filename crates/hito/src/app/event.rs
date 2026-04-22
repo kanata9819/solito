@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, mpsc::Sender},
 };
 
-use tracing::error;
+use tracing::{error, info};
 use winit::{
     event::{KeyEvent, WindowEvent},
     event_loop::ActiveEventLoop,
@@ -53,7 +53,9 @@ pub fn event_handler(
         WindowEvent::Resized(size) => {
             state.resize(size);
         }
-        _ => {}
+        _ => {
+            info!("unhandled event: {event:?}");
+        }
     }
     Ok(())
 }
@@ -76,6 +78,8 @@ pub fn handle_key(
             CodeKind::Function => Ok(()),
             CodeKind::Special => Ok(()),
         },
-        ParseResult::Err(ParseError::InvalidCode) => Err(("Invalid Code".to_string()).into()),
+        ParseResult::Err(ParseError::InvalidCode(code)) => {
+            Err((format!("Invalid Code: {:?}", code).to_string()).into())
+        }
     }
 }

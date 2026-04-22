@@ -1,16 +1,8 @@
 use winit::keyboard::KeyCode;
 
 pub enum ParseError {
-    InvalidCode,
+    InvalidCode(KeyCode),
 }
-
-// impl std::error::Error for ParseError {
-//     fn description(&self) -> &str {
-//         match self {
-//             ParseError::InvalidCode => "Invalid Code",
-//         }
-//     }
-// }
 
 pub enum CodeKind {
     Char(char),
@@ -91,6 +83,6 @@ pub fn parse(code: &KeyCode, is_pressed: bool) -> ParseResult {
         | (KeyCode::F7, true)
         | (KeyCode::F8, true)
         | (KeyCode::F9, true) => ParseResult::Ok(CodeKind::Function),
-        _ => ParseResult::Err(ParseError::InvalidCode),
+        _ => ParseResult::Err(ParseError::InvalidCode(*code)),
     }
 }
