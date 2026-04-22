@@ -23,6 +23,9 @@ impl InputBuffer {
         physical_size: winit::dpi::PhysicalSize<u32>,
         scale_factor: f64,
     ) -> Self {
+        const FONT_SIZE: f32 = 20.0;
+        const LINE_HEIGHT: f32 = 30.0;
+
         let mut font_system: FontSystem = FontSystem::new();
         let swash_cache: SwashCache = SwashCache::new();
         let cache: Cache = Cache::new(device);
@@ -30,7 +33,8 @@ impl InputBuffer {
         let mut atlas: TextAtlas = TextAtlas::new(device, queue, &cache, swapchain_format);
         let renderer: TextRenderer =
             TextRenderer::new(&mut atlas, device, MultisampleState::default(), None);
-        let mut text_buffer: Buffer = Buffer::new(&mut font_system, Metrics::new(30.0, 42.0));
+        let mut text_buffer: Buffer =
+            Buffer::new(&mut font_system, Metrics::new(FONT_SIZE, LINE_HEIGHT));
 
         let physical_width: f32 = (physical_size.width as f64 * scale_factor) as f32;
         let physical_height: f32 = (physical_size.height as f64 * scale_factor) as f32;
