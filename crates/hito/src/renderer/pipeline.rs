@@ -2,6 +2,7 @@ use wgpu::ShaderModule;
 use wgpu::wgt::SurfaceConfiguration;
 
 pub struct Pipeline {
+    #[allow(unused)]
     render_pipeline: wgpu::RenderPipeline,
 }
 
@@ -100,6 +101,8 @@ impl Pipeline {
         Self { render_pipeline }
     }
 
+    /// Returns the render pipeline
+    #[allow(unused)]
     pub fn render_pipeline(&self) -> &wgpu::RenderPipeline {
         &self.render_pipeline
     }

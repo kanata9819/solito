@@ -37,8 +37,11 @@ impl Perform for EscParser {
     fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, _byte: u8) {
         debug!("parser csi_dispatch: {:?}", _byte);
     }
-    fn execute(&mut self, _byte: u8) {
-        debug!("parser excute: {:?}", _byte);
+    fn execute(&mut self, byte: u8) {
+        debug!("parser excute: {:?}", byte);
+        if let Err(err) = self.output_tx.send(byte.to_string().as_bytes().to_vec()) {
+            error!("error occured at output_tx.send() {}", err);
+        };
     }
     fn hook(&mut self, _params: &vte::Params, _intermediates: &[u8], _ignore: bool, _action: char) {
         debug!("parser hook: {:?}", _params);

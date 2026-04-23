@@ -2,6 +2,7 @@ use winit::keyboard::KeyCode;
 
 pub enum ParseError {
     InvalidCode(KeyCode),
+    UnHandled(KeyCode),
 }
 
 pub enum CodeKind {
@@ -15,8 +16,16 @@ pub enum ParseResult {
     Err(ParseError),
 }
 
-pub fn parse(code: &KeyCode, is_pressed: bool) -> ParseResult {
-    match (code, is_pressed) {
+pub struct KeyState {
+    pub key_code: KeyCode,
+    pub is_pressed: bool,
+    pub is_released: bool,
+}
+
+/// This is where we'll parse the keycode
+/// TODO: released is not handled right now
+pub fn parse(key_state: &KeyState) -> ParseResult {
+    match (key_state.key_code, key_state.is_pressed) {
         (KeyCode::KeyA, true) => ParseResult::Ok(CodeKind::Char('A')),
         (KeyCode::KeyB, true) => ParseResult::Ok(CodeKind::Char('B')),
         (KeyCode::KeyC, true) => ParseResult::Ok(CodeKind::Char('C')),
@@ -83,6 +92,12 @@ pub fn parse(code: &KeyCode, is_pressed: bool) -> ParseResult {
         | (KeyCode::F7, true)
         | (KeyCode::F8, true)
         | (KeyCode::F9, true) => ParseResult::Ok(CodeKind::Function),
-        _ => ParseResult::Err(ParseError::InvalidCode(*code)),
+        _ => {
+            if key_state.is_released {
+                ParseResult::Err(ParseError::UnHandled(*&key_state.key_code))
+            } else {
+                ParseResult::Err(ParseError::InvalidCode(*&key_state.key_code))
+            }
+        }
     }
 }

@@ -15,6 +15,7 @@ pub struct State {
     queue: Queue,
     config: SurfaceConfiguration,
     is_surface_configured: bool,
+    #[allow(unused)]
     render_pipeline: Pipeline,
     buffer: InputBuffer,
     instance: Instance,
@@ -150,12 +151,6 @@ impl State {
             }
         };
 
-        // This line creates a TextureView with default settings.
-        // We need to do this because we want to control how the render code interacts with the texture.
-        // let view: TextureView = output
-        //     .texture
-        //     .create_view(&wgpu::TextureViewDescriptor::default());
-
         // We also need to create a CommandEncoder to create the actual commands to send to the GPU.
         // Most modern graphics frameworks expect commands to be stored in a command buffer before being sent to the GPU.
         // The encoder builds a command buffer that we can then send to the GPU.
@@ -164,44 +159,6 @@ impl State {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("Render Encoder"),
                 });
-
-        {
-            // First things first, let's talk about the extra block ({}) around encoder.begin_render_pass(...).
-            // begin_render_pass() borrows encoder mutably (aka &mut self).
-            // We can't call encoder.finish() until we release that mutable borrow.
-            // The block tells Rust to drop any variables within it when the code leaves that scope,
-            // thus releasing the mutable borrow on encoder and allowing us to finish() it.
-            // If you don't like the {}, you can also use drop(render_pass) to achieve the same effect.
-            // 1.
-            // let mut render_pass: wgpu::RenderPass<'_> =
-            //     encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            //         label: Some("Render Pass"),
-            //         color_attachments: &[
-            //             // This is what @location(0) in the fragment shader targets
-            //             Some(wgpu::RenderPassColorAttachment {
-            //                 view: &view,
-            //                 resolve_target: None,
-            //                 depth_slice: None,
-            //                 ops: wgpu::Operations {
-            //                     load: wgpu::LoadOp::Clear(wgpu::Color {
-            //                         r: 0.1,
-            //                         g: 0.2,
-            //                         b: 0.3,
-            //                         a: 1.0,
-            //                     }),
-            //                     store: wgpu::StoreOp::Store,
-            //                 },
-            //             }),
-            //         ],
-            //         occlusion_query_set: None,
-            //         timestamp_writes: None,
-            //         multiview_mask: None,
-            //         depth_stencil_attachment: None,
-            //     });
-
-            // render_pass.set_pipeline(self.render_pipeline.render_pipeline()); // 2.
-            // render_pass.draw(0..3, 0..1); // 3.
-        }
 
         // submit will accept anything that implements IntoIter
         self.queue.submit(std::iter::once(encoder.finish()));

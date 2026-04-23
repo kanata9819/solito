@@ -8,7 +8,7 @@ use tracing::{error, info};
 use winit::{
     event::{KeyEvent, WindowEvent},
     event_loop::ActiveEventLoop,
-    keyboard::{KeyCode, PhysicalKey},
+    keyboard::PhysicalKey,
     window::{Window, WindowId},
 };
 
@@ -16,7 +16,7 @@ use crate::{
     renderer::state::State,
     util::{
         self,
-        keycode_parser::{CodeKind, ParseError, ParseResult},
+        keycode_parser::{CodeKind, KeyState, ParseError, ParseResult},
     },
 };
 
@@ -49,7 +49,14 @@ pub fn event_handler(
                     ..
                 },
             ..
-        } => handle_key(state, event_loop, code, key_state.is_pressed(), input_tx)?,
+        } => {
+            let key_state: KeyState = KeyState {
+                key_code: code,
+                is_pressed: key_state == winit::event::ElementState::Pressed,
+                is_released: key_state == winit::event::ElementState::Released,
+            };
+            handle_key(state, event_loop, &key_state, input_tx)?
+        }
         WindowEvent::Resized(size) => {
             state.resize(size);
         }
@@ -64,11 +71,10 @@ pub fn event_handler(
 pub fn handle_key(
     state: &mut State,
     _event_loop: &ActiveEventLoop,
-    code: KeyCode,
-    is_pressed: bool,
+    key_state: &KeyState,
     input_tx: &Sender<Vec<u8>>,
 ) -> Result<(), Box<dyn Error>> {
-    match util::keycode_parser::parse(&code, is_pressed) {
+    match util::keycode_parser::parse(&key_state) {
         ParseResult::Ok(kind) => match kind {
             CodeKind::Char(char) => {
                 input_tx.send(char.to_string().into_bytes())?;
@@ -80,6 +86,9 @@ pub fn handle_key(
         },
         ParseResult::Err(ParseError::InvalidCode(code)) => {
             Err((format!("Invalid Code: {:?}", code).to_string()).into())
+        }
+        ParseResult::Err(ParseError::UnHandled(code)) => {
+            Err((format!("UnHandled Code: {:?}", code).to_string()).into())
         }
     }
 }
