@@ -36,19 +36,12 @@ impl HitoApplication {
     }
 
     fn drain_output(&mut self) -> Result<(), Box<dyn Error>> {
-        while let Ok(output) = self.output_rx.try_recv() {
-            if let Some(state) = &mut self.state {
-                let mut dbg: Vec<char> = Vec::new();
-                let output: String = String::from_utf8(output)?;
-                for char in output.chars() {
-                    state.add_char_to_buffer(char);
-
-                    dbg.push(char);
-                }
-
-                for c in dbg {
-                    println!("{:?}", c);
-                }
+        while let Ok(output) = self.output_rx.try_recv()
+            && let Some(state) = &mut self.state
+        {
+            let output: String = String::from_utf8(output)?;
+            for char in output.chars() {
+                state.add_char_to_buffer(char);
             }
         }
         Ok(())
@@ -67,15 +60,10 @@ impl HitoApplication {
 
         let window_id: WindowId = window.id();
         self.windows.insert(window_id, window.clone());
-
         let mut state: State = pollster::block_on(State::new(window))?;
         state.render()?;
         self.state = Some(state);
-
-        if let Err(err) = self.drain_output() {
-            error!("drain output error occured: {}", err);
-        };
-
+        self.drain_output()?;
         Ok(())
     }
 }
