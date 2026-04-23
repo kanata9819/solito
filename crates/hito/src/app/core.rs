@@ -38,16 +38,16 @@ impl HitoApplication {
     fn drain_output(&mut self) -> Result<(), Box<dyn Error>> {
         while let Ok(output) = self.output_rx.try_recv() {
             if let Some(state) = &mut self.state {
-                if cfg!(debug_assertions) {
-                    eprintln!("output: {:#?}", output);
-                }
+                let mut dbg: Vec<char> = Vec::new();
                 let output: String = String::from_utf8(output)?;
                 for char in output.chars() {
                     state.add_char_to_buffer(char);
 
-                    if cfg!(debug_assertions) {
-                        eprintln!("output: {:?}", char);
-                    }
+                    dbg.push(char);
+                }
+
+                for c in dbg {
+                    println!("{:?}", c);
                 }
             }
         }
@@ -108,5 +108,15 @@ impl ApplicationHandler for HitoApplication {
         ) {
             error!("event handle error: {}", err);
         };
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        if let Err(err) = self.drain_output() {
+            error!("drain output error occured: {}", err);
+        }
+
+        for window in self.windows.values() {
+            window.request_redraw();
+        }
     }
 }
