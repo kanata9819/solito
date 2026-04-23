@@ -48,6 +48,8 @@ impl Perform for EscParser {
             debug!("parser excute: {:?}", byte);
         }
 
+        // if we convert "byte" to string, and then send to the terminal,
+        // "\n" will be converted to "10", which is not what we want.
         if let Err(err) = self.output_tx.send(vec![byte]) {
             error!("error occured at output_tx.send() {}", err);
         };
