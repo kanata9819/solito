@@ -78,7 +78,7 @@ pub fn handle_key(
         ParseResult::Ok(kind) => match kind {
             CodeKind::Char(char) => {
                 input_tx.send(char.to_string().into_bytes())?;
-                state.add_char_to_buffer(char)?;
+                state.add_char_to_buffer(char);
                 Ok(())
             }
             CodeKind::Function => Ok(()),

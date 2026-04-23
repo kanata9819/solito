@@ -43,7 +43,7 @@ impl HitoApplication {
                 }
                 let output: String = String::from_utf8(output)?;
                 for char in output.chars() {
-                    state.add_char_to_buffer(char)?;
+                    state.add_char_to_buffer(char);
 
                     if cfg!(debug_assertions) {
                         eprintln!("output: {:?}", char);

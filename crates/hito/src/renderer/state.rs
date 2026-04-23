@@ -258,9 +258,7 @@ impl State {
         Ok(())
     }
 
-    pub fn add_char_to_buffer(&mut self, char: char) -> Result<(), Box<dyn Error>> {
+    pub fn add_char_to_buffer(&mut self, char: char) {
         self.buffer.set_text(char);
-
-        Ok(())
     }
 }
