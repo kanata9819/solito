@@ -20,8 +20,11 @@ impl EscParser {
 
 impl Perform for EscParser {
     fn print(&mut self, c: char) {
-        debug!("parser print: {:?}", c);
-        if let Err(err) = self.output_tx.send(c.to_string().as_bytes().to_vec()) {
+        if cfg!(debug_assertions) {
+            debug!("parser print: {:?}", c);
+        }
+
+        if let Err(err) = self.output_tx.send(c.to_string().into_bytes()) {
             error!("error occured at output_tx.send() {}", err);
         };
     }
@@ -38,8 +41,11 @@ impl Perform for EscParser {
         debug!("parser csi_dispatch: {:?}", _byte);
     }
     fn execute(&mut self, byte: u8) {
-        debug!("parser excute: {:?}", byte);
-        if let Err(err) = self.output_tx.send(byte.to_string().as_bytes().to_vec()) {
+        if cfg!(debug_assertions) {
+            debug!("parser excute: {:?}", byte);
+        }
+
+        if let Err(err) = self.output_tx.send(vec![byte]) {
             error!("error occured at output_tx.send() {}", err);
         };
     }

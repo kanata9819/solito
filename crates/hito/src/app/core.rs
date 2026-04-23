@@ -38,10 +38,17 @@ impl HitoApplication {
     fn drain_output(&mut self) -> Result<(), Box<dyn Error>> {
         while let Ok(output) = self.output_rx.try_recv() {
             if let Some(state) = &mut self.state {
-                let output: std::borrow::Cow<'_, str> = String::from_utf8_lossy(&output);
-                if let Some(char) = output.chars().next() {
+                if cfg!(debug_assertions) {
+                    eprintln!("output: {:#?}", output);
+                }
+                let output: String = String::from_utf8(output)?;
+                for char in output.chars() {
                     state.add_char_to_buffer(char)?;
-                };
+
+                    if cfg!(debug_assertions) {
+                        eprintln!("output: {:?}", char);
+                    }
+                }
             }
         }
         Ok(())
