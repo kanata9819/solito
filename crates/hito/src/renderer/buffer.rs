@@ -12,6 +12,7 @@ pub struct InputBuffer {
     pub font_system: FontSystem,
     pub swash_cache: SwashCache,
     pub atlas: TextAtlas,
+    pub cursor: Cursor,
     inner_buffer: String,
 }
 
@@ -55,6 +56,7 @@ impl InputBuffer {
             swash_cache,
             atlas,
             inner_buffer: String::new(),
+            cursor: Cursor::new(),
         }
     }
 
@@ -69,5 +71,43 @@ impl InputBuffer {
             Shaping::Advanced,
             None,
         );
+    }
+}
+
+pub struct Cursor {
+    col: usize,
+    row: usize,
+}
+
+impl Cursor {
+    pub fn new() -> Self {
+        Self {
+            col: usize::default(),
+            row: usize::default(),
+        }
+    }
+
+    pub fn forward_col(&mut self) {
+        self.col += 1;
+    }
+
+    pub fn backward_col(&mut self) {
+        self.col = self.col.saturating_sub(1);
+    }
+
+    pub fn forward_row(&mut self) {
+        self.row += 1;
+    }
+
+    pub fn backward_row(&mut self) {
+        self.row = self.row.saturating_sub(1);
+    }
+
+    pub fn reset_col(&mut self) {
+        self.col = 0;
+    }
+
+    pub fn reset_row(&mut self) {
+        self.row = 0;
     }
 }
