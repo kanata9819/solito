@@ -36,8 +36,8 @@ impl InputBuffer {
         let mut text_buffer: Buffer =
             Buffer::new(&mut font_system, Metrics::new(FONT_SIZE, LINE_HEIGHT));
 
-        let physical_width: f32 = (physical_size.width as f64 * scale_factor) as f32;
-        let physical_height: f32 = (physical_size.height as f64 * scale_factor) as f32;
+        let physical_width: f32 = (f64::from(physical_size.width) * scale_factor) as f32;
+        let physical_height: f32 = (f64::from(physical_size.height) * scale_factor) as f32;
 
         text_buffer.set_size(
             &mut font_system,
