@@ -1,5 +1,4 @@
 use portable_pty::{Child, CommandBuilder, ExitStatus, MasterPty, PtyPair, PtySize, SlavePty};
-use std::borrow::Cow;
 use std::error::Error;
 use std::io::{Read, Write};
 use std::sync::mpsc::{Receiver, Sender};
@@ -28,13 +27,12 @@ impl SessionRuntime {
     pub fn new(input_rx: Receiver<Vec<u8>>, output_tx: Sender<Vec<u8>>) -> Self {
         let pty_pair: PtyPair = Self::pty_pair();
         let child: TChild = Self::spawn_command(pty_pair.slave);
-        let parser: EscParser = EscParser::new(output_tx);
 
         Self {
             child,
             input_rx,
             master: pty_pair.master,
-            parser,
+            parser: EscParser::new(output_tx),
         }
     }
 
@@ -83,8 +81,7 @@ impl SessionRuntime {
                         break;
                     }
                     Ok(n) => {
-                        let output: Cow<'_, str> = String::from_utf8_lossy(&buffer[..n]);
-                        parser.parse(output.as_bytes());
+                        parser.parse(&buffer[..n]);
                     }
                     Err(err) => {
                         error!("error occured at reader.read() {}", err)

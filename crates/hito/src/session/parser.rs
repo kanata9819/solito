@@ -4,21 +4,34 @@ use tracing::{debug, error};
 use vte::{Parser, Perform};
 
 pub struct EscParser {
-    output_tx: Sender<Vec<u8>>,
+    pub parser: Parser<1024>,
+    pub performer: EscPerformer,
 }
 
 impl EscParser {
     pub fn new(output_tx: Sender<Vec<u8>>) -> Self {
-        Self { output_tx }
+        Self {
+            parser: Parser::new(),
+            performer: EscPerformer::new(output_tx),
+        }
     }
 
     pub fn parse(&mut self, bytes: impl AsRef<[u8]>) {
-        let mut parser: Parser<1024> = Parser::new();
-        parser.advance(self, bytes.as_ref());
+        self.parser.advance(&mut self.performer, bytes.as_ref());
     }
 }
 
-impl Perform for EscParser {
+pub struct EscPerformer {
+    output_tx: Sender<Vec<u8>>,
+}
+
+impl EscPerformer {
+    pub fn new(output_tx: Sender<Vec<u8>>) -> Self {
+        Self { output_tx }
+    }
+}
+
+impl Perform for EscPerformer {
     fn print(&mut self, c: char) {
         if cfg!(debug_assertions) {
             debug!("parser print: {:?}", c);
