@@ -10,6 +10,13 @@ impl Cursor {
             row: usize::default(),
         }
     }
+    pub fn current_col(&self) -> usize {
+        self.col
+    }
+
+    pub fn current_row(&self) -> usize {
+        self.row
+    }
 
     pub fn forward_col(&mut self) {
         self.col += 1;

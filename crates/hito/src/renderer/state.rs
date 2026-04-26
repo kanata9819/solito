@@ -7,7 +7,7 @@ use wgpu::{
 };
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::renderer::{buffer::InputBuffer, pipeline::Pipeline};
+use crate::renderer::{buffer::InputBuffer, pipeline::rect_pipeline, render_pass};
 
 pub struct State {
     surface: Surface<'static>,
@@ -15,7 +15,7 @@ pub struct State {
     queue: Queue,
     config: SurfaceConfiguration,
     is_surface_configured: bool,
-    render_pipeline: Pipeline,
+    rect_pipeline: rect_pipeline::Pipeline,
     buffer: InputBuffer,
     instance: Instance,
     window: Arc<Window>,
@@ -77,7 +77,8 @@ impl State {
                 desired_maximum_frame_latency: 2,
             };
 
-        let render_pipeline: Pipeline = Pipeline::new(&device, config.clone());
+        let render_pipeline: rect_pipeline::Pipeline =
+            rect_pipeline::Pipeline::new(&device, config.clone());
         let swapchain_format: TextureFormat = TextureFormat::Bgra8UnormSrgb;
         let buffer: InputBuffer =
             InputBuffer::new(&device.clone(), &queue.clone(), swapchain_format, size, 1.0);
@@ -88,7 +89,7 @@ impl State {
             queue,
             config,
             is_surface_configured: false,
-            render_pipeline,
+            rect_pipeline: render_pipeline,
             buffer,
             instance,
             window,
@@ -207,23 +208,8 @@ impl State {
             .device
             .create_command_encoder(&CommandEncoderDescriptor { label: None });
         {
-            let mut pass: wgpu::RenderPass<'_> = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: None,
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-
+            let mut pass: wgpu::RenderPass<'_> =
+                render_pass::begin_render_pass(&mut encoder, &view);
             self.buffer.text_renderer.render(
                 &self.buffer.atlas,
                 &self.buffer.viewport,

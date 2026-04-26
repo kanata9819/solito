@@ -8,6 +8,9 @@ use wgpu::MultisampleState;
 
 use super::cursor::Cursor;
 
+const FONT_SIZE: f32 = 20.0;
+const LINE_HEIGHT: f32 = 30.0;
+
 pub struct InputBuffer {
     pub text_buffer: Buffer,
     pub viewport: Viewport,
@@ -27,9 +30,6 @@ impl InputBuffer {
         physical_size: winit::dpi::PhysicalSize<u32>,
         scale_factor: f64,
     ) -> Self {
-        const FONT_SIZE: f32 = 20.0;
-        const LINE_HEIGHT: f32 = 30.0;
-
         let mut font_system: FontSystem = FontSystem::new();
         let swash_cache: SwashCache = SwashCache::new();
         let cache: Cache = Cache::new(device);
@@ -72,5 +72,10 @@ impl InputBuffer {
             Shaping::Advanced,
             None,
         );
+    }
+
+    fn draw_caret(&self) {
+        let caret_x = 10.0 + self.cursor.current_col() as f32 * 12.0;
+        let caret_y = 10.0 + self.cursor.current_row() as f32 * LINE_HEIGHT;
     }
 }
