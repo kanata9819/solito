@@ -1,9 +1,8 @@
 use glyphon::{Color, Resolution, TextArea, TextBounds};
 use std::{error::Error, sync::Arc};
 use wgpu::{
-    Adapter, CommandEncoder, CommandEncoderDescriptor, Device, Instance, LoadOp, Operations, Queue,
-    RenderPassColorAttachment, RenderPassDescriptor, Surface, SurfaceConfiguration, SurfaceTexture,
-    TextureFormat, TextureView, TextureViewDescriptor,
+    Adapter, CommandEncoder, CommandEncoderDescriptor, Device, Instance, Queue, Surface,
+    SurfaceConfiguration, SurfaceTexture, TextureFormat, TextureView, TextureViewDescriptor,
 };
 use winit::{dpi::PhysicalSize, window::Window};
 
