@@ -15,7 +15,6 @@ pub struct State {
     queue: Queue,
     config: SurfaceConfiguration,
     is_surface_configured: bool,
-    #[allow(unused)]
     render_pipeline: Pipeline,
     buffer: InputBuffer,
     instance: Instance,
@@ -47,8 +46,6 @@ impl State {
                 label: None,
                 required_features: wgpu::Features::empty(),
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
-                // WebGL doesn't support all of wgpu's features, so if
-                // we're building for the web we'll have to disable some.
                 required_limits: if cfg!(target_arch = "wasm32") {
                     wgpu::Limits::downlevel_webgl2_defaults()
                 } else {
@@ -61,9 +58,6 @@ impl State {
 
         let surface_caps: wgpu::SurfaceCapabilities = surface.get_capabilities(&adapter);
 
-        // Shader code in this tutorial assumes an sRGB surface texture. Using a different
-        // one will result in all the colors coming out darker. If you want to support non
-        // sRGB surfaces, you'll need to account for that when drawing to the frame.
         let surface_format: wgpu::TextureFormat = surface_caps
             .formats
             .iter()
@@ -101,15 +95,6 @@ impl State {
         })
     }
 
-    /// ↓ quoted from official document. ↓
-    /// If we want to support resizing in our application,
-    /// we're going to need to reconfigure the surface every time the window's size changes.
-    /// That's the reason we stored the physical size and the config used to configure the surface.
-    /// With all of these, the resize method is very simple.
-    ///
-    /// This is where we configure the surface.
-    /// We need the surface to be configured before we can do anything with it.
-    /// We set the is_surface_configured flag to true here and we'll check it in the render() function.
     pub fn resize(&mut self, size: PhysicalSize<u32>) {
         let size: PhysicalSize<u32> = size;
         if size.width > 0 && size.height > 0 {
@@ -151,16 +136,12 @@ impl State {
             }
         };
 
-        // We also need to create a CommandEncoder to create the actual commands to send to the GPU.
-        // Most modern graphics frameworks expect commands to be stored in a command buffer before being sent to the GPU.
-        // The encoder builds a command buffer that we can then send to the GPU.
         let encoder: CommandEncoder =
             self.device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("Render Encoder"),
                 });
 
-        // submit will accept anything that implements IntoIter
         self.queue.submit(std::iter::once(encoder.finish()));
 
         // The last lines of the code tell wgpu to finish the command buffer
