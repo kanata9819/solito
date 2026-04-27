@@ -136,11 +136,7 @@ impl State {
             }
         };
 
-        let encoder: CommandEncoder =
-            self.device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Render Encoder"),
-                });
+        let encoder: CommandEncoder = self.create_encoder(Some("Render Encoder"));
 
         self.queue.submit(std::iter::once(encoder.finish()));
 
@@ -160,6 +156,41 @@ impl State {
             },
         );
 
+        self.prepare()?;
+
+        let frame: Option<SurfaceTexture> = match self.initialize_frame() {
+            Ok(Some(frame)) => Some(frame),
+            Ok(None) => None,
+            Err(err) => {
+                eprintln!("initialize frame failed: {}", err);
+                None
+            }
+        };
+
+        if let Some(frame) = frame {
+            let view: TextureView = frame.texture.create_view(&TextureViewDescriptor::default());
+            let mut encoder: CommandEncoder = self.create_encoder(None);
+            self.render_pass(&mut encoder, view)?;
+            self.queue.submit(Some(encoder.finish()));
+            frame.present();
+        }
+
+        self.buffer.atlas.trim();
+
+        Ok(())
+    }
+
+    pub fn add_char_to_buffer(&mut self, char: char) {
+        self.buffer.set_text(char);
+        self.buffer.cursor.forward_col();
+    }
+
+    fn create_encoder(&self, label: Option<&str>) -> CommandEncoder {
+        self.device
+            .create_command_encoder(&CommandEncoderDescriptor { label })
+    }
+
+    fn prepare(&mut self) -> Result<(), Box<dyn Error>> {
         self.buffer.text_renderer.prepare(
             &self.device,
             &self.queue,
@@ -182,52 +213,45 @@ impl State {
             &mut self.buffer.swash_cache,
         )?;
 
+        Ok(())
+    }
+
+    fn render_pass(
+        &mut self,
+        encoder: &mut CommandEncoder,
+        view: TextureView,
+    ) -> Result<(), Box<dyn Error>> {
+        let mut pass: wgpu::RenderPass<'_> = render_pass::begin_render_pass(encoder, &view);
+        self.buffer
+            .text_renderer
+            .render(&self.buffer.atlas, &self.buffer.viewport, &mut pass)?;
+        self.rect_pipeline.draw_rect(&mut pass);
+
+        Ok(())
+    }
+
+    fn initialize_frame(&mut self) -> Result<Option<SurfaceTexture>, Box<dyn Error>> {
         let frame: SurfaceTexture = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame) => frame,
             wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
                 // Try again later
                 self.window.request_redraw();
-                return Ok(());
+                return Ok(None);
             }
             wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Suboptimal(_) => {
                 self.surface.configure(&self.device, &self.config);
                 self.window.request_redraw();
-                return Ok(());
+                return Ok(None);
             }
             wgpu::CurrentSurfaceTexture::Lost => {
                 self.surface = self.instance.create_surface(self.window.clone())?;
                 self.surface.configure(&self.device, &self.config);
                 self.window.request_redraw();
-                return Ok(());
+                return Ok(None);
             }
             wgpu::CurrentSurfaceTexture::Validation => panic!("validation error"),
         };
-        let view: TextureView = frame.texture.create_view(&TextureViewDescriptor::default());
-        let mut encoder: CommandEncoder = self
-            .device
-            .create_command_encoder(&CommandEncoderDescriptor { label: None });
 
-        {
-            let mut pass: wgpu::RenderPass<'_> =
-                render_pass::begin_render_pass(&mut encoder, &view);
-            self.buffer.text_renderer.render(
-                &self.buffer.atlas,
-                &self.buffer.viewport,
-                &mut pass,
-            )?;
-            self.rect_pipeline.draw_rect(&mut pass);
-        }
-
-        self.queue.submit(Some(encoder.finish()));
-        frame.present();
-
-        self.buffer.atlas.trim();
-
-        Ok(())
-    }
-
-    pub fn add_char_to_buffer(&mut self, char: char) {
-        self.buffer.set_text(char);
-        self.buffer.cursor.forward_col();
+        Ok(Some(frame))
     }
 }

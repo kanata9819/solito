@@ -74,7 +74,11 @@ impl Pipeline {
     }
 
     pub fn draw_rect(&self, pass: &mut wgpu::RenderPass) {
+        use std::ops::Range;
+        const VERTICIES_COUNT: Range<u32> = 0..6;
+        const INSTANCE_COUNT: Range<u32> = 0..1;
+
         pass.set_pipeline(&self.pipeline);
-        pass.draw(0..6, 0..1)
+        pass.draw(VERTICIES_COUNT, INSTANCE_COUNT)
     }
 }
