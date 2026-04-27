@@ -74,8 +74,10 @@ impl InputBuffer {
         );
     }
 
-    fn draw_caret(&self) {
-        let caret_x = 10.0 + self.cursor.current_col() as f32 * 12.0;
-        let caret_y = 10.0 + self.cursor.current_row() as f32 * LINE_HEIGHT;
+    pub fn caret_rect(&self) -> (f32, f32, f32, f32) {
+        let x = 10.0 + self.cursor.current_col() as f32 * 12.0;
+        let y = 10.0 + self.cursor.current_row() as f32 * 30.0;
+
+        (x, y, 2.0, 30.0)
     }
 }

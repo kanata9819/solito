@@ -76,7 +76,7 @@ impl State {
                 desired_maximum_frame_latency: 2,
             };
 
-        let render_pipeline: rect_pipeline::Pipeline =
+        let rect_pipeline: rect_pipeline::Pipeline =
             rect_pipeline::Pipeline::new(&device, config.clone());
         let swapchain_format: TextureFormat = TextureFormat::Bgra8UnormSrgb;
         let buffer: InputBuffer =
@@ -88,7 +88,7 @@ impl State {
             queue,
             config,
             is_surface_configured: false,
-            rect_pipeline: render_pipeline,
+            rect_pipeline,
             buffer,
             instance,
             window,
@@ -206,6 +206,7 @@ impl State {
         let mut encoder: CommandEncoder = self
             .device
             .create_command_encoder(&CommandEncoderDescriptor { label: None });
+
         {
             let mut pass: wgpu::RenderPass<'_> =
                 render_pass::begin_render_pass(&mut encoder, &view);
@@ -214,6 +215,7 @@ impl State {
                 &self.buffer.viewport,
                 &mut pass,
             )?;
+            self.rect_pipeline.draw_rect(&mut pass);
         }
 
         self.queue.submit(Some(encoder.finish()));
@@ -226,5 +228,6 @@ impl State {
 
     pub fn add_char_to_buffer(&mut self, char: char) {
         self.buffer.set_text(char);
+        self.buffer.cursor.forward_col();
     }
 }

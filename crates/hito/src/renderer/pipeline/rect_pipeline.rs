@@ -20,7 +20,7 @@ impl Pipeline {
         config: SurfaceConfiguration<Vec<wgpu::TextureFormat>>,
     ) -> Self {
         let shader: ShaderModule =
-            device.create_shader_module(wgpu::include_wgsl!("../../shader/shader.wgsl"));
+            device.create_shader_module(wgpu::include_wgsl!("../../shader/rect.wgsl"));
 
         let render_pipeline_layout: wgpu::PipelineLayout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -73,8 +73,8 @@ impl Pipeline {
         }
     }
 
-    /// Returns the render pipeline
-    pub fn render_pipeline(&self) -> &wgpu::RenderPipeline {
-        &self.pipeline
+    pub fn draw_rect(&self, pass: &mut wgpu::RenderPass) {
+        pass.set_pipeline(&self.pipeline);
+        pass.draw(0..6, 0..1)
     }
 }
