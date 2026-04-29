@@ -6,7 +6,7 @@ use wgpu::{
 };
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::renderer::{buffer::InputBuffer, pipeline::rect_pipeline, render_pass};
+use crate::renderer::{buffer::InputBuffer, pass, pipeline::rect};
 
 pub struct State {
     surface: Surface<'static>,
@@ -14,10 +14,11 @@ pub struct State {
     queue: Queue,
     config: SurfaceConfiguration,
     is_surface_configured: bool,
-    rect_pipeline: rect_pipeline::Pipeline,
+    rect_pipeline: rect::Pipeline,
     buffer: InputBuffer,
     instance: Instance,
     window: Arc<Window>,
+    uniform_buffer: wgpu::Buffer,
 }
 
 impl State {
@@ -76,8 +77,9 @@ impl State {
                 desired_maximum_frame_latency: 2,
             };
 
-        let rect_pipeline: rect_pipeline::Pipeline =
-            rect_pipeline::Pipeline::new(&device, config.clone());
+        let uniform_buffer: wgpu::Buffer = rect::Pipeline::create_uniform_buffer(&device);
+        let rect_pipeline: rect::Pipeline =
+            rect::Pipeline::new(&device, config.clone(), &queue, &uniform_buffer);
         let swapchain_format: TextureFormat = TextureFormat::Bgra8UnormSrgb;
         let buffer: InputBuffer =
             InputBuffer::new(&device.clone(), &queue.clone(), swapchain_format, size, 1.0);
@@ -92,6 +94,7 @@ impl State {
             buffer,
             instance,
             window,
+            uniform_buffer,
         })
     }
 
@@ -221,11 +224,17 @@ impl State {
         encoder: &mut CommandEncoder,
         view: TextureView,
     ) -> Result<(), Box<dyn Error>> {
-        let mut pass: wgpu::RenderPass<'_> = render_pass::begin_render_pass(encoder, &view);
+        let mut pass: wgpu::RenderPass<'_> = pass::begin_render_pass(encoder, &view);
+
         self.buffer
             .text_renderer
             .render(&self.buffer.atlas, &self.buffer.viewport, &mut pass)?;
-        self.rect_pipeline.draw_rect(&mut pass);
+
+        let bind_group = self
+            .rect_pipeline
+            .caret_bind_group(&self.device, &self.uniform_buffer);
+
+        self.rect_pipeline.draw_rect(&mut pass, bind_group);
 
         Ok(())
     }

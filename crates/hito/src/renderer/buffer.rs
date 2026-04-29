@@ -2,8 +2,6 @@ use glyphon::{
     Attrs, Buffer, Cache, Family, FontSystem, Metrics, Shaping, SwashCache, TextAtlas,
     TextRenderer, Viewport,
 };
-#[allow(unused)]
-use tracing::debug;
 use wgpu::MultisampleState;
 
 use super::cursor::Cursor;
@@ -26,7 +24,7 @@ impl InputBuffer {
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        swapchain_format: wgpu::TextureFormat,
+        swapchain: wgpu::TextureFormat,
         physical_size: winit::dpi::PhysicalSize<u32>,
         scale_factor: f64,
     ) -> Self {
@@ -34,7 +32,7 @@ impl InputBuffer {
         let swash_cache: SwashCache = SwashCache::new();
         let cache: Cache = Cache::new(device);
         let viewport: Viewport = Viewport::new(device, &cache);
-        let mut atlas: TextAtlas = TextAtlas::new(device, queue, &cache, swapchain_format);
+        let mut atlas: TextAtlas = TextAtlas::new(device, queue, &cache, swapchain);
         let renderer: TextRenderer =
             TextRenderer::new(&mut atlas, device, MultisampleState::default(), None);
         let mut text_buffer: Buffer =
@@ -72,12 +70,5 @@ impl InputBuffer {
             Shaping::Advanced,
             None,
         );
-    }
-
-    pub fn caret_rect(&self) -> (f32, f32, f32, f32) {
-        let x = 10.0 + self.cursor.current_col() as f32 * 12.0;
-        let y = 10.0 + self.cursor.current_row() as f32 * 30.0;
-
-        (x, y, 2.0, 30.0)
     }
 }

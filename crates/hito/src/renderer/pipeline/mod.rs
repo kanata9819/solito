@@ -1,1 +1,1 @@
-pub mod rect_pipeline;
+pub mod rect;

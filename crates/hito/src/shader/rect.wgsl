@@ -1,28 +1,47 @@
+struct CaretUniform {
+    pos: vec2<f32>,
+    size: vec2<f32>,
+    screen: vec2<f32>,
+    pad: vec2<f32>,
+};
+
+@group(0) @binding(0)
+var<uniform> caret: CaretUniform;
+
 struct VertexOutput {
-    @builtin(position) clip_position: vec4<f32>,
-}
+    @builtin(position) position: vec4<f32>,
+};
 
 @vertex
-fn vs_main(
-    @builtin(vertex_index) in: u32,
-) -> VertexOutput {
-    var pos = array<vec2<f32>, 6>(
-        vec2<f32>(-0.01, 0.00), // left bottom
-        vec2<f32>( 0.00, 0.00), // right bottom
-        vec2<f32>( 0.00, 0.05), // right top
+fn vs_main(@builtin(vertex_index) index: u32) -> VertexOutput {
 
-        vec2<f32>(-0.01, 0.00), // left bottom
-        vec2<f32>( 0.00, 0.05), // right top
-        vec2<f32>(-0.01, 0.05), // left top
+    var quad = array<vec2<f32>, 6>(
+        vec2<f32>(0.0, 0.0),
+        vec2<f32>(0.0, 1.0),
+        vec2<f32>(1.0, 0.0),
+
+        vec2<f32>(1.0, 0.0),
+        vec2<f32>(0.0, 1.0),
+        vec2<f32>(1.0, 1.0),
+    );
+
+    let local = quad[index];
+
+    let pixel = caret.pos + local * caret.size;
+
+    let ndc = vec2<f32>(
+        pixel.x / caret.screen.x * 2.0 - 1.0,
+        1.0 - pixel.y / caret.screen.y * 2.0
     );
 
     var out: VertexOutput;
-    out.clip_position = vec4<f32>(pos[in], 0.0, 1.0);
+    out.position = vec4<f32>(ndc, 0.0, 1.0);
+
     return out;
 }
 
 // Fragment shader
 @fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return vec4<f32>(0.3, 0.7, 1.0, 1.0);
+fn fs_main() -> @location(0) vec4<f32> {
+    return vec4<f32>(1.0, 1.0, 1.0, 1.0);
 }

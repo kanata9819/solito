@@ -48,8 +48,11 @@ impl HitoApplication {
     }
 
     fn create_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), Box<dyn Error>> {
+        const WINDOW_WIDTH: f32 = 1200.0;
+        const WINDOW_HIGHT: f32 = 750.0;
+
         let window_attributes: WindowAttributes = WindowAttributes::default()
-            .with_inner_size(LogicalSize::new(1200.0, 750.0))
+            .with_inner_size(LogicalSize::new(WINDOW_WIDTH, WINDOW_HIGHT))
             .with_title("Hito");
 
         let window: Arc<Window> = Arc::new(
