@@ -7,8 +7,8 @@ use std::{
     },
 };
 
-use crate::app::event as AppEvent;
 use crate::renderer::state::State;
+use crate::{app::event as AppEvent, session::parser::TerminalEvent};
 use tracing::error;
 use winit::{
     application::ApplicationHandler,
@@ -22,11 +22,11 @@ pub struct HitoApplication {
     pub windows: HashMap<WindowId, Arc<Window>>,
     state: Option<State>,
     input_tx: Sender<Vec<u8>>,
-    output_rx: Receiver<Vec<u8>>,
+    output_rx: Receiver<TerminalEvent>,
 }
 
 impl HitoApplication {
-    pub fn new(input_tx: Sender<Vec<u8>>, output_rx: Receiver<Vec<u8>>) -> Self {
+    pub fn new(input_tx: Sender<Vec<u8>>, output_rx: Receiver<TerminalEvent>) -> Self {
         Self {
             windows: HashMap::new(),
             state: None,
@@ -39,9 +39,22 @@ impl HitoApplication {
         while let Ok(output) = self.output_rx.try_recv()
             && let Some(state) = &mut self.state
         {
-            let output: String = String::from_utf8(output)?;
-            for char in output.chars() {
-                state.add_char_to_buffer(char);
+            match output {
+                TerminalEvent::Print(char) => {
+                    state.add_char_to_buffer(char);
+                }
+                TerminalEvent::CarriageReturn => {
+                    state.carriage_return();
+                }
+                TerminalEvent::LineFeed => {
+                    state.line_feed();
+                }
+                TerminalEvent::ClearLine => {
+                    state.clear_line();
+                }
+                TerminalEvent::MoveCursor(row, col) => {
+                    state.move_cursor_to(row, col);
+                }
             }
         }
         Ok(())
@@ -64,9 +77,11 @@ impl HitoApplication {
         let window_id: WindowId = window.id();
         self.windows.insert(window_id, window.clone());
         let mut state: State = pollster::block_on(State::new(window))?;
+
         state.render()?;
         self.state = Some(state);
         self.drain_output()?;
+
         Ok(())
     }
 }

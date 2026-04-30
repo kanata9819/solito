@@ -5,7 +5,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::thread::{self, JoinHandle};
 use tracing::{error, info};
 
-use crate::session::parser::EscParser;
+use crate::session::parser::{EscParser, TerminalEvent};
 
 // mpsc pair
 type TReader = Box<dyn Read + Send>;
@@ -24,7 +24,7 @@ pub struct SessionRuntime {
 }
 
 impl SessionRuntime {
-    pub fn new(input_rx: Receiver<Vec<u8>>, output_tx: Sender<Vec<u8>>) -> Self {
+    pub fn new(input_rx: Receiver<Vec<u8>>, output_tx: Sender<TerminalEvent>) -> Self {
         let pty_pair: PtyPair = Self::pty_pair();
         let child: TChild = Self::spawn_command(pty_pair.slave);
 

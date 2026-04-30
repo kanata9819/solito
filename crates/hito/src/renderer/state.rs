@@ -201,6 +201,22 @@ impl State {
         self.buffer.forward_col();
     }
 
+    pub fn carriage_return(&mut self) {
+        self.buffer.reset_col();
+    }
+
+    pub fn line_feed(&mut self) {
+        self.buffer.line_feed();
+    }
+
+    pub fn clear_line(&mut self) {
+        self.buffer.clear_line();
+    }
+
+    pub fn move_cursor_to(&mut self, row: u16, col: u16) {
+        self.buffer.move_cursor_to(row, col);
+    }
+
     fn create_encoder(&self, label: Option<&str>) -> CommandEncoder {
         self.device
             .create_command_encoder(&CommandEncoderDescriptor { label })

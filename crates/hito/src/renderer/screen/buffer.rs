@@ -17,7 +17,7 @@ pub struct InputBuffer {
     pub swash_cache: SwashCache,
     pub atlas: TextAtlas,
     pub cursor: Cursor,
-    inner_buffer: String,
+    inner_buffer: Vec<Vec<char>>,
 }
 
 impl InputBuffer {
@@ -56,23 +56,59 @@ impl InputBuffer {
             viewport,
             swash_cache,
             atlas,
-            inner_buffer: String::new(),
+            inner_buffer: vec![Vec::new()],
             cursor: Cursor::new(),
         }
     }
 
     pub fn set_text(&mut self, c: char) {
-        self.inner_buffer.push(c);
+        self.ensure_row();
+
+        // add char to last row
+        self.inner_buffer[self.cursor.row()].push(c);
+
+        // transform two-dimensional array to String
+        let text: String = self
+            .inner_buffer
+            .iter()
+            .map(|line| line.iter().collect::<String>())
+            .collect::<Vec<String>>()
+            .join("\n");
+
         self.text_buffer.set_text(
             &mut self.font_system,
-            &self.inner_buffer,
+            text.as_ref(),
             &Attrs::new().family(Family::Name("Cascadia Mono")),
             Shaping::Advanced,
             None,
         );
     }
 
+    pub fn ensure_row(&mut self) {
+        // ensure cursor row
+        while self.inner_buffer.len() <= self.cursor.row() {
+            self.inner_buffer.push(Vec::new());
+        }
+    }
+
     pub fn forward_col(&mut self) {
         self.cursor.forward_col();
+    }
+
+    pub fn reset_col(&mut self) {
+        self.cursor.reset_col();
+    }
+
+    pub fn line_feed(&mut self) {
+        self.cursor.line_feed();
+    }
+
+    pub fn clear_line(&mut self) {
+        self.ensure_row();
+        self.inner_buffer[self.cursor.row()].clear();
+    }
+
+    pub fn move_cursor_to(&mut self, row: u16, col: u16) {
+        self.cursor.move_to(row, col);
     }
 }
