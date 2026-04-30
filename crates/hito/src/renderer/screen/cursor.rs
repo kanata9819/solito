@@ -4,14 +4,17 @@ pub struct Cursor {
 }
 
 impl Cursor {
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             col: usize::default(),
             row: usize::default(),
         }
     }
+    pub(super) fn reset_col(&mut self) {
+        self.col = 0;
+    }
 
-    pub fn forward_col(&mut self) {
+    pub(super) fn forward_col(&mut self) {
         self.col += 1;
     }
 }

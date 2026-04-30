@@ -71,4 +71,8 @@ impl InputBuffer {
             None,
         );
     }
+
+    pub fn forward_col(&mut self) {
+        self.cursor.forward_col();
+    }
 }

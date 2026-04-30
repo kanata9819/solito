@@ -1,6 +1,5 @@
-pub mod buffer;
+pub mod screen;
 pub mod state;
 
-mod cursor;
 mod pass;
 mod pipeline;

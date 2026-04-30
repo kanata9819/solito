@@ -6,7 +6,7 @@ use wgpu::{
 };
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::renderer::{buffer::InputBuffer, pass, pipeline::rect};
+use crate::renderer::{pass, pipeline::rect, screen::buffer::InputBuffer};
 
 pub struct State {
     surface: Surface<'static>,
@@ -198,7 +198,7 @@ impl State {
 
     pub fn add_char_to_buffer(&mut self, char: char) {
         self.buffer.set_text(char);
-        self.buffer.cursor.forward_col();
+        self.buffer.forward_col();
     }
 
     fn create_encoder(&self, label: Option<&str>) -> CommandEncoder {
