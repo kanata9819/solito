@@ -94,9 +94,9 @@ pub fn parse(key_state: &KeyState) -> ParseResult {
         | (KeyCode::F9, true) => ParseResult::Ok(CodeKind::Function),
         _ => {
             if key_state.is_released {
-                ParseResult::Err(ParseError::UnHandled(*&key_state.key_code))
+                ParseResult::Err(ParseError::UnHandled(key_state.key_code))
             } else {
-                ParseResult::Err(ParseError::InvalidCode(*&key_state.key_code))
+                ParseResult::Err(ParseError::InvalidCode(key_state.key_code))
             }
         }
     }

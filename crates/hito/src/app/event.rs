@@ -74,7 +74,7 @@ pub fn handle_key(
     key_state: &KeyState,
     input_tx: &Sender<Vec<u8>>,
 ) -> Result<(), Box<dyn Error>> {
-    match util::keycode_parser::parse(&key_state) {
+    match util::keycode_parser::parse(key_state) {
         ParseResult::Ok(kind) => match kind {
             CodeKind::Char(char) => {
                 input_tx.send(char.to_string().into_bytes())?;

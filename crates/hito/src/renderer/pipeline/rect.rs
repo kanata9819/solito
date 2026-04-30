@@ -109,7 +109,7 @@ impl RectPipeline {
             padding_x, padding_y, // padding
         ];
 
-        queue.write_buffer(&uniform_buffer, 0, general_parser::as_bytes(&caret_uniform));
+        queue.write_buffer(uniform_buffer, 0, general_parser::as_bytes(&caret_uniform));
     }
 
     fn caret_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
