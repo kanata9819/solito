@@ -64,7 +64,7 @@ impl InputBuffer {
     pub fn set_text(&mut self, c: char) {
         self.ensure_row();
 
-        // add char to last row
+        // add char to current row
         self.inner_buffer[self.cursor.row()].push(c);
 
         // transform two-dimensional array to String
