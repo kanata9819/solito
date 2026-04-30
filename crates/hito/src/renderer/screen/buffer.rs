@@ -85,7 +85,6 @@ impl InputBuffer {
     }
 
     pub fn ensure_row(&mut self) {
-        // ensure cursor row
         while self.inner_buffer.len() <= self.cursor.row() {
             self.inner_buffer.push(Vec::new());
         }
