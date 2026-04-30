@@ -1,23 +1,25 @@
 use wgpu::wgt::SurfaceConfiguration;
 use wgpu::{Buffer, ShaderModule};
 
-pub struct Pipeline {
+use crate::util::general_parser;
+
+pub struct RectPipeline {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
 }
 
-impl Pipeline {
+impl RectPipeline {
     pub fn new(
         device: &wgpu::Device,
         config: SurfaceConfiguration<Vec<wgpu::TextureFormat>>,
         queue: &wgpu::Queue,
         uniform_buffer: &Buffer,
+        window_width: u32,
+        window_height: u32,
     ) -> Self {
         let shader: ShaderModule =
             device.create_shader_module(wgpu::include_wgsl!("../../shader/rect.wgsl"));
-
-        let bind_group_layout: wgpu::BindGroupLayout =
-            Self::caret_bind_group_layout(&uniform_buffer, device, queue);
+        let bind_group_layout: wgpu::BindGroupLayout = Self::caret_bind_group_layout(device);
 
         let render_pipeline_layout: wgpu::PipelineLayout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -65,6 +67,8 @@ impl Pipeline {
                 cache: None,
             });
 
+        Self::update_caret_uniform(uniform_buffer, queue, window_width, window_height);
+
         Self {
             pipeline: render_pipeline,
             layout: bind_group_layout,
@@ -88,24 +92,27 @@ impl Pipeline {
         bind_group
     }
 
-    fn caret_bind_group_layout(
+    pub fn update_caret_uniform(
         uniform_buffer: &Buffer,
-        device: &wgpu::Device,
         queue: &wgpu::Queue,
-    ) -> wgpu::BindGroupLayout {
-        let (caret_x, caret_y) = (30.0, 20.0);
-        let (caret_w, caret_h) = (10.0, 20.0);
-        let (screen_w, screen_h) = (100.0, 200.0);
-
+        width: u32,
+        height: u32,
+    ) {
+        let (caret_x, caret_y) = (50.0, 30.0);
+        let (caret_w, caret_h) = (15.0, 30.0);
+        let (padding_x, padding_y) = (0.0, 0.0);
+        let (screen_w, screen_h) = (width as f32, height as f32);
         let caret_uniform: [f32; 8] = [
             caret_x, caret_y, // pos
             caret_w, caret_h, // size
             screen_w, screen_h, // window size
-            0.0, 0.0, // padding
+            padding_x, padding_y, // padding
         ];
 
-        queue.write_buffer(&uniform_buffer, 0, Self::as_bytes(&caret_uniform));
+        queue.write_buffer(&uniform_buffer, 0, general_parser::as_bytes(&caret_uniform));
+    }
 
+    fn caret_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
         let bind_group_layout: wgpu::BindGroupLayout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("Caret Layout"),
@@ -133,12 +140,6 @@ impl Pipeline {
         });
 
         caret_uniform_buffer
-    }
-
-    fn as_bytes<T>(value: &T) -> &[u8] {
-        unsafe {
-            std::slice::from_raw_parts(value as *const T as *const u8, std::mem::size_of::<T>())
-        }
     }
 
     pub fn draw_rect(&self, pass: &mut wgpu::RenderPass, bind_group: wgpu::BindGroup) {

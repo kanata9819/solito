@@ -14,7 +14,7 @@ pub struct State {
     queue: Queue,
     config: SurfaceConfiguration,
     is_surface_configured: bool,
-    rect_pipeline: rect::Pipeline,
+    rect_pipeline: rect::RectPipeline,
     buffer: InputBuffer,
     instance: Instance,
     window: Arc<Window>,
@@ -77,9 +77,15 @@ impl State {
                 desired_maximum_frame_latency: 2,
             };
 
-        let uniform_buffer: wgpu::Buffer = rect::Pipeline::create_uniform_buffer(&device);
-        let rect_pipeline: rect::Pipeline =
-            rect::Pipeline::new(&device, config.clone(), &queue, &uniform_buffer);
+        let uniform_buffer: wgpu::Buffer = rect::RectPipeline::create_uniform_buffer(&device);
+        let rect_pipeline: rect::RectPipeline = rect::RectPipeline::new(
+            &device,
+            config.clone(),
+            &queue,
+            &uniform_buffer,
+            size.width,
+            size.height,
+        );
         let swapchain_format: TextureFormat = TextureFormat::Bgra8UnormSrgb;
         let buffer: InputBuffer =
             InputBuffer::new(&device.clone(), &queue.clone(), swapchain_format, size, 1.0);
@@ -105,6 +111,13 @@ impl State {
             self.config.height = size.height;
             self.surface.configure(&self.device, &self.config);
             self.is_surface_configured = true;
+
+            rect::RectPipeline::update_caret_uniform(
+                &self.uniform_buffer,
+                &self.queue,
+                self.window.inner_size().width,
+                self.window.inner_size().height,
+            );
         }
     }
 
