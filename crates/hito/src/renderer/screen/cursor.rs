@@ -1,4 +1,4 @@
-pub struct Cursor {
+pub(super) struct Cursor {
     col: usize,
     row: usize,
 }

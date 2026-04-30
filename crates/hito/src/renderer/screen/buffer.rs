@@ -16,7 +16,7 @@ pub struct InputBuffer {
     pub font_system: FontSystem,
     pub swash_cache: SwashCache,
     pub atlas: TextAtlas,
-    pub cursor: Cursor,
+    cursor: Cursor,
     inner_buffer: Vec<Vec<char>>,
 }
 
