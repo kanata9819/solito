@@ -68,20 +68,20 @@ impl Perform for EscPerformer {
         }
     }
 
-    fn hook(&mut self, _params: &vte::Params, _intermediates: &[u8], _ignore: bool, _action: char) {
-        debug!("parser hook: {:?}", _params);
+    fn hook(&mut self, params: &vte::Params, _intermediates: &[u8], _ignore: bool, action: char) {
+        debug!("hook: params({:?}), action({:?})", params, action);
     }
 
-    fn put(&mut self, _byte: u8) {
-        debug!("parser csi_dispatch: {:?}", _byte);
+    fn put(&mut self, byte: u8) {
+        debug!("csi_dispatch: byte({:?})", byte);
     }
 
     fn unhook(&mut self) {
-        debug!("parser unhook");
+        debug!("unhook");
     }
 
-    fn osc_dispatch(&mut self, _params: &[&[u8]], _bell_terminated: bool) {
-        debug!("parser osc_dispatch: {:?}", _params);
+    fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
+        debug!("osc_dispatch: params({:?})", params);
     }
 
     fn csi_dispatch(
@@ -108,16 +108,18 @@ impl Perform for EscPerformer {
 
                 self.send(TerminalEvent::MoveCursor(row, col));
             }
-            _ => {}
+            _ => {
+                debug!("csi_dispatch: params({:?}), action({:?})", params, action)
+            }
         }
     }
 
-    fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, _byte: u8) {
-        debug!("parser csi_dispatch: {:?}", _byte);
+    fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, byte: u8) {
+        debug!("esc_dispatch: byte({:?})", byte);
     }
 
     fn terminated(&self) -> bool {
-        debug!("parser terminated");
+        debug!("terminated");
         true
     }
 }

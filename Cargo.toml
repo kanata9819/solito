@@ -1,3 +1,3 @@
 [workspace]
-members = ["crates/hito"]
+members = ["crates/decodesc","crates/hito"]
 resolver = "3"

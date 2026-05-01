@@ -61,6 +61,14 @@ pub fn event_handler(
         WindowEvent::Resized(size) => {
             state.resize(size);
         }
+        #[allow(unused)]
+        WindowEvent::CursorMoved {
+            device_id,
+            position,
+        } => {}
+
+        #[allow(unused)]
+        WindowEvent::CursorLeft { device_id } => {}
         _ => {
             tracing::debug!("unhandled event: {event:?}");
         }
