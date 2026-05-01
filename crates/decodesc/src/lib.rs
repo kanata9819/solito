@@ -1,19 +1,21 @@
-#[derive(Default)]
-pub struct Params {
-    subparams: [u8; 32],
-    params: [u16; 32],
-    current_subparams: u8,
-    len: usize,
-}
+mod csi;
+mod esc;
+mod osc;
+mod params;
 
-pub enum CsiMessage {}
-pub enum OscMessage {}
-pub enum EscMessage {}
+pub use csi::CsiMessage;
+use csi::decode_csi;
+pub use esc::EscMessage;
+use esc::decode_esc;
+pub use osc::OscMessage;
+use osc::decode_osc;
+
+use crate::params::Params;
 
 pub struct DecodedEvent {
-    csi: Option<CsiMessage>,
-    osc: Option<OscMessage>,
-    esc: Option<EscMessage>,
+    pub csi: Option<CsiMessage>,
+    pub osc: Option<OscMessage>,
+    pub esc: Option<EscMessage>,
 }
 
 pub enum VteEvent<'a> {
@@ -34,32 +36,43 @@ pub enum VteEvent<'a> {
     },
 }
 
-pub fn decode(event: VteEvent) {
+pub fn decode(event: VteEvent) -> Option<DecodedEvent> {
     match event {
         VteEvent::Csi {
             params,
             intermediates,
             ignore,
             action,
-        } => {
-            decode_csi(params, intermediates, ignore, action);
-        }
+        } => match decode_csi(params, intermediates, ignore, action) {
+            Some(csi) => Some(DecodedEvent {
+                csi: Some(csi),
+                osc: None,
+                esc: None,
+            }),
+            None => None,
+        },
         VteEvent::Osc {
             params,
             bell_terminated,
-        } => {
-            decode_osc(params, bell_terminated);
-        }
+        } => match decode_osc(params, bell_terminated) {
+            Some(osc) => Some(DecodedEvent {
+                csi: None,
+                osc: Some(osc),
+                esc: None,
+            }),
+            None => None,
+        },
         VteEvent::Esc {
             intermediates,
             ignore,
             byte,
-        } => {
-            decode_esc(intermediates, ignore, byte);
-        }
+        } => match decode_esc(intermediates, ignore, byte) {
+            Some(esc) => Some(DecodedEvent {
+                csi: None,
+                osc: None,
+                esc: Some(esc),
+            }),
+            None => None,
+        },
     }
 }
-
-fn decode_csi(params: &Params, intermediates: &[u8], ignore: bool, action: char) {}
-fn decode_osc(params: &[&[u8]], bell_terminated: bool) {}
-fn decode_esc(intermediates: &[u8], ignore: bool, byte: u8) {}
