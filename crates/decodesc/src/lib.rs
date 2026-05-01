@@ -4,10 +4,11 @@ mod osc;
 mod params;
 
 pub use csi::CsiMessage;
-use csi::decode_csi;
 pub use esc::EscMessage;
-use esc::decode_esc;
 pub use osc::OscMessage;
+
+use csi::decode_csi;
+use esc::decode_esc;
 use osc::decode_osc;
 
 use crate::params::Params;
