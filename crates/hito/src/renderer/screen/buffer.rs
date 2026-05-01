@@ -5,9 +5,7 @@ use glyphon::{
 use wgpu::MultisampleState;
 
 use super::cursor::Cursor;
-
-const FONT_SIZE: f32 = 20.0;
-const LINE_HEIGHT: f32 = 30.0;
+use crate::config::BufferAttr;
 
 pub struct InputBuffer {
     pub text_buffer: Buffer,
@@ -35,8 +33,10 @@ impl InputBuffer {
         let mut atlas: TextAtlas = TextAtlas::new(device, queue, &cache, swapchain);
         let renderer: TextRenderer =
             TextRenderer::new(&mut atlas, device, MultisampleState::default(), None);
-        let mut text_buffer: Buffer =
-            Buffer::new(&mut font_system, Metrics::new(FONT_SIZE, LINE_HEIGHT));
+        let mut text_buffer: Buffer = Buffer::new(
+            &mut font_system,
+            Metrics::new(BufferAttr::FONT_SIZE, BufferAttr::LINE_HEIGHT),
+        );
 
         let physical_width: f32 = (f64::from(physical_size.width) * scale_factor) as f32;
         let physical_height: f32 = (f64::from(physical_size.height) * scale_factor) as f32;

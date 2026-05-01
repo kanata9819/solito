@@ -1,4 +1,5 @@
 mod app;
+mod config;
 mod renderer;
 mod session;
 mod util;
@@ -28,8 +29,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn init_tracing() {
-    const FILTER: &str = "error";
-    let env_filter: String = format!("error,hito={}", FILTER);
+    let env_filter: String = format!("error,hito={}", config::TracingFilter::FILTER_DEBUG);
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::new(env_filter))
         .init();

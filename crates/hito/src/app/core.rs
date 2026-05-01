@@ -7,6 +7,7 @@ use std::{
     },
 };
 
+use crate::config::WindowAttr;
 use crate::renderer::state::State;
 use crate::{app::event as AppEvent, session::parser::TerminalEvent};
 use tracing::error;
@@ -61,11 +62,11 @@ impl HitoApplication {
     }
 
     fn create_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), Box<dyn Error>> {
-        const WINDOW_WIDTH: f32 = 800.0;
-        const WINDOW_HIGHT: f32 = 500.0;
-
         let window_attributes: WindowAttributes = WindowAttributes::default()
-            .with_inner_size(LogicalSize::new(WINDOW_WIDTH, WINDOW_HIGHT))
+            .with_inner_size(LogicalSize::new(
+                WindowAttr::WINDOW_WIDTH,
+                WindowAttr::WINDOW_HIGHT,
+            ))
             .with_title("Hito");
 
         let window: Arc<Window> = Arc::new(

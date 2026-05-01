@@ -178,7 +178,7 @@ impl State {
             Ok(Some(frame)) => Some(frame),
             Ok(None) => None,
             Err(err) => {
-                eprintln!("initialize frame failed: {}", err);
+                tracing::error!("initialize frame failed: {}", err);
                 None
             }
         };

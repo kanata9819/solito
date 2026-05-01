@@ -1,6 +1,6 @@
 use std::sync::mpsc::Sender;
 
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 use vte::{Parser, Perform};
 
 pub enum TerminalEvent {
@@ -49,20 +49,12 @@ impl EscPerformer {
 
 impl Perform for EscPerformer {
     fn print(&mut self, c: char) {
-        if cfg!(debug_assertions) {
-            debug!("parser print: {:?}", c);
-        }
-
         if let Err(err) = self.output_tx.send(TerminalEvent::Print(c)) {
             error!("error occured at output_tx.send() {}", err);
         };
     }
 
     fn execute(&mut self, byte: u8) {
-        if cfg!(debug_assertions) {
-            debug!("parser excute: {}", String::from_utf8_lossy(&[byte]));
-        }
-
         match byte {
             b'\r' => {
                 self.send(TerminalEvent::CarriageReturn);
@@ -71,7 +63,7 @@ impl Perform for EscPerformer {
                 self.send(TerminalEvent::LineFeed);
             }
             _ => {
-                info!("uncaught excute: {:?}", byte);
+                debug!("uncaught excute: {:?}", byte);
             }
         }
     }

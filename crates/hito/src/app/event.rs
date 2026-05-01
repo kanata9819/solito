@@ -3,8 +3,7 @@ use std::{
     error::Error,
     sync::{Arc, mpsc::Sender},
 };
-
-use tracing::{error, info};
+use tracing::error;
 use winit::{
     event::{KeyEvent, WindowEvent},
     event_loop::ActiveEventLoop,
@@ -35,10 +34,12 @@ pub fn event_handler(
         }
         WindowEvent::RedrawRequested => {
             windows[&window_id].set_blur(true);
+
             if let Err(e) = state.render() {
                 error!("{e}");
                 event_loop.exit();
             }
+
             state.redraw()?;
         }
         WindowEvent::KeyboardInput {
@@ -61,7 +62,7 @@ pub fn event_handler(
             state.resize(size);
         }
         _ => {
-            info!("unhandled event: {event:?}");
+            tracing::debug!("unhandled event: {event:?}");
         }
     }
     Ok(())

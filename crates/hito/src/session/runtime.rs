@@ -3,7 +3,7 @@ use std::error::Error;
 use std::io::{Read, Write};
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread::{self, JoinHandle};
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use crate::session::parser::{EscParser, TerminalEvent};
 
@@ -46,7 +46,7 @@ impl SessionRuntime {
         Self::spawn_writing_thread(self.input_rx, writer);
 
         let status: ExitStatus = self.child.wait()?;
-        info!("exited with status: {:?}", status);
+        debug!("exited with status: {:?}", status);
 
         Ok(())
     }
@@ -105,7 +105,7 @@ impl SessionRuntime {
                     error!("Error writing to PTY: {}", err);
                     break;
                 } else {
-                    info!("wrote: {}", String::from_utf8_lossy(&bytes));
+                    debug!("wrote: {}", String::from_utf8_lossy(&bytes));
                 }
 
                 writer.flush().expect("flush error");
