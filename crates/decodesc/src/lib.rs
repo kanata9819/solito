@@ -6,6 +6,16 @@ pub struct Params {
     len: usize,
 }
 
+pub enum CsiMessage {}
+pub enum OscMessage {}
+pub enum EscMessage {}
+
+pub struct DecodedEvent {
+    csi: Option<CsiMessage>,
+    osc: Option<OscMessage>,
+    esc: Option<EscMessage>,
+}
+
 pub enum VteEvent<'a> {
     Csi {
         params: &'a Params,
