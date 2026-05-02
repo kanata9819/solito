@@ -1,5 +1,6 @@
 use std::sync::mpsc::Sender;
 
+use decodesc::{DecodedEvent, VteEvent};
 use tracing::{debug, error};
 use vte::{Parser, Perform};
 
@@ -80,42 +81,72 @@ impl Perform for EscPerformer {
         debug!("unhook");
     }
 
-    fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
-        debug!("osc_dispatch: params({:?})", params);
+    fn osc_dispatch(&mut self, params: &[&[u8]], bell_terminated: bool) {
+        let decoded: Option<DecodedEvent> = decodesc::decode(VteEvent::Osc {
+            params,
+            bell_terminated,
+        });
+
+        if let Some(decoded) = decoded
+            && let Some(osc) = decoded.esc
+        {
+            match osc {
+                _ => {
+                    debug!("osch: {:?}", osc);
+                }
+            }
+        }
     }
 
     fn csi_dispatch(
         &mut self,
         params: &vte::Params,
-        _intermediates: &[u8],
-        _ignore: bool,
+        intermediates: &[u8],
+        ignore: bool,
         action: char,
     ) {
-        match action {
-            'K' => {
-                let mode: u16 = params.iter().next().map(|param| param[0]).unwrap_or(0);
-                match mode {
-                    0 => {
-                        self.send(TerminalEvent::ClearLine);
-                    }
-                    _ => {}
-                }
-            }
-            'H' | 'f' => {
-                let mut iter: vte::ParamsIter<'_> = params.iter();
-                let row: u16 = iter.next().map(|p| p[0]).unwrap_or(0);
-                let col: u16 = iter.next().map(|p| p[0]).unwrap_or(0);
+        let decoded: Option<DecodedEvent> = decodesc::decode(VteEvent::Csi {
+            params,
+            intermediates,
+            ignore,
+            action,
+        });
 
-                self.send(TerminalEvent::MoveCursor(row, col));
-            }
-            _ => {
-                debug!("csi_dispatch: params({:?}), action({:?})", params, action)
+        if let Some(decoded) = decoded {
+            if let Some(csi) = decoded.csi {
+                match csi {
+                    decodesc::CsiMessage::EraseLine(mode) => {
+                        if mode == 0 {
+                            self.send(TerminalEvent::ClearLine);
+                        }
+                    }
+                    decodesc::CsiMessage::CursorPosition { row, col } => {
+                        self.send(TerminalEvent::MoveCursor(row, col));
+                    }
+                    _ => {
+                        debug!("csi: {:?}", csi);
+                    }
+                }
             }
         }
     }
 
-    fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, byte: u8) {
-        debug!("esc_dispatch: byte({:?})", byte);
+    fn esc_dispatch(&mut self, intermediates: &[u8], ignore: bool, byte: u8) {
+        let decoded: Option<DecodedEvent> = decodesc::decode(VteEvent::Esc {
+            intermediates,
+            ignore,
+            byte,
+        });
+
+        if let Some(decoded) = decoded {
+            if let Some(esc) = decoded.esc {
+                match esc {
+                    _ => {
+                        debug!("esc: {:?}", esc);
+                    }
+                }
+            }
+        }
     }
 
     fn terminated(&self) -> bool {

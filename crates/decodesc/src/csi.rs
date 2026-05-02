@@ -1,5 +1,5 @@
-use crate::Params;
 use std::fmt::{self, Display};
+use vte::Params;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CsiMessage {
@@ -81,7 +81,7 @@ pub fn decode_csi(
     ignore: bool,
     action: char,
 ) -> Option<CsiMessage> {
-    let amount: u16 = params.first(1);
+    let amount: u16 = param(params, 0, 1);
 
     Some(match action {
         'A' => CsiMessage::CursorUp(amount),
@@ -92,24 +92,32 @@ pub fn decode_csi(
         'F' => CsiMessage::CursorPreviousLine(amount),
         'G' => CsiMessage::CursorHorizontalAbsolute(amount),
         'H' | 'f' => CsiMessage::CursorPosition {
-            row: params.get(0, 1),
-            col: params.get(1, 1),
+            row: param(params, 0, 1),
+            col: param(params, 1, 1),
         },
-        'J' => CsiMessage::EraseDisplay(params.first(0)),
-        'K' => CsiMessage::EraseLine(params.first(0)),
+        'J' => CsiMessage::EraseDisplay(param(params, 0, 0)),
+        'K' => CsiMessage::EraseLine(param(params, 0, 0)),
         'S' => CsiMessage::ScrollUp(amount),
         'T' => CsiMessage::ScrollDown(amount),
-        'm' => CsiMessage::SelectGraphicRendition(params.to_vec()),
-        'n' => CsiMessage::DeviceStatusReport(params.first(0)),
+        'm' => CsiMessage::SelectGraphicRendition(params_to_vec(params)),
+        'n' => CsiMessage::DeviceStatusReport(param(params, 0, 0)),
         's' => CsiMessage::SaveCursor,
         'u' => CsiMessage::RestoreCursor,
-        'h' if params.first(0) == 25 => CsiMessage::ShowCursor,
-        'l' if params.first(0) == 25 => CsiMessage::HideCursor,
+        'h' if param(params, 0, 0) == 25 => CsiMessage::ShowCursor,
+        'l' if param(params, 0, 0) == 25 => CsiMessage::HideCursor,
         _ => CsiMessage::Unknown {
-            params: params.to_vec(),
+            params: params_to_vec(params),
             intermediates: intermediates.to_vec(),
             ignore,
             action,
         },
     })
+}
+
+fn param(params: &Params, index: usize, default: u16) -> u16 {
+    params.iter().nth(index).map(|param| param[0]).unwrap_or(default)
+}
+
+fn params_to_vec(params: &Params) -> Vec<u16> {
+    params.iter().flat_map(|param| param.iter().copied()).collect()
 }

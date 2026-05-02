@@ -1,7 +1,6 @@
 mod csi;
 mod esc;
 mod osc;
-mod params;
 
 pub use csi::CsiMessage;
 pub use esc::EscMessage;
@@ -11,8 +10,6 @@ use csi::decode_csi;
 use esc::decode_esc;
 use osc::decode_osc;
 
-use crate::params::Params;
-
 pub struct DecodedEvent {
     pub csi: Option<CsiMessage>,
     pub osc: Option<OscMessage>,
@@ -21,7 +18,7 @@ pub struct DecodedEvent {
 
 pub enum VteEvent<'a> {
     Csi {
-        params: &'a Params,
+        params: &'a vte::Params,
         intermediates: &'a [u8],
         ignore: bool,
         action: char,
