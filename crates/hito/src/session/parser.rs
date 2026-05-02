@@ -112,20 +112,20 @@ impl Perform for EscPerformer {
             action,
         });
 
-        if let Some(decoded) = decoded {
-            if let Some(csi) = decoded.csi {
-                match csi {
-                    decodesc::CsiMessage::EraseLine(mode) => {
-                        if mode == 0 {
-                            self.send(TerminalEvent::ClearLine);
-                        }
+        if let Some(decoded) = decoded
+            && let Some(csi) = decoded.csi
+        {
+            match csi {
+                decodesc::CsiMessage::EraseLine(mode) => {
+                    if mode == 0 {
+                        self.send(TerminalEvent::ClearLine);
                     }
-                    decodesc::CsiMessage::CursorPosition { row, col } => {
-                        self.send(TerminalEvent::MoveCursor(row, col));
-                    }
-                    _ => {
-                        debug!("csi: {:?}", csi);
-                    }
+                }
+                decodesc::CsiMessage::CursorPosition { row, col } => {
+                    self.send(TerminalEvent::MoveCursor(row, col));
+                }
+                _ => {
+                    debug!("csi: {:?}", csi);
                 }
             }
         }
@@ -138,12 +138,12 @@ impl Perform for EscPerformer {
             byte,
         });
 
-        if let Some(decoded) = decoded {
-            if let Some(esc) = decoded.esc {
-                match esc {
-                    _ => {
-                        debug!("esc: {:?}", esc);
-                    }
+        if let Some(decoded) = decoded
+            && let Some(esc) = decoded.esc
+        {
+            match esc {
+                _ => {
+                    debug!("esc: {:?}", esc);
                 }
             }
         }
