@@ -92,7 +92,7 @@ impl Perform for EscPerformer {
         {
             match osc {
                 _ => {
-                    debug!("osch: {:?}", osc);
+                    debug!("osc: {:?}", osc);
                 }
             }
         }
