@@ -8,8 +8,8 @@ pub struct RectPipeline {
     layout: wgpu::BindGroupLayout,
 }
 
-impl RectPipeline {
-    pub fn new(
+impl Rect for RectPipeline {
+    fn new(
         device: &wgpu::Device,
         config: SurfaceConfiguration<Vec<wgpu::TextureFormat>>,
         queue: &wgpu::Queue,
@@ -74,12 +74,29 @@ impl RectPipeline {
             layout: bind_group_layout,
         }
     }
+}
 
-    pub fn caret_bind_group(
-        &self,
+pub trait Rect {
+    fn new(
         device: &wgpu::Device,
+        config: SurfaceConfiguration<Vec<wgpu::TextureFormat>>,
+        queue: &wgpu::Queue,
         uniform_buffer: &Buffer,
-    ) -> wgpu::BindGroup {
+        window_width: u32,
+        window_height: u32,
+    ) -> Self;
+}
+
+pub trait Caret {
+    fn caret_bind_group(&self, device: &wgpu::Device, uniform_buffer: &Buffer) -> wgpu::BindGroup;
+    fn update_caret_uniform(uniform_buffer: &Buffer, queue: &wgpu::Queue, width: u32, height: u32);
+    fn caret_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout;
+    fn create_caret_uniform_buffer(device: &wgpu::Device) -> wgpu::Buffer;
+    fn draw_rect(&self, pass: &mut wgpu::RenderPass, bind_group: wgpu::BindGroup);
+}
+
+impl Caret for RectPipeline {
+    fn caret_bind_group(&self, device: &wgpu::Device, uniform_buffer: &Buffer) -> wgpu::BindGroup {
         let bind_group: wgpu::BindGroup = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Caret Bind Group"),
             layout: &self.layout,
@@ -92,12 +109,7 @@ impl RectPipeline {
         bind_group
     }
 
-    pub fn update_caret_uniform(
-        uniform_buffer: &Buffer,
-        queue: &wgpu::Queue,
-        width: u32,
-        height: u32,
-    ) {
+    fn update_caret_uniform(uniform_buffer: &Buffer, queue: &wgpu::Queue, width: u32, height: u32) {
         let (caret_x, caret_y) = (50.0, 30.0);
         let (caret_w, caret_h) = (15.0, 30.0);
         let (padding_x, padding_y) = (0.0, 0.0);
@@ -131,7 +143,7 @@ impl RectPipeline {
         bind_group_layout
     }
 
-    pub fn create_uniform_buffer(device: &wgpu::Device) -> wgpu::Buffer {
+    fn create_caret_uniform_buffer(device: &wgpu::Device) -> wgpu::Buffer {
         let caret_uniform_buffer: wgpu::Buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Caret Uniform Buffer"),
             size: std::mem::size_of::<[f32; 8]>() as u64,
@@ -142,7 +154,7 @@ impl RectPipeline {
         caret_uniform_buffer
     }
 
-    pub fn draw_rect(&self, pass: &mut wgpu::RenderPass, bind_group: wgpu::BindGroup) {
+    fn draw_rect(&self, pass: &mut wgpu::RenderPass, bind_group: wgpu::BindGroup) {
         use std::ops::Range;
         const VERTICIES_COUNT: Range<u32> = 0..6;
         const INSTANCE_COUNT: Range<u32> = 0..1;

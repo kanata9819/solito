@@ -6,7 +6,11 @@ use wgpu::{
 };
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::renderer::{pass, pipeline::rect, screen::buffer::InputBuffer};
+use crate::renderer::{
+    pass,
+    pipeline::rect::{self, Caret, Rect},
+    screen::buffer::InputBuffer,
+};
 
 pub struct State {
     surface: Surface<'static>,
@@ -77,7 +81,7 @@ impl State {
                 desired_maximum_frame_latency: 2,
             };
 
-        let uniform_buffer: wgpu::Buffer = rect::RectPipeline::create_uniform_buffer(&device);
+        let uniform_buffer: wgpu::Buffer = rect::RectPipeline::create_caret_uniform_buffer(&device);
         let rect_pipeline: rect::RectPipeline = rect::RectPipeline::new(
             &device,
             config.clone(),
