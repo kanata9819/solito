@@ -5,7 +5,7 @@ use glyphon::{
 use super::cursor::Cursor;
 use super::glyphon::GlyphonResources;
 
-pub struct InputBuffer {
+pub(in crate::renderer) struct InputBuffer {
     pub text_buffer: Buffer,
     pub viewport: Viewport,
     pub text_renderer: TextRenderer,
@@ -17,7 +17,7 @@ pub struct InputBuffer {
 }
 
 impl InputBuffer {
-    pub fn new(
+    pub(in crate::renderer) fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         swapchain: wgpu::TextureFormat,
