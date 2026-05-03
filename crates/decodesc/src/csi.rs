@@ -75,7 +75,7 @@ impl Display for CsiMessage {
     }
 }
 
-pub fn decode_csi(
+pub(super) fn decode_csi(
     params: &Params,
     intermediates: &[u8],
     ignore: bool,
@@ -115,9 +115,16 @@ pub fn decode_csi(
 }
 
 fn param(params: &Params, index: usize, default: u16) -> u16 {
-    params.iter().nth(index).map(|param| param[0]).unwrap_or(default)
+    params
+        .iter()
+        .nth(index)
+        .map(|param| param[0])
+        .unwrap_or(default)
 }
 
 fn params_to_vec(params: &Params) -> Vec<u16> {
-    params.iter().flat_map(|param| param.iter().copied()).collect()
+    params
+        .iter()
+        .flat_map(|param| param.iter().copied())
+        .collect()
 }

@@ -12,30 +12,30 @@ pub enum TerminalEvent {
     MoveCursor(u16, u16),
 }
 
-pub struct EscParser {
+pub(super) struct EscParser {
     pub parser: Parser<1024>,
     pub performer: EscPerformer,
 }
 
 impl EscParser {
-    pub fn new(output_tx: Sender<TerminalEvent>) -> Self {
+    pub(super) fn new(output_tx: Sender<TerminalEvent>) -> Self {
         Self {
             parser: Parser::new(),
             performer: EscPerformer::new(output_tx),
         }
     }
 
-    pub fn parse(&mut self, bytes: impl AsRef<[u8]>) {
+    pub(super) fn parse(&mut self, bytes: impl AsRef<[u8]>) {
         self.parser.advance(&mut self.performer, bytes.as_ref());
     }
 }
 
-pub struct EscPerformer {
+pub(super) struct EscPerformer {
     output_tx: Sender<TerminalEvent>,
 }
 
 impl EscPerformer {
-    pub fn new(output_tx: Sender<TerminalEvent>) -> Self {
+    fn new(output_tx: Sender<TerminalEvent>) -> Self {
         Self { output_tx }
     }
 

@@ -19,7 +19,7 @@ use crate::{
     },
 };
 
-pub fn event_handler<T: TerminalOutputSink + WindowRenderer>(
+pub(super) fn event_handler<T: TerminalOutputSink + WindowRenderer>(
     windows: &mut HashMap<WindowId, Arc<Window>>,
     window_id: WindowId,
     state: &mut T,
@@ -77,7 +77,7 @@ pub fn event_handler<T: TerminalOutputSink + WindowRenderer>(
 }
 
 /// This is where we'll handle keyboard events.
-pub fn handle_key(
+fn handle_key(
     state: &mut impl TerminalOutputSink,
     _event_loop: &ActiveEventLoop,
     key_state: &KeyState,

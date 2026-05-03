@@ -37,7 +37,7 @@ impl Display for EscMessage {
     }
 }
 
-pub fn decode_esc(intermediates: &[u8], ignore: bool, byte: u8) -> Option<EscMessage> {
+pub(super) fn decode_esc(intermediates: &[u8], ignore: bool, byte: u8) -> Option<EscMessage> {
     Some(match byte {
         b'7' => EscMessage::SaveCursor,
         b'8' => EscMessage::RestoreCursor,

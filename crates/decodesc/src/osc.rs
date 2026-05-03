@@ -31,7 +31,7 @@ impl Display for OscMessage {
     }
 }
 
-pub fn decode_osc(params: &[&[u8]], bell_terminated: bool) -> Option<OscMessage> {
+pub(super) fn decode_osc(params: &[&[u8]], bell_terminated: bool) -> Option<OscMessage> {
     let code: &&[u8] = params.first()?;
     let value: String = params
         .get(1)
