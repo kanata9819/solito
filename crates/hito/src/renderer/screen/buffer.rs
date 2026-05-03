@@ -1,11 +1,9 @@
 use glyphon::{
-    Attrs, Buffer, Cache, Family, FontSystem, Metrics, Shaping, SwashCache, TextAtlas,
-    TextRenderer, Viewport,
+    Attrs, Buffer, Family, FontSystem, Shaping, SwashCache, TextAtlas, TextRenderer, Viewport,
 };
-use wgpu::MultisampleState;
 
 use super::cursor::Cursor;
-use crate::config::BufferAttr;
+use super::text::{GlyphonItem, initialize_glyphon};
 
 pub struct InputBuffer {
     pub text_buffer: Buffer,
@@ -26,57 +24,45 @@ impl InputBuffer {
         physical_size: winit::dpi::PhysicalSize<u32>,
         scale_factor: f64,
     ) -> Self {
-        let mut font_system: FontSystem = FontSystem::new();
-        let swash_cache: SwashCache = SwashCache::new();
-        let cache: Cache = Cache::new(device);
-        let viewport: Viewport = Viewport::new(device, &cache);
-        let mut atlas: TextAtlas = TextAtlas::new(device, queue, &cache, swapchain);
-        let renderer: TextRenderer =
-            TextRenderer::new(&mut atlas, device, MultisampleState::default(), None);
-        let mut text_buffer: Buffer = Buffer::new(
-            &mut font_system,
-            Metrics::new(BufferAttr::FONT_SIZE, BufferAttr::LINE_HEIGHT),
-        );
-
-        let physical_width: f32 = (f64::from(physical_size.width) * scale_factor) as f32;
-        let physical_height: f32 = (f64::from(physical_size.height) * scale_factor) as f32;
-
-        text_buffer.set_size(
-            &mut font_system,
-            Some(physical_width),
-            Some(physical_height),
-        );
-
-        text_buffer.shape_until_scroll(&mut font_system, false);
+        let glyphon: GlyphonItem =
+            initialize_glyphon(device, queue, swapchain, physical_size, scale_factor);
 
         Self {
-            text_buffer,
-            text_renderer: renderer,
-            font_system,
-            viewport,
-            swash_cache,
-            atlas,
+            text_buffer: glyphon.text_buffer,
+            text_renderer: glyphon.text_renderer,
+            font_system: glyphon.font_system,
+            viewport: glyphon.viewport,
+            swash_cache: glyphon.swash_cache,
+            atlas: glyphon.atlas,
             inner_buffer: vec![Vec::new()],
             cursor: Cursor::new(),
         }
     }
 
     pub fn push_char(&mut self, c: char) {
-        self.ensure_row();
+        tracing::debug!(
+            "print: char({:?}) row({:?}) col({:?})",
+            c,
+            self.cursor.row(),
+            self.cursor.col()
+        );
 
-        // add char to current row
-        self.inner_buffer[self.cursor.row()].push(c);
+        self.ensure_line();
+        self.set_char_at_col(c);
         self.set_text_to_buffer();
+    }
+
+    fn set_char_at_col(&mut self, c: char) {
+        if let Some(line) = self.inner_buffer.get_mut(self.cursor.row())
+            && let Some(cell) = line.get_mut(self.cursor.col())
+        {
+            *cell = c;
+        }
     }
 
     fn set_text_to_buffer(&mut self) {
         // transform two-dimensional array to String
-        let text: String = self
-            .inner_buffer
-            .iter()
-            .map(|line| line.iter().collect::<String>())
-            .collect::<Vec<String>>()
-            .join("\n");
+        let text: String = self.buffer_string();
 
         self.text_buffer.set_text(
             &mut self.font_system,
@@ -87,9 +73,30 @@ impl InputBuffer {
         );
     }
 
-    pub fn ensure_row(&mut self) {
+    fn buffer_string(&mut self) -> String {
+        self.inner_buffer
+            .iter()
+            .map(|line| line.iter().collect::<String>())
+            .collect::<Vec<String>>()
+            .join("\n")
+    }
+
+    fn ensure_line(&mut self) {
+        self.ensure_row();
+        self.ensure_col();
+    }
+
+    fn ensure_row(&mut self) {
         while self.inner_buffer.len() <= self.cursor.row() {
             self.inner_buffer.push(Vec::new());
+        }
+    }
+
+    fn ensure_col(&mut self) {
+        if let Some(line) = self.inner_buffer.get_mut(self.cursor.row()) {
+            while line.len() <= self.cursor.col() {
+                line.push(' ');
+            }
         }
     }
 
@@ -106,7 +113,7 @@ impl InputBuffer {
     }
 
     pub fn clear_line(&mut self) {
-        self.ensure_row();
+        self.ensure_line();
         self.inner_buffer[self.cursor.row()].clear();
         self.set_text_to_buffer();
     }

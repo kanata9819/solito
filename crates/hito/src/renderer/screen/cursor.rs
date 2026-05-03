@@ -22,6 +22,10 @@ impl Cursor {
         self.row += 1;
     }
 
+    pub(super) fn col(&self) -> usize {
+        self.col
+    }
+
     pub(super) fn row(&self) -> usize {
         self.row
     }
