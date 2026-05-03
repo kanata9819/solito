@@ -3,7 +3,7 @@ use glyphon::{
 };
 
 use super::cursor::Cursor;
-use super::text::{GlyphonItem, initialize_glyphon};
+use super::glyphon::GlyphonResources;
 
 pub struct InputBuffer {
     pub text_buffer: Buffer,
@@ -24,8 +24,8 @@ impl InputBuffer {
         physical_size: winit::dpi::PhysicalSize<u32>,
         scale_factor: f64,
     ) -> Self {
-        let glyphon: GlyphonItem =
-            initialize_glyphon(device, queue, swapchain, physical_size, scale_factor);
+        let glyphon: GlyphonResources =
+            GlyphonResources::new(device, queue, swapchain, physical_size, scale_factor);
 
         Self {
             text_buffer: glyphon.text_buffer,
