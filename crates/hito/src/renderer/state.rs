@@ -9,7 +9,7 @@ use winit::{dpi::PhysicalSize, window::Window};
 use crate::renderer::{
     pass,
     pipeline::rect::{self, Caret, Rect},
-    screen::buffer::InputBuffer,
+    screen::buffer::{InputBuffer, ScreenBufferEditor},
 };
 
 pub struct State {
@@ -296,7 +296,6 @@ pub trait TerminalOutputSink {
 impl TerminalOutputSink for State {
     fn print_char(&mut self, char: char) {
         self.buffer.push_char(char);
-        self.buffer.forward_col();
     }
 
     fn carriage_return(&mut self) {

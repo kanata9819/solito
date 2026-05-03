@@ -39,19 +39,6 @@ impl InputBuffer {
         }
     }
 
-    pub fn push_char(&mut self, c: char) {
-        tracing::debug!(
-            "print: char({:?}) row({:?}) col({:?})",
-            c,
-            self.cursor.row(),
-            self.cursor.col()
-        );
-
-        self.ensure_line();
-        self.set_char_at_col(c);
-        self.set_text_to_buffer();
-    }
-
     fn set_char_at_col(&mut self, c: char) {
         if let Some(line) = self.inner_buffer.get_mut(self.cursor.row())
             && let Some(cell) = line.get_mut(self.cursor.col())
@@ -99,26 +86,51 @@ impl InputBuffer {
             }
         }
     }
+}
 
-    pub fn forward_col(&mut self) {
+pub(in crate::renderer) trait ScreenBufferEditor {
+    fn push_char(&mut self, c: char);
+    fn forward_col(&mut self);
+    fn reset_col(&mut self);
+    fn line_feed(&mut self);
+    fn clear_line(&mut self);
+    fn move_cursor_to(&mut self, row: u16, col: u16);
+}
+
+impl ScreenBufferEditor for InputBuffer {
+    fn push_char(&mut self, c: char) {
+        tracing::debug!(
+            "print: char({:?}) row({:?}) col({:?})",
+            c,
+            self.cursor.row(),
+            self.cursor.col()
+        );
+
+        self.ensure_line();
+        self.set_char_at_col(c);
+        self.set_text_to_buffer();
+        self.forward_col();
+    }
+
+    fn forward_col(&mut self) {
         self.cursor.forward_col();
     }
 
-    pub fn reset_col(&mut self) {
+    fn reset_col(&mut self) {
         self.cursor.reset_col();
     }
 
-    pub fn line_feed(&mut self) {
+    fn line_feed(&mut self) {
         self.cursor.line_feed();
     }
 
-    pub fn clear_line(&mut self) {
+    fn clear_line(&mut self) {
         self.ensure_line();
         self.inner_buffer[self.cursor.row()].clear();
         self.set_text_to_buffer();
     }
 
-    pub fn move_cursor_to(&mut self, row: u16, col: u16) {
+    fn move_cursor_to(&mut self, row: u16, col: u16) {
         self.cursor.move_to(row, col);
     }
 }
