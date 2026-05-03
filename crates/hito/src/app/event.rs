@@ -56,7 +56,7 @@ pub(super) fn event_handler<T: TerminalOutputSink + WindowRenderer>(
                 is_pressed: key_state == winit::event::ElementState::Pressed,
                 is_released: key_state == winit::event::ElementState::Released,
             };
-            handle_key(state, event_loop, &key_state, input_tx)?
+            handle_key(&key_state, input_tx)?
         }
         WindowEvent::Resized(size) => {
             state.resize(size);
@@ -77,17 +77,13 @@ pub(super) fn event_handler<T: TerminalOutputSink + WindowRenderer>(
 }
 
 /// This is where we'll handle keyboard events.
-fn handle_key(
-    state: &mut impl TerminalOutputSink,
-    _event_loop: &ActiveEventLoop,
-    key_state: &KeyState,
-    input_tx: &Sender<Vec<u8>>,
-) -> Result<(), Box<dyn Error>> {
+fn handle_key(key_state: &KeyState, input_tx: &Sender<Vec<u8>>) -> Result<(), Box<dyn Error>> {
     match util::keycode_parser::parse(key_state) {
         ParseResult::Ok(kind) => match kind {
             CodeKind::Char(char) => {
                 input_tx.send(char.to_string().into_bytes())?;
-                state.print_char(char);
+                // The PTY echoes printable input back to us, so drawing here would duplicate
+                // or briefly conflict with the terminal output stream.
                 Ok(())
             }
             CodeKind::Function => Ok(()),

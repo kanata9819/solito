@@ -31,7 +31,8 @@ impl Cursor {
     }
 
     pub(super) fn move_to(&mut self, row: u16, col: u16) {
-        self.row = row as usize;
-        self.col = col as usize;
+        // Terminal cursor positions are 1-based; the internal buffer indexes are 0-based.
+        self.row = row.saturating_sub(1) as usize;
+        self.col = col.saturating_sub(1) as usize;
     }
 }

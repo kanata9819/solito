@@ -126,7 +126,8 @@ impl ScreenBufferEditor for InputBuffer {
 
     fn clear_line(&mut self) {
         self.ensure_line();
-        self.inner_buffer[self.cursor.row()].clear();
+        // ESC[K with mode 0 erases from the cursor to the end of the line.
+        self.inner_buffer[self.cursor.row()].truncate(self.cursor.col());
         self.set_text_to_buffer();
     }
 
