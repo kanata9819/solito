@@ -7,6 +7,16 @@ pub struct RectPipeline {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
 }
+pub trait Rect {
+    fn new(
+        device: &wgpu::Device,
+        config: SurfaceConfiguration<Vec<wgpu::TextureFormat>>,
+        queue: &wgpu::Queue,
+        uniform_buffer: &Buffer,
+        window_width: u32,
+        window_height: u32,
+    ) -> Self;
+}
 
 impl Rect for RectPipeline {
     fn new(
@@ -74,17 +84,6 @@ impl Rect for RectPipeline {
             layout: bind_group_layout,
         }
     }
-}
-
-pub trait Rect {
-    fn new(
-        device: &wgpu::Device,
-        config: SurfaceConfiguration<Vec<wgpu::TextureFormat>>,
-        queue: &wgpu::Queue,
-        uniform_buffer: &Buffer,
-        window_width: u32,
-        window_height: u32,
-    ) -> Self;
 }
 
 pub trait Caret {
