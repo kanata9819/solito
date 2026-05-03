@@ -61,12 +61,15 @@ impl InputBuffer {
         }
     }
 
-    pub fn set_text(&mut self, c: char) {
+    pub fn push_char(&mut self, c: char) {
         self.ensure_row();
 
         // add char to current row
         self.inner_buffer[self.cursor.row()].push(c);
+        self.set_text_to_buffer();
+    }
 
+    fn set_text_to_buffer(&mut self) {
         // transform two-dimensional array to String
         let text: String = self
             .inner_buffer
@@ -105,6 +108,7 @@ impl InputBuffer {
     pub fn clear_line(&mut self) {
         self.ensure_row();
         self.inner_buffer[self.cursor.row()].clear();
+        self.set_text_to_buffer();
     }
 
     pub fn move_cursor_to(&mut self, row: u16, col: u16) {

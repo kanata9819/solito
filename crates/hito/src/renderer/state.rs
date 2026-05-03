@@ -295,7 +295,7 @@ pub trait TerminalOutputSink {
 
 impl TerminalOutputSink for State {
     fn print_char(&mut self, char: char) {
-        self.buffer.set_text(char);
+        self.buffer.push_char(char);
         self.buffer.forward_col();
     }
 
