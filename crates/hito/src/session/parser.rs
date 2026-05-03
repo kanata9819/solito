@@ -74,7 +74,7 @@ impl Perform for EscPerformer {
     }
 
     fn put(&mut self, byte: u8) {
-        debug!("csi_dispatch: byte({:?})", byte);
+        debug!("put: {:?}", byte);
     }
 
     fn unhook(&mut self) {
@@ -117,11 +117,13 @@ impl Perform for EscPerformer {
         {
             match csi {
                 decodesc::CsiMessage::EraseLine(mode) => {
+                    debug!("csi: {:?}", csi);
                     if mode == 0 {
                         self.send(TerminalEvent::ClearLine);
                     }
                 }
                 decodesc::CsiMessage::CursorPosition { row, col } => {
+                    debug!("csi: {:?}", csi);
                     self.send(TerminalEvent::MoveCursor(row, col));
                 }
                 _ => {

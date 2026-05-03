@@ -12,17 +12,17 @@ use winit::{
 };
 
 use crate::{
-    renderer::state::State,
+    renderer::state::{TerminalOutputSink, WindowRenderer},
     util::{
         self,
         keycode_parser::{CodeKind, KeyState, ParseError, ParseResult},
     },
 };
 
-pub fn event_handler(
+pub fn event_handler<T: TerminalOutputSink + WindowRenderer>(
     windows: &mut HashMap<WindowId, Arc<Window>>,
     window_id: WindowId,
-    state: &mut State,
+    state: &mut T,
     event_loop: &ActiveEventLoop,
     event: WindowEvent,
     input_tx: &Sender<Vec<u8>>,
@@ -78,7 +78,7 @@ pub fn event_handler(
 
 /// This is where we'll handle keyboard events.
 pub fn handle_key(
-    state: &mut State,
+    state: &mut impl TerminalOutputSink,
     _event_loop: &ActiveEventLoop,
     key_state: &KeyState,
     input_tx: &Sender<Vec<u8>>,
@@ -87,7 +87,7 @@ pub fn handle_key(
         ParseResult::Ok(kind) => match kind {
             CodeKind::Char(char) => {
                 input_tx.send(char.to_string().into_bytes())?;
-                state.add_char_to_buffer(char);
+                state.print_char(char);
                 Ok(())
             }
             CodeKind::Function => Ok(()),

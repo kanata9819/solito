@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::config::WindowAttr;
-use crate::renderer::state::State;
+use crate::renderer::state::{State, TerminalOutputSink, WindowRenderer};
 use crate::{app::event as AppEvent, session::parser::TerminalEvent};
 use tracing::error;
 use winit::{
@@ -42,7 +42,7 @@ impl HitoApplication {
         {
             match output {
                 TerminalEvent::Print(char) => {
-                    state.add_char_to_buffer(char);
+                    state.print_char(char);
                 }
                 TerminalEvent::CarriageReturn => {
                     state.carriage_return();

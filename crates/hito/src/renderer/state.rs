@@ -104,119 +104,6 @@ impl State {
         })
     }
 
-    pub fn resize(&mut self, size: PhysicalSize<u32>) {
-        let size: PhysicalSize<u32> = size;
-        if size.width > 0 && size.height > 0 {
-            self.config.width = size.width;
-            self.config.height = size.height;
-            self.surface.configure(&self.device, &self.config);
-            self.is_surface_configured = true;
-
-            rect::RectPipeline::update_caret_uniform(
-                &self.uniform_buffer,
-                &self.queue,
-                self.window.inner_size().width,
-                self.window.inner_size().height,
-            );
-        }
-    }
-
-    pub fn render(&mut self) -> Result<(), Box<dyn Error>> {
-        self.window.request_redraw();
-
-        // We can't render unless the surface is configured
-        if !self.is_surface_configured {
-            return Ok(());
-        }
-
-        let output: SurfaceTexture = match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
-            wgpu::CurrentSurfaceTexture::Suboptimal(surface_texture) => {
-                self.surface.configure(&self.device, &self.config);
-                surface_texture
-            }
-            wgpu::CurrentSurfaceTexture::Timeout
-            | wgpu::CurrentSurfaceTexture::Occluded
-            | wgpu::CurrentSurfaceTexture::Validation => {
-                // Skip this frame
-                return Ok(());
-            }
-            wgpu::CurrentSurfaceTexture::Outdated => {
-                self.surface.configure(&self.device, &self.config);
-                return Ok(());
-            }
-            wgpu::CurrentSurfaceTexture::Lost => {
-                // You could recreate the devices and all resources
-                // created with it here, but we'll just bail
-                todo!("Lost device");
-            }
-        };
-
-        let encoder: CommandEncoder = self.create_encoder(Some("Render Encoder"));
-
-        self.queue.submit(std::iter::once(encoder.finish()));
-
-        // The last lines of the code tell wgpu to finish the command buffer
-        // and submit it to the GPU's render queue.
-        output.present();
-
-        Ok(())
-    }
-
-    pub fn redraw(&mut self) -> Result<(), Box<dyn Error>> {
-        self.buffer.viewport.update(
-            &self.queue,
-            Resolution {
-                width: self.config.width,
-                height: self.config.height,
-            },
-        );
-
-        self.prepare()?;
-
-        let frame: Option<SurfaceTexture> = match self.initialize_frame() {
-            Ok(Some(frame)) => Some(frame),
-            Ok(None) => None,
-            Err(err) => {
-                tracing::error!("initialize frame failed: {}", err);
-                None
-            }
-        };
-
-        if let Some(frame) = frame {
-            let view: TextureView = frame.texture.create_view(&TextureViewDescriptor::default());
-            let mut encoder: CommandEncoder = self.create_encoder(None);
-            self.render_pass(&mut encoder, view)?;
-            self.queue.submit(Some(encoder.finish()));
-            frame.present();
-        }
-
-        self.buffer.atlas.trim();
-
-        Ok(())
-    }
-
-    pub fn add_char_to_buffer(&mut self, char: char) {
-        self.buffer.set_text(char);
-        self.buffer.forward_col();
-    }
-
-    pub fn carriage_return(&mut self) {
-        self.buffer.reset_col();
-    }
-
-    pub fn line_feed(&mut self) {
-        self.buffer.line_feed();
-    }
-
-    pub fn clear_line(&mut self) {
-        self.buffer.clear_line();
-    }
-
-    pub fn move_cursor_to(&mut self, row: u16, col: u16) {
-        self.buffer.move_cursor_to(row, col);
-    }
-
     fn create_encoder(&self, label: Option<&str>) -> CommandEncoder {
         self.device
             .create_command_encoder(&CommandEncoderDescriptor { label })
@@ -291,5 +178,136 @@ impl State {
         };
 
         Ok(Some(frame))
+    }
+}
+
+pub trait WindowRenderer {
+    fn resize(&mut self, size: PhysicalSize<u32>);
+    fn render(&mut self) -> Result<(), Box<dyn Error>>;
+    fn redraw(&mut self) -> Result<(), Box<dyn Error>>;
+}
+
+impl WindowRenderer for State {
+    fn resize(&mut self, size: PhysicalSize<u32>) {
+        let size: PhysicalSize<u32> = size;
+        if size.width > 0 && size.height > 0 {
+            self.config.width = size.width;
+            self.config.height = size.height;
+            self.surface.configure(&self.device, &self.config);
+            self.is_surface_configured = true;
+
+            rect::RectPipeline::update_caret_uniform(
+                &self.uniform_buffer,
+                &self.queue,
+                self.window.inner_size().width,
+                self.window.inner_size().height,
+            );
+        }
+    }
+
+    fn render(&mut self) -> Result<(), Box<dyn Error>> {
+        self.window.request_redraw();
+
+        // We can't render unless the surface is configured
+        if !self.is_surface_configured {
+            return Ok(());
+        }
+
+        let output: SurfaceTexture = match self.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
+            wgpu::CurrentSurfaceTexture::Suboptimal(surface_texture) => {
+                self.surface.configure(&self.device, &self.config);
+                surface_texture
+            }
+            wgpu::CurrentSurfaceTexture::Timeout
+            | wgpu::CurrentSurfaceTexture::Occluded
+            | wgpu::CurrentSurfaceTexture::Validation => {
+                // Skip this frame
+                return Ok(());
+            }
+            wgpu::CurrentSurfaceTexture::Outdated => {
+                self.surface.configure(&self.device, &self.config);
+                return Ok(());
+            }
+            wgpu::CurrentSurfaceTexture::Lost => {
+                // You could recreate the devices and all resources
+                // created with it here, but we'll just bail
+                todo!("Lost device");
+            }
+        };
+
+        let encoder: CommandEncoder = self.create_encoder(Some("Render Encoder"));
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+
+        // The last lines of the code tell wgpu to finish the command buffer
+        // and submit it to the GPU's render queue.
+        output.present();
+
+        Ok(())
+    }
+
+    fn redraw(&mut self) -> Result<(), Box<dyn Error>> {
+        self.buffer.viewport.update(
+            &self.queue,
+            Resolution {
+                width: self.config.width,
+                height: self.config.height,
+            },
+        );
+
+        self.prepare()?;
+
+        let frame: Option<SurfaceTexture> = match self.initialize_frame() {
+            Ok(Some(frame)) => Some(frame),
+            Ok(None) => None,
+            Err(err) => {
+                tracing::error!("initialize frame failed: {}", err);
+                None
+            }
+        };
+
+        if let Some(frame) = frame {
+            let view: TextureView = frame.texture.create_view(&TextureViewDescriptor::default());
+            let mut encoder: CommandEncoder = self.create_encoder(None);
+            self.render_pass(&mut encoder, view)?;
+            self.queue.submit(Some(encoder.finish()));
+            frame.present();
+        }
+
+        self.buffer.atlas.trim();
+
+        Ok(())
+    }
+}
+
+pub trait TerminalOutputSink {
+    fn print_char(&mut self, char: char);
+    fn carriage_return(&mut self);
+    fn line_feed(&mut self);
+    fn clear_line(&mut self);
+    fn move_cursor_to(&mut self, row: u16, col: u16);
+}
+
+impl TerminalOutputSink for State {
+    fn print_char(&mut self, char: char) {
+        self.buffer.set_text(char);
+        self.buffer.forward_col();
+    }
+
+    fn carriage_return(&mut self) {
+        self.buffer.reset_col();
+    }
+
+    fn line_feed(&mut self) {
+        self.buffer.line_feed();
+    }
+
+    fn clear_line(&mut self) {
+        self.buffer.clear_line();
+    }
+
+    fn move_cursor_to(&mut self, row: u16, col: u16) {
+        self.buffer.move_cursor_to(row, col);
     }
 }
