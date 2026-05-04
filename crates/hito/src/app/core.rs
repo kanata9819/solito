@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::config::WindowAttr;
-use crate::renderer::state::{State, TerminalOutputSink, WindowRenderer};
+use crate::renderer::state::context::{State, TerminalOutputSink, WindowRenderer};
 use crate::{app::event as AppEvent, session::parser::TerminalEvent};
 use tracing::error;
 use winit::{

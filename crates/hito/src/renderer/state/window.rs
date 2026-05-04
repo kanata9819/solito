@@ -1,119 +1,26 @@
 use glyphon::{Color, Resolution, TextArea, TextBounds};
-use std::{error::Error, sync::Arc};
+use std::error::Error;
 use wgpu::{
-    Adapter, CommandEncoder, CommandEncoderDescriptor, Device, Instance, Queue, Surface,
-    SurfaceConfiguration, SurfaceTexture, TextureFormat, TextureView, TextureViewDescriptor,
+    CommandEncoder, CommandEncoderDescriptor, SurfaceTexture, TextureView, TextureViewDescriptor,
 };
-use winit::{dpi::PhysicalSize, window::Window};
+use winit::dpi::PhysicalSize;
 
+use super::context::State;
 use crate::renderer::{
     pass,
-    pipeline::rect::{self, Caret, Rect},
-    screen::buffer::{InputBuffer, ScreenBufferEditor},
+    pipeline::rect::{self, Caret},
+    screen::buffer::ScreenBufferEditor,
 };
 
-pub struct State {
-    surface: Surface<'static>,
-    device: Device,
-    queue: Queue,
-    config: SurfaceConfiguration,
-    is_surface_configured: bool,
-    rect_pipeline: rect::RectPipeline,
-    buffer: InputBuffer,
-    instance: Instance,
-    window: Arc<Window>,
-    uniform_buffer: wgpu::Buffer,
+pub trait WindowRenderer {
+    fn resize(&mut self, size: PhysicalSize<u32>);
+    fn render(&mut self) -> Result<(), Box<dyn Error>>;
+    fn redraw(&mut self) -> Result<(), Box<dyn Error>>;
+    fn scroll(&mut self, x: f32, y: f32);
 }
 
 impl State {
-    pub async fn new(window: Arc<Window>) -> Result<Self, Box<dyn Error>> {
-        let size: PhysicalSize<u32> = window.inner_size();
-        let instance: Instance = Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY,
-            flags: Default::default(),
-            memory_budget_thresholds: Default::default(),
-            backend_options: Default::default(),
-            display: None,
-        });
-
-        let surface: Surface<'_> = instance.create_surface(window.clone())?;
-        let adapter: Adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
-                compatible_surface: Some(&surface),
-                force_fallback_adapter: false,
-            })
-            .await?;
-
-        let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                label: None,
-                required_features: wgpu::Features::empty(),
-                experimental_features: wgpu::ExperimentalFeatures::disabled(),
-                required_limits: if cfg!(target_arch = "wasm32") {
-                    wgpu::Limits::downlevel_webgl2_defaults()
-                } else {
-                    wgpu::Limits::default()
-                },
-                memory_hints: Default::default(),
-                trace: wgpu::Trace::Off,
-            })
-            .await?;
-
-        let surface_caps: wgpu::SurfaceCapabilities = surface.get_capabilities(&adapter);
-
-        let surface_format: wgpu::TextureFormat = surface_caps
-            .formats
-            .iter()
-            .find(|f| f.is_srgb())
-            .copied()
-            .unwrap_or(surface_caps.formats[0]);
-
-        let config: wgpu::wgt::SurfaceConfiguration<Vec<wgpu::TextureFormat>> =
-            wgpu::SurfaceConfiguration {
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                format: surface_format,
-                width: size.width,
-                height: size.height,
-                present_mode: surface_caps.present_modes[0],
-                alpha_mode: surface_caps.alpha_modes[0],
-                view_formats: vec![],
-                desired_maximum_frame_latency: 2,
-            };
-
-        let uniform_buffer: wgpu::Buffer = rect::RectPipeline::create_caret_uniform_buffer(&device);
-        let rect_pipeline: rect::RectPipeline = rect::RectPipeline::new(
-            &device,
-            config.clone(),
-            &queue,
-            &uniform_buffer,
-            size.width,
-            size.height,
-        );
-        let swapchain_format: TextureFormat = TextureFormat::Bgra8UnormSrgb;
-        let buffer: InputBuffer =
-            InputBuffer::new(&device.clone(), &queue.clone(), swapchain_format, size, 1.0);
-
-        Ok(Self {
-            surface,
-            device,
-            queue,
-            config,
-            is_surface_configured: false,
-            rect_pipeline,
-            buffer,
-            instance,
-            window,
-            uniform_buffer,
-        })
-    }
-
-    fn create_encoder(&self, label: Option<&str>) -> CommandEncoder {
-        self.device
-            .create_command_encoder(&CommandEncoderDescriptor { label })
-    }
-
-    fn prepare(&mut self) -> Result<(), Box<dyn Error>> {
+    fn prepare_render(&mut self) -> Result<(), Box<dyn Error>> {
         self.buffer.text_renderer.prepare(
             &self.device,
             &self.queue,
@@ -183,16 +90,14 @@ impl State {
 
         Ok(Some(frame))
     }
+
+    fn create_encoder(&self, label: Option<&str>) -> CommandEncoder {
+        self.device
+            .create_command_encoder(&CommandEncoderDescriptor { label })
+    }
 }
 
-pub trait WindowRenderer {
-    fn resize(&mut self, size: PhysicalSize<u32>);
-    fn render(&mut self) -> Result<(), Box<dyn Error>>;
-    fn redraw(&mut self) -> Result<(), Box<dyn Error>>;
-    fn scroll(&mut self, x: f32, y: f32);
-}
-
-impl WindowRenderer for State {
+impl WindowRenderer for super::context::State {
     fn resize(&mut self, size: PhysicalSize<u32>) {
         let size: PhysicalSize<u32> = size;
         if size.width > 0 && size.height > 0 {
@@ -263,7 +168,7 @@ impl WindowRenderer for State {
             },
         );
 
-        self.prepare()?;
+        self.prepare_render()?;
 
         let frame: Option<SurfaceTexture> = match self.initialize_frame() {
             Ok(Some(frame)) => Some(frame),
@@ -289,35 +194,5 @@ impl WindowRenderer for State {
 
     fn scroll(&mut self, x: f32, y: f32) {
         self.buffer.scroll(x, y);
-    }
-}
-
-pub trait TerminalOutputSink {
-    fn print_char(&mut self, char: char);
-    fn carriage_return(&mut self);
-    fn line_feed(&mut self);
-    fn clear_line(&mut self);
-    fn move_cursor_to(&mut self, row: u16, col: u16);
-}
-
-impl TerminalOutputSink for State {
-    fn print_char(&mut self, char: char) {
-        self.buffer.push_char(char);
-    }
-
-    fn carriage_return(&mut self) {
-        self.buffer.reset_col();
-    }
-
-    fn line_feed(&mut self) {
-        self.buffer.line_feed();
-    }
-
-    fn clear_line(&mut self) {
-        self.buffer.clear_line();
-    }
-
-    fn move_cursor_to(&mut self, row: u16, col: u16) {
-        self.buffer.move_cursor_to(row, col);
     }
 }

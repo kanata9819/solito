@@ -7,7 +7,7 @@ use crate::config::BufferAttr;
 use super::cursor::Cursor;
 use super::glyphon::GlyphonResources;
 
-pub(in crate::renderer) struct InputBuffer {
+pub struct InputBuffer {
     pub text_buffer: Buffer,
     pub viewport: Viewport,
     pub text_renderer: TextRenderer,
@@ -127,7 +127,7 @@ impl InputBuffer {
     }
 }
 
-pub(in crate::renderer) trait ScreenBufferEditor {
+pub trait ScreenBufferEditor {
     fn push_char(&mut self, c: char);
     fn forward_col(&mut self);
     fn reset_col(&mut self);

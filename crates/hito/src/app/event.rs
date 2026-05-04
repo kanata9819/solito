@@ -13,7 +13,8 @@ use winit::{
 
 use crate::{
     config::BufferAttr,
-    renderer::state::{TerminalOutputSink, WindowRenderer},
+    renderer::state::context::TerminalOutputSink,
+    renderer::state::context::WindowRenderer,
     util::{
         self,
         keycode_parser::{CodeKind, KeyState, ParseError, ParseResult},
