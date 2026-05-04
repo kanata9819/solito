@@ -150,7 +150,7 @@ impl State {
             .text_renderer
             .render(&self.buffer.atlas, &self.buffer.viewport, &mut pass)?;
 
-        let bind_group = self
+        let bind_group: wgpu::BindGroup = self
             .rect_pipeline
             .caret_bind_group(&self.device, &self.uniform_buffer);
 
