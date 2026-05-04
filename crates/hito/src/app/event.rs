@@ -61,14 +61,28 @@ pub(super) fn event_handler<T: TerminalOutputSink + WindowRenderer>(
         WindowEvent::Resized(size) => {
             state.resize(size);
         }
+        WindowEvent::MouseWheel {
+            device_id: _,
+            delta,
+            phase: _,
+        } => match delta {
+            winit::event::MouseScrollDelta::LineDelta(x, y) => {
+                tracing::debug!("MouseScrollDelta.LineDelta: x({:?}), y({:?})", x, y);
+                state.scroll(x, y);
+            }
+            winit::event::MouseScrollDelta::PixelDelta(pos) => {
+                tracing::debug!("MouseScrollDelta.PixelDelta: pos({:?})", pos);
+            }
+        },
         #[allow(unused)]
         WindowEvent::CursorMoved {
             device_id,
             position,
         } => {}
-
         #[allow(unused)]
         WindowEvent::CursorLeft { device_id } => {}
+        #[allow(unused)]
+        WindowEvent::CursorEntered { device_id } => {}
         _ => {
             tracing::debug!("unhandled event: {event:?}");
         }

@@ -189,6 +189,7 @@ pub trait WindowRenderer {
     fn resize(&mut self, size: PhysicalSize<u32>);
     fn render(&mut self) -> Result<(), Box<dyn Error>>;
     fn redraw(&mut self) -> Result<(), Box<dyn Error>>;
+    fn scroll(&mut self, x: f32, y: f32);
 }
 
 impl WindowRenderer for State {
@@ -282,6 +283,10 @@ impl WindowRenderer for State {
         self.buffer.atlas.trim();
 
         Ok(())
+    }
+
+    fn scroll(&mut self, x: f32, y: f32) {
+        self.buffer.scroll(x, y);
     }
 }
 

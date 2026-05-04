@@ -95,6 +95,7 @@ pub(in crate::renderer) trait ScreenBufferEditor {
     fn line_feed(&mut self);
     fn clear_line(&mut self);
     fn move_cursor_to(&mut self, row: u16, col: u16);
+    fn scroll(&mut self, x: f32, y: f32);
 }
 
 impl ScreenBufferEditor for InputBuffer {
@@ -134,4 +135,6 @@ impl ScreenBufferEditor for InputBuffer {
     fn move_cursor_to(&mut self, row: u16, col: u16) {
         self.cursor.move_to(row, col);
     }
+
+    fn scroll(&mut self, x: f32, y: f32) {}
 }
