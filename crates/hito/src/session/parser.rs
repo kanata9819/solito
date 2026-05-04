@@ -58,9 +58,11 @@ impl Perform for EscPerformer {
     fn execute(&mut self, byte: u8) {
         match byte {
             b'\r' => {
+                tracing::debug!("TerminalEvent: CarriageReturn");
                 self.send(TerminalEvent::CarriageReturn);
             }
             b'\n' => {
+                tracing::debug!("TerminalEvent: LineFeed");
                 self.send(TerminalEvent::LineFeed);
             }
             _ => {
