@@ -2,6 +2,8 @@ use glyphon::{
     Attrs, Buffer, Family, FontSystem, Shaping, SwashCache, TextAtlas, TextRenderer, Viewport,
 };
 
+use crate::config::BufferAttr;
+
 use super::cursor::Cursor;
 use super::glyphon::GlyphonResources;
 
@@ -14,6 +16,9 @@ pub(in crate::renderer) struct InputBuffer {
     pub atlas: TextAtlas,
     cursor: Cursor,
     inner_buffer: Vec<Vec<char>>,
+    scroll_offset: usize,
+    scroll_accumulator: f32,
+    visible_rows: usize,
 }
 
 impl InputBuffer {
@@ -36,7 +41,22 @@ impl InputBuffer {
             atlas: glyphon.atlas,
             inner_buffer: vec![Vec::new()],
             cursor: Cursor::new(),
+            scroll_offset: 0,
+            scroll_accumulator: 0.0,
+            visible_rows: Self::visible_rows(physical_size.height),
         }
+    }
+
+    pub(in crate::renderer) fn resize(&mut self, height: u32) {
+        self.visible_rows = Self::visible_rows(height);
+        self.clamp_scroll_offset();
+        self.set_text_to_buffer();
+    }
+
+    fn visible_rows(height: u32) -> usize {
+        // Calculates how many full rows can fit on the screen
+        // by dividing the screen height by the line height.
+        ((height as f32 / BufferAttr::LINE_HEIGHT).floor() as usize).max(1)
     }
 
     fn set_char_at_col(&mut self, c: char) {
@@ -61,11 +81,30 @@ impl InputBuffer {
     }
 
     fn buffer_string(&mut self) -> String {
-        self.inner_buffer
+        self.clamp_scroll_offset();
+
+        let end: usize = self.inner_buffer.len().saturating_sub(self.scroll_offset);
+        let start: usize = end.saturating_sub(self.visible_rows);
+
+        self.inner_buffer[start..end]
             .iter()
             .map(|line| line.iter().collect::<String>())
             .collect::<Vec<String>>()
             .join("\n")
+    }
+
+    fn max_scroll_offset(&self) -> usize {
+        let row_count: usize = self.inner_buffer.len();
+        row_count.saturating_sub(self.visible_rows)
+    }
+
+    fn clamp_scroll_offset(&mut self) {
+        self.scroll_offset = self.scroll_offset.min(self.max_scroll_offset());
+    }
+
+    fn reset_scroll(&mut self) {
+        self.scroll_offset = 0;
+        self.scroll_accumulator = 0.0;
     }
 
     fn ensure_line(&mut self) {
@@ -107,6 +146,7 @@ impl ScreenBufferEditor for InputBuffer {
             self.cursor.col()
         );
 
+        self.reset_scroll();
         self.ensure_line();
         self.set_char_at_col(c);
         self.set_text_to_buffer();
@@ -122,10 +162,14 @@ impl ScreenBufferEditor for InputBuffer {
     }
 
     fn line_feed(&mut self) {
+        self.reset_scroll();
         self.cursor.line_feed();
+        self.ensure_row();
+        self.set_text_to_buffer();
     }
 
     fn clear_line(&mut self) {
+        self.reset_scroll();
         self.ensure_line();
         // ESC[K with mode 0 erases from the cursor to the end of the line.
         self.inner_buffer[self.cursor.row()].truncate(self.cursor.col());
@@ -136,5 +180,20 @@ impl ScreenBufferEditor for InputBuffer {
         self.cursor.move_to(row, col);
     }
 
-    fn scroll(&mut self, x: f32, y: f32) {}
+    fn scroll(&mut self, _x: f32, y: f32) {
+        self.scroll_accumulator += y;
+
+        while self.scroll_accumulator >= 1.0 {
+            self.scroll_offset = self.scroll_offset.saturating_add(1);
+            self.scroll_accumulator -= 1.0;
+        }
+
+        while self.scroll_accumulator <= -1.0 {
+            self.scroll_offset = self.scroll_offset.saturating_sub(1);
+            self.scroll_accumulator += 1.0;
+        }
+
+        self.clamp_scroll_offset();
+        self.set_text_to_buffer();
+    }
 }

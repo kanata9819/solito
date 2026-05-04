@@ -207,6 +207,8 @@ impl WindowRenderer for State {
                 self.window.inner_size().width,
                 self.window.inner_size().height,
             );
+
+            self.buffer.resize(size.height);
         }
     }
 

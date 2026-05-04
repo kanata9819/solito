@@ -12,6 +12,7 @@ use winit::{
 };
 
 use crate::{
+    config::BufferAttr,
     renderer::state::{TerminalOutputSink, WindowRenderer},
     util::{
         self,
@@ -72,6 +73,10 @@ pub(super) fn event_handler<T: TerminalOutputSink + WindowRenderer>(
             }
             winit::event::MouseScrollDelta::PixelDelta(pos) => {
                 tracing::debug!("MouseScrollDelta.PixelDelta: pos({:?})", pos);
+                state.scroll(
+                    pos.x as f32 / BufferAttr::LINE_HEIGHT,
+                    pos.y as f32 / BufferAttr::LINE_HEIGHT,
+                );
             }
         },
         #[allow(unused)]
