@@ -10,7 +10,7 @@ use super::{context::State, gpu::GpuContext};
 use crate::renderer::{
     pass,
     pipeline::rect::{self, Caret},
-    screen::buffer::ScreenBufferEditor,
+    screen::input_buffer::ScreenBufferEditor,
 };
 
 pub(super) struct WindowSurface {

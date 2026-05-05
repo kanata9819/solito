@@ -3,7 +3,7 @@ use wgpu::{Instance, Surface, TextureFormat};
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::renderer::{
-    screen::buffer::InputBuffer,
+    screen::input_buffer::InputBuffer,
     state::{gpu::GpuContext, render::RenderResources, window::WindowSurface},
 };
 
