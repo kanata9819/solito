@@ -1,16 +1,60 @@
 use glyphon::{Color, Resolution, TextArea, TextBounds};
-use std::error::Error;
+use std::{error::Error, sync::Arc};
 use wgpu::{
-    CommandEncoder, CommandEncoderDescriptor, SurfaceTexture, TextureView, TextureViewDescriptor,
+    CommandEncoder, CommandEncoderDescriptor, Surface, SurfaceConfiguration, SurfaceTexture,
+    TextureView, TextureViewDescriptor,
 };
-use winit::dpi::PhysicalSize;
+use winit::{dpi::PhysicalSize, window::Window};
 
-use super::context::State;
+use super::{context::State, gpu::GpuContext};
 use crate::renderer::{
     pass,
     pipeline::rect::{self, Caret},
     screen::buffer::ScreenBufferEditor,
 };
+
+pub(super) struct WindowSurface {
+    pub(super) surface: Surface<'static>,
+    pub(super) config: SurfaceConfiguration,
+    pub(super) is_configured: bool,
+    pub(super) window: Arc<Window>,
+}
+
+impl WindowSurface {
+    pub(super) fn new(
+        window: Arc<Window>,
+        surface: Surface<'static>,
+        gpu: &GpuContext,
+        size: PhysicalSize<u32>,
+    ) -> Self {
+        let surface_caps: wgpu::SurfaceCapabilities = surface.get_capabilities(&gpu.adapter);
+
+        let surface_format: wgpu::TextureFormat = surface_caps
+            .formats
+            .iter()
+            .find(|f| f.is_srgb())
+            .copied()
+            .unwrap_or(surface_caps.formats[0]);
+
+        let config: SurfaceConfiguration = SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: surface_format,
+            width: size.width,
+            height: size.height,
+            present_mode: surface_caps.present_modes[0],
+            alpha_mode: surface_caps.alpha_modes[0],
+            view_formats: vec![],
+            desired_maximum_frame_latency: 2,
+        };
+
+        Self {
+            surface,
+            config,
+            is_configured: false,
+            window,
+        }
+    }
+}
 
 pub trait WindowRenderer {
     fn resize(&mut self, size: PhysicalSize<u32>);
@@ -22,8 +66,8 @@ pub trait WindowRenderer {
 impl State {
     fn prepare_render(&mut self) -> Result<(), Box<dyn Error>> {
         self.buffer.text_renderer.prepare(
-            &self.device,
-            &self.queue,
+            &self.gpu.device,
+            &self.gpu.queue,
             &mut self.buffer.font_system,
             &mut self.buffer.atlas,
             &self.buffer.viewport,
@@ -58,31 +102,41 @@ impl State {
             .render(&self.buffer.atlas, &self.buffer.viewport, &mut pass)?;
 
         let bind_group: wgpu::BindGroup = self
+            .render_resources
             .rect_pipeline
-            .caret_bind_group(&self.device, &self.uniform_buffer);
+            .caret_bind_group(&self.gpu.device, &self.render_resources.uniform_buffer);
 
-        self.rect_pipeline.draw_rect(&mut pass, bind_group);
+        self.render_resources
+            .rect_pipeline
+            .draw_rect(&mut pass, bind_group);
 
         Ok(())
     }
 
     fn initialize_frame(&mut self) -> Result<Option<SurfaceTexture>, Box<dyn Error>> {
-        let frame: SurfaceTexture = match self.surface.get_current_texture() {
+        let frame: SurfaceTexture = match self.window_surface.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame) => frame,
             wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
                 // Try again later
-                self.window.request_redraw();
+                self.window_surface.window.request_redraw();
                 return Ok(None);
             }
             wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Suboptimal(_) => {
-                self.surface.configure(&self.device, &self.config);
-                self.window.request_redraw();
+                self.window_surface
+                    .surface
+                    .configure(&self.gpu.device, &self.window_surface.config);
+                self.window_surface.window.request_redraw();
                 return Ok(None);
             }
             wgpu::CurrentSurfaceTexture::Lost => {
-                self.surface = self.instance.create_surface(self.window.clone())?;
-                self.surface.configure(&self.device, &self.config);
-                self.window.request_redraw();
+                self.window_surface.surface = self
+                    .gpu
+                    .instance
+                    .create_surface(self.window_surface.window.clone())?;
+                self.window_surface
+                    .surface
+                    .configure(&self.gpu.device, &self.window_surface.config);
+                self.window_surface.window.request_redraw();
                 return Ok(None);
             }
             wgpu::CurrentSurfaceTexture::Validation => panic!("validation error"),
@@ -92,25 +146,28 @@ impl State {
     }
 
     fn create_encoder(&self, label: Option<&str>) -> CommandEncoder {
-        self.device
+        self.gpu
+            .device
             .create_command_encoder(&CommandEncoderDescriptor { label })
     }
 }
 
-impl WindowRenderer for super::context::State {
+impl WindowRenderer for State {
     fn resize(&mut self, size: PhysicalSize<u32>) {
         let size: PhysicalSize<u32> = size;
         if size.width > 0 && size.height > 0 {
-            self.config.width = size.width;
-            self.config.height = size.height;
-            self.surface.configure(&self.device, &self.config);
-            self.is_surface_configured = true;
+            self.window_surface.config.width = size.width;
+            self.window_surface.config.height = size.height;
+            self.window_surface
+                .surface
+                .configure(&self.gpu.device, &self.window_surface.config);
+            self.window_surface.is_configured = true;
 
             rect::RectPipeline::update_caret_uniform(
-                &self.uniform_buffer,
-                &self.queue,
-                self.window.inner_size().width,
-                self.window.inner_size().height,
+                &self.render_resources.uniform_buffer,
+                &self.gpu.queue,
+                self.window_surface.window.inner_size().width,
+                self.window_surface.window.inner_size().height,
             );
 
             self.buffer.resize(size.height);
@@ -118,17 +175,19 @@ impl WindowRenderer for super::context::State {
     }
 
     fn render(&mut self) -> Result<(), Box<dyn Error>> {
-        self.window.request_redraw();
+        self.window_surface.window.request_redraw();
 
         // We can't render unless the surface is configured
-        if !self.is_surface_configured {
+        if !self.window_surface.is_configured {
             return Ok(());
         }
 
-        let output: SurfaceTexture = match self.surface.get_current_texture() {
+        let output: SurfaceTexture = match self.window_surface.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
             wgpu::CurrentSurfaceTexture::Suboptimal(surface_texture) => {
-                self.surface.configure(&self.device, &self.config);
+                self.window_surface
+                    .surface
+                    .configure(&self.gpu.device, &self.window_surface.config);
                 surface_texture
             }
             wgpu::CurrentSurfaceTexture::Timeout
@@ -138,7 +197,9 @@ impl WindowRenderer for super::context::State {
                 return Ok(());
             }
             wgpu::CurrentSurfaceTexture::Outdated => {
-                self.surface.configure(&self.device, &self.config);
+                self.window_surface
+                    .surface
+                    .configure(&self.gpu.device, &self.window_surface.config);
                 return Ok(());
             }
             wgpu::CurrentSurfaceTexture::Lost => {
@@ -150,7 +211,7 @@ impl WindowRenderer for super::context::State {
 
         let encoder: CommandEncoder = self.create_encoder(Some("Render Encoder"));
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.gpu.queue.submit(std::iter::once(encoder.finish()));
 
         // The last lines of the code tell wgpu to finish the command buffer
         // and submit it to the GPU's render queue.
@@ -161,10 +222,10 @@ impl WindowRenderer for super::context::State {
 
     fn redraw(&mut self) -> Result<(), Box<dyn Error>> {
         self.buffer.viewport.update(
-            &self.queue,
+            &self.gpu.queue,
             Resolution {
-                width: self.config.width,
-                height: self.config.height,
+                width: self.window_surface.config.width,
+                height: self.window_surface.config.height,
             },
         );
 
@@ -183,7 +244,7 @@ impl WindowRenderer for super::context::State {
             let view: TextureView = frame.texture.create_view(&TextureViewDescriptor::default());
             let mut encoder: CommandEncoder = self.create_encoder(None);
             self.render_pass(&mut encoder, view)?;
-            self.queue.submit(Some(encoder.finish()));
+            self.gpu.queue.submit(Some(encoder.finish()));
             frame.present();
         }
 
