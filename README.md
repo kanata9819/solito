@@ -1,4 +1,4 @@
-# Hito Terminal Emulator
+# Solito Terminal Emulator
 
 ## コーディングエージェントによるコード生成を行わず作成するコンセプトのターミナルエミュレータ。
 

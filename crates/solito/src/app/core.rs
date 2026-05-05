@@ -19,14 +19,14 @@ use winit::{
     window::{Window, WindowAttributes, WindowId},
 };
 
-pub struct HitoApplication {
+pub struct SolitoApplication {
     pub windows: HashMap<WindowId, Arc<Window>>,
     state: Option<State>,
     input_tx: Sender<Vec<u8>>,
     output_rx: Receiver<TerminalEvent>,
 }
 
-impl HitoApplication {
+impl SolitoApplication {
     pub fn new(input_tx: Sender<Vec<u8>>, output_rx: Receiver<TerminalEvent>) -> Self {
         Self {
             windows: HashMap::new(),
@@ -67,7 +67,7 @@ impl HitoApplication {
                 WindowAttr::WINDOW_WIDTH,
                 WindowAttr::WINDOW_HIGHT,
             ))
-            .with_title("Hito");
+            .with_title("Solito");
 
         let window: Arc<Window> = Arc::new(event_loop.create_window(window_attributes)?);
         let window_id: WindowId = window.id();
@@ -82,7 +82,7 @@ impl HitoApplication {
     }
 }
 
-impl ApplicationHandler for HitoApplication {
+impl ApplicationHandler for SolitoApplication {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if let Err(err) = self.create_window(event_loop) {
             error!("create window error occured: {}", err)

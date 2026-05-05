@@ -16,7 +16,7 @@ use tracing::error;
 use tracing_subscriber::EnvFilter;
 use winit::event_loop::EventLoop;
 
-use crate::app::core::HitoApplication;
+use crate::app::core::SolitoApplication;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let (input_tx, input_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel::<Vec<u8>>();
@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn init_tracing() {
-    let env_filter: String = format!("error,hito={}", config::TracingFilter::FILTER_DEBUG);
+    let env_filter: String = format!("error,solito={}", config::TracingFilter::FILTER_DEBUG);
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::new(env_filter))
         .init();
@@ -51,8 +51,8 @@ fn run_app(
     output_rx: Receiver<TerminalEvent>,
 ) -> Result<(), Box<dyn Error>> {
     let event_loop: EventLoop<()> = EventLoop::new()?;
-    let mut hito: HitoApplication = HitoApplication::new(input_tx, output_rx);
-    event_loop.run_app(&mut hito)?;
+    let mut solito: SolitoApplication = SolitoApplication::new(input_tx, output_rx);
+    event_loop.run_app(&mut solito)?;
 
     Ok(())
 }
