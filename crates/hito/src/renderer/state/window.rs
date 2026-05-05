@@ -65,14 +65,14 @@ pub trait WindowRenderer {
 
 impl State {
     fn prepare_render(&mut self) -> Result<(), Box<dyn Error>> {
-        self.buffer.text_renderer.prepare(
+        self.buffer.glyphs.text_renderer.prepare(
             &self.gpu.device,
             &self.gpu.queue,
-            &mut self.buffer.font_system,
-            &mut self.buffer.atlas,
-            &self.buffer.viewport,
+            &mut self.buffer.glyphs.font_system,
+            &mut self.buffer.glyphs.atlas,
+            &self.buffer.glyphs.viewport,
             [TextArea {
-                buffer: &self.buffer.text_buffer,
+                buffer: &self.buffer.glyphs.text_buffer,
                 left: 10.0,
                 top: 10.0,
                 scale: 1.0,
@@ -84,7 +84,7 @@ impl State {
                 default_color: Color::rgb(255, 255, 255),
                 custom_glyphs: &[],
             }],
-            &mut self.buffer.swash_cache,
+            &mut self.buffer.glyphs.swash_cache,
         )?;
 
         Ok(())
@@ -98,8 +98,9 @@ impl State {
         let mut pass: wgpu::RenderPass<'_> = pass::begin_render_pass(encoder, &view);
 
         self.buffer
+            .glyphs
             .text_renderer
-            .render(&self.buffer.atlas, &self.buffer.viewport, &mut pass)?;
+            .render(&self.buffer.glyphs.atlas, &self.buffer.glyphs.viewport, &mut pass)?;
 
         let bind_group: wgpu::BindGroup = self
             .render_resources
@@ -221,7 +222,7 @@ impl WindowRenderer for State {
     }
 
     fn redraw(&mut self) -> Result<(), Box<dyn Error>> {
-        self.buffer.viewport.update(
+        self.buffer.glyphs.viewport.update(
             &self.gpu.queue,
             Resolution {
                 width: self.window_surface.config.width,
@@ -248,7 +249,7 @@ impl WindowRenderer for State {
             frame.present();
         }
 
-        self.buffer.atlas.trim();
+        self.buffer.glyphs.atlas.trim();
 
         Ok(())
     }
