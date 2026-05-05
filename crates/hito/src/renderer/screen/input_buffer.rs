@@ -47,7 +47,7 @@ impl InputBuffer {
     }
 }
 
-pub trait ScreenBufferEditor {
+pub trait TerminalOutputHandler {
     fn push_char(&mut self, c: char);
     fn reset_col(&mut self);
     fn line_feed(&mut self);
@@ -56,7 +56,7 @@ pub trait ScreenBufferEditor {
     fn scroll(&mut self, x: f32, y: f32);
 }
 
-impl ScreenBufferEditor for InputBuffer {
+impl TerminalOutputHandler for InputBuffer {
     fn push_char(&mut self, c: char) {
         tracing::debug!(
             "print: char({:?}) row({:?}) col({:?})",

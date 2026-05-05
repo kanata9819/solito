@@ -1,5 +1,5 @@
 use super::context::State;
-use crate::renderer::screen::input_buffer::ScreenBufferEditor;
+use crate::renderer::screen::input_buffer::TerminalOutputHandler;
 
 pub trait TerminalOutputSink {
     fn print_char(&mut self, char: char);

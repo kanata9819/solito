@@ -10,7 +10,7 @@ use super::{context::State, gpu::GpuContext};
 use crate::renderer::{
     pass,
     pipeline::rect::{self, Caret},
-    screen::input_buffer::ScreenBufferEditor,
+    screen::input_buffer::TerminalOutputHandler,
 };
 
 pub(super) struct WindowSurface {
@@ -97,10 +97,11 @@ impl State {
     ) -> Result<(), Box<dyn Error>> {
         let mut pass: wgpu::RenderPass<'_> = pass::begin_render_pass(encoder, &view);
 
-        self.buffer
-            .glyphs
-            .text_renderer
-            .render(&self.buffer.glyphs.atlas, &self.buffer.glyphs.viewport, &mut pass)?;
+        self.buffer.glyphs.text_renderer.render(
+            &self.buffer.glyphs.atlas,
+            &self.buffer.glyphs.viewport,
+            &mut pass,
+        )?;
 
         let bind_group: wgpu::BindGroup = self
             .render_resources
