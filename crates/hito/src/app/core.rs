@@ -69,12 +69,7 @@ impl HitoApplication {
             ))
             .with_title("Hito");
 
-        let window: Arc<Window> = Arc::new(
-            event_loop
-                .create_window(window_attributes)
-                .expect("failed to create window"),
-        );
-
+        let window: Arc<Window> = Arc::new(event_loop.create_window(window_attributes)?);
         let window_id: WindowId = window.id();
         self.windows.insert(window_id, window.clone());
         let mut state: State = pollster::block_on(State::new(window))?;
