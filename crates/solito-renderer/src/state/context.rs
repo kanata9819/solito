@@ -2,15 +2,15 @@ use std::{error::Error, sync::Arc};
 use wgpu::{Instance, Surface, TextureFormat};
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::renderer::{
+use crate::{
     state::{gpu::GpuContext, render::RenderResources, window::WindowSurface},
     terminal_view::TerminalView,
 };
 
-pub(crate) use super::terminal::TerminalViewRenderer;
-pub(crate) use super::window::WindowRenderer;
+pub use super::terminal::TerminalViewRenderer;
+pub use super::window::WindowRenderer;
 
-pub(crate) struct State {
+pub struct State {
     pub(super) gpu: GpuContext,
     pub(super) window_surface: WindowSurface,
     pub(super) render_resources: RenderResources,
@@ -18,7 +18,7 @@ pub(crate) struct State {
 }
 
 impl State {
-    pub(crate) async fn new(window: Arc<Window>) -> Result<Self, Box<dyn Error>> {
+    pub async fn new(window: Arc<Window>) -> Result<Self, Box<dyn Error>> {
         let size: PhysicalSize<u32> = window.inner_size();
         let instance: Instance = GpuContext::create_instance();
         let surface: Surface<'_> = instance.create_surface(window.clone())?;

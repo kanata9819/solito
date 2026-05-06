@@ -1,3 +1,8 @@
 [workspace]
-members = ["crates/decodesc","crates/solito", "crates/solito-terminal"]
+members = [
+    "crates/decodesc",
+    "crates/solito",
+    "crates/solito-renderer",
+    "crates/solito-terminal",
+]
 resolver = "3"

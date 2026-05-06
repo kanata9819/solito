@@ -8,7 +8,7 @@ use wgpu::{
 use winit::{dpi::PhysicalSize, window::Window};
 
 use super::{context::State, gpu::GpuContext};
-use crate::renderer::{
+use crate::{
     pass,
     pipeline::rect::{self, Caret},
 };
@@ -56,7 +56,7 @@ impl WindowSurface {
     }
 }
 
-pub(crate) trait WindowRenderer {
+pub trait WindowRenderer {
     fn resize(&mut self, size: PhysicalSize<u32>, snapshot: ScreenSnapshot);
     fn render(&mut self) -> Result<(), Box<dyn Error>>;
     fn redraw(&mut self) -> Result<(), Box<dyn Error>>;

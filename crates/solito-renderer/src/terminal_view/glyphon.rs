@@ -3,7 +3,7 @@ use ::glyphon::{
 };
 use wgpu::MultisampleState;
 
-use crate::config::BufferAttr;
+use crate::RendererConfig;
 
 pub(super) struct GlyphonResources {
     pub(super) text_buffer: Buffer,
@@ -31,7 +31,7 @@ impl GlyphonResources {
             TextRenderer::new(&mut atlas, device, MultisampleState::default(), None);
         let mut text_buffer: Buffer = Buffer::new(
             &mut font_system,
-            Metrics::new(BufferAttr::FONT_SIZE, BufferAttr::LINE_HEIGHT),
+            Metrics::new(RendererConfig::FONT_SIZE, RendererConfig::LINE_HEIGHT),
         );
 
         let physical_width: f32 = (f64::from(physical_size.width) * scale_factor) as f32;

@@ -1,7 +1,7 @@
 use ::glyphon::{Attrs, Family, Shaping};
 use solito_terminal::{ScreenCell, ScreenSnapshot};
 
-use crate::config::BufferAttr;
+use crate::RendererConfig;
 
 mod glyphon;
 mod resources;
@@ -11,14 +11,14 @@ use self::glyphon::GlyphonResources;
 use self::resources::GlyphResources;
 use self::viewport::ViewportState;
 
-pub(in crate::renderer) struct TerminalView {
-    pub(in crate::renderer) glyphs: GlyphResources,
+pub(crate) struct TerminalView {
+    pub(crate) glyphs: GlyphResources,
     snapshot: ScreenSnapshot,
     viewport: ViewportState,
 }
 
 impl TerminalView {
-    pub(in crate::renderer) fn new(
+    pub(crate) fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         swapchain: wgpu::TextureFormat,
@@ -35,19 +35,19 @@ impl TerminalView {
         }
     }
 
-    pub(in crate::renderer) fn resize(&mut self, height: u32, snapshot: ScreenSnapshot) {
+    pub(crate) fn resize(&mut self, height: u32, snapshot: ScreenSnapshot) {
         self.snapshot = snapshot;
         self.viewport.resize(height, self.row_count());
         self.set_text_to_buffer();
     }
 
-    pub(in crate::renderer) fn set_snapshot(&mut self, snapshot: ScreenSnapshot) {
+    pub(crate) fn set_snapshot(&mut self, snapshot: ScreenSnapshot) {
         self.viewport.reset();
         self.snapshot = snapshot;
         self.set_text_to_buffer();
     }
 
-    pub(in crate::renderer) fn scroll(&mut self, _x: f32, y: f32) {
+    pub(crate) fn scroll(&mut self, _x: f32, y: f32) {
         self.viewport.scroll(y, self.row_count());
         self.set_text_to_buffer();
     }
@@ -94,11 +94,11 @@ impl TerminalView {
     }
 
     pub(crate) fn visible_cols(width: u32) -> usize {
-        let cell_width = (BufferAttr::FONT_SIZE * 0.62).max(1.0);
+        let cell_width = (RendererConfig::FONT_SIZE * 0.62).max(1.0);
         ((width as f32 / cell_width).floor() as usize).max(1)
     }
 
     pub(crate) fn visible_rows(height: u32) -> usize {
-        ((height as f32 / BufferAttr::LINE_HEIGHT).floor() as usize).max(1)
+        ((height as f32 / RendererConfig::LINE_HEIGHT).floor() as usize).max(1)
     }
 }

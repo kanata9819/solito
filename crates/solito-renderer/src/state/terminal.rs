@@ -1,9 +1,9 @@
 use super::context::State;
-use crate::renderer::terminal_view::TerminalView;
+use crate::terminal_view::TerminalView;
 use solito_terminal::ScreenSnapshot;
 use winit::dpi::PhysicalSize;
 
-pub(crate) trait TerminalViewRenderer {
+pub trait TerminalViewRenderer {
     fn set_terminal_snapshot(&mut self, snapshot: ScreenSnapshot);
     fn terminal_size(&self) -> (usize, usize);
     fn terminal_size_for(&self, size: PhysicalSize<u32>) -> (usize, usize);

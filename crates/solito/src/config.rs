@@ -12,12 +12,6 @@ impl WindowAttr {
     pub(crate) const WINDOW_HIGHT: f32 = 650.0;
 }
 
-pub(crate) struct BufferAttr;
-impl BufferAttr {
-    pub(crate) const FONT_SIZE: f32 = 20.0;
-    pub(crate) const LINE_HEIGHT: f32 = 30.0;
-}
-
 // pub struct TerminalAttr;
 // impl TerminalAttr {
 //     pub const TERMINAL_COL: usize = 120;

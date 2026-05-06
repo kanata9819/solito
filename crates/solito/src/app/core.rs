@@ -1,3 +1,4 @@
+use solito_renderer::{State, TerminalViewRenderer, WindowRenderer};
 use solito_terminal::TerminalState;
 use std::{
     collections::HashMap,
@@ -10,7 +11,6 @@ use std::{
 
 use crate::app::event as AppEvent;
 use crate::config::WindowAttr;
-use crate::renderer::state::context::{State, TerminalViewRenderer, WindowRenderer};
 use tracing::error;
 use winit::{
     application::ApplicationHandler,

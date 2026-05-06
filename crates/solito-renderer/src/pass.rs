@@ -3,7 +3,7 @@ use wgpu::{
     RenderPassDescriptor, TextureView,
 };
 
-pub(in crate::renderer) fn begin_render_pass<'a>(
+pub(crate) fn begin_render_pass<'a>(
     encoder: &'a mut CommandEncoder,
     view: &TextureView,
 ) -> RenderPass<'a> {

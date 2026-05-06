@@ -1,4 +1,4 @@
-use crate::config::BufferAttr;
+use crate::RendererConfig;
 
 pub(super) struct ViewportState {
     scroll_offset: usize,
@@ -52,7 +52,7 @@ impl ViewportState {
     }
 
     fn visible_rows(height: u32) -> usize {
-        ((height as f32 / BufferAttr::LINE_HEIGHT).floor() as usize).max(1)
+        ((height as f32 / RendererConfig::LINE_HEIGHT).floor() as usize).max(1)
     }
 
     fn max_scroll_offset(&self, row_count: usize) -> usize {

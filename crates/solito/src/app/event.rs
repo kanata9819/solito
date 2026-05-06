@@ -1,3 +1,4 @@
+use solito_renderer::{RendererConfig, TerminalViewRenderer, WindowRenderer};
 use solito_terminal::TerminalState;
 use std::{
     collections::HashMap,
@@ -12,14 +13,9 @@ use winit::{
     window::{Window, WindowId},
 };
 
-use crate::{
-    config::BufferAttr,
-    renderer::state::context::TerminalViewRenderer,
-    renderer::state::context::WindowRenderer,
-    util::{
-        self,
-        keycode_parser::{CodeKind, KeyState, ParseError, ParseResult},
-    },
+use crate::util::{
+    self,
+    keycode_parser::{CodeKind, KeyState, ParseError, ParseResult},
 };
 
 pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
@@ -80,8 +76,8 @@ pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
             winit::event::MouseScrollDelta::PixelDelta(pos) => {
                 tracing::debug!("MouseScrollDelta.PixelDelta: pos({:?})", pos);
                 state.scroll(
-                    pos.x as f32 / BufferAttr::LINE_HEIGHT,
-                    pos.y as f32 / BufferAttr::LINE_HEIGHT,
+                    pos.x as f32 / RendererConfig::LINE_HEIGHT,
+                    pos.y as f32 / RendererConfig::LINE_HEIGHT,
                 );
             }
         },

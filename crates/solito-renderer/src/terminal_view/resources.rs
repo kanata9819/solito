@@ -2,13 +2,13 @@ use ::glyphon::{Buffer, FontSystem, SwashCache, TextAtlas, TextRenderer, Viewpor
 
 use super::glyphon::GlyphonResources;
 
-pub(in crate::renderer) struct GlyphResources {
-    pub(in crate::renderer) text_buffer: Buffer,
-    pub(in crate::renderer) viewport: Viewport,
-    pub(in crate::renderer) text_renderer: TextRenderer,
-    pub(in crate::renderer) font_system: FontSystem,
-    pub(in crate::renderer) swash_cache: SwashCache,
-    pub(in crate::renderer) atlas: TextAtlas,
+pub(crate) struct GlyphResources {
+    pub(crate) text_buffer: Buffer,
+    pub(crate) viewport: Viewport,
+    pub(crate) text_renderer: TextRenderer,
+    pub(crate) font_system: FontSystem,
+    pub(crate) swash_cache: SwashCache,
+    pub(crate) atlas: TextAtlas,
 }
 
 impl GlyphResources {

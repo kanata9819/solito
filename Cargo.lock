@@ -1896,12 +1896,22 @@ checksum = "4aaa7368fcf4852a4c2dd92df0cace6a71f2091ca0a23391ce7f3a31833f1523"
 name = "solito"
 version = "0.1.0"
 dependencies = [
- "glyphon",
  "pollster",
  "portable-pty",
+ "solito-renderer",
  "solito-terminal",
  "tracing",
  "tracing-subscriber",
+ "winit",
+]
+
+[[package]]
+name = "solito-renderer"
+version = "0.1.0"
+dependencies = [
+ "glyphon",
+ "solito-terminal",
+ "tracing",
  "wgpu",
  "winit",
 ]

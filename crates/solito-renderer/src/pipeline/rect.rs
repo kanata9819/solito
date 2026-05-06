@@ -1,13 +1,11 @@
 use wgpu::wgt::SurfaceConfiguration;
 use wgpu::{Buffer, ShaderModule};
 
-use crate::util::general_parser;
-
-pub(in crate::renderer) struct RectPipeline {
+pub(crate) struct RectPipeline {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
 }
-pub(in crate::renderer) trait Rect {
+pub(crate) trait Rect {
     fn new(
         device: &wgpu::Device,
         config: SurfaceConfiguration<Vec<wgpu::TextureFormat>>,
@@ -28,7 +26,7 @@ impl Rect for RectPipeline {
         window_height: u32,
     ) -> Self {
         let shader: ShaderModule =
-            device.create_shader_module(wgpu::include_wgsl!("../../shader/rect.wgsl"));
+            device.create_shader_module(wgpu::include_wgsl!("../shader/rect.wgsl"));
         let bind_group_layout: wgpu::BindGroupLayout = Self::caret_bind_group_layout(device);
 
         let render_pipeline_layout: wgpu::PipelineLayout =
@@ -86,7 +84,7 @@ impl Rect for RectPipeline {
     }
 }
 
-pub(in crate::renderer) trait Caret {
+pub(crate) trait Caret {
     fn caret_bind_group(&self, device: &wgpu::Device, uniform_buffer: &Buffer) -> wgpu::BindGroup;
     fn update_caret_uniform(uniform_buffer: &Buffer, queue: &wgpu::Queue, width: u32, height: u32);
     fn caret_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout;
@@ -120,7 +118,7 @@ impl Caret for RectPipeline {
             padding_x, padding_y, // padding
         ];
 
-        queue.write_buffer(uniform_buffer, 0, general_parser::as_bytes(&caret_uniform));
+        queue.write_buffer(uniform_buffer, 0, as_bytes(&caret_uniform));
     }
 
     fn caret_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
@@ -162,4 +160,8 @@ impl Caret for RectPipeline {
         pass.set_bind_group(0, &bind_group, &[]);
         pass.draw(VERTICIES_COUNT, INSTANCE_COUNT);
     }
+}
+
+fn as_bytes<T>(value: &T) -> &[u8] {
+    unsafe { std::slice::from_raw_parts(value as *const T as *const u8, std::mem::size_of::<T>()) }
 }

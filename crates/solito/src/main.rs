@@ -2,7 +2,6 @@
 
 mod app;
 mod config;
-mod renderer;
 mod session;
 mod util;
 
