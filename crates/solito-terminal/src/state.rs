@@ -1,33 +1,33 @@
-use crate::terminal::screen::buffer::ScreenSnapshot;
-use crate::terminal::screen::core::Screen;
+use crate::screen::buffer::ScreenSnapshot;
+use crate::screen::core::Screen;
 use vte::Parser;
 
-pub(crate) struct TerminalState {
+pub struct TerminalState {
     parser: Parser,
     screen: Screen,
 }
 
 impl TerminalState {
-    pub(crate) fn new(cols: usize, rows: usize) -> Self {
+    pub fn new(cols: usize, rows: usize) -> Self {
         Self {
             parser: Parser::new(),
             screen: Screen::new(cols, rows),
         }
     }
 
-    pub(crate) fn apply_terminal_output(&mut self, bytes: &[u8]) {
+    pub fn apply_terminal_output(&mut self, bytes: &[u8]) {
         self.parser.advance(&mut self.screen, bytes);
     }
 
-    pub(crate) fn set_width(&mut self, cols: usize) {
+    pub fn set_width(&mut self, cols: usize) {
         self.screen.set_cols(cols.max(1));
     }
 
-    pub(crate) fn set_height(&mut self, rows: usize) {
+    pub fn set_height(&mut self, rows: usize) {
         self.screen.set_rows(rows.max(1));
     }
 
-    pub(crate) fn snapshot(&self) -> ScreenSnapshot {
+    pub fn snapshot(&self) -> ScreenSnapshot {
         self.screen.snapshot()
     }
 }
@@ -35,7 +35,7 @@ impl TerminalState {
 #[cfg(test)]
 mod tests {
     use super::TerminalState;
-    use crate::terminal::screen::buffer::ScreenCell;
+    use crate::screen::buffer::ScreenCell;
 
     fn line_text(line: &[ScreenCell]) -> String {
         line.iter()

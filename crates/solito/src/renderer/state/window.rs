@@ -1,4 +1,5 @@
 use glyphon::{Color, Resolution, TextArea, TextBounds};
+use solito_terminal::ScreenSnapshot;
 use std::{error::Error, sync::Arc};
 use wgpu::{
     CommandEncoder, CommandEncoderDescriptor, Surface, SurfaceConfiguration, SurfaceTexture,
@@ -7,12 +8,9 @@ use wgpu::{
 use winit::{dpi::PhysicalSize, window::Window};
 
 use super::{context::State, gpu::GpuContext};
-use crate::{
-    renderer::{
-        pass,
-        pipeline::rect::{self, Caret},
-    },
-    terminal::ScreenSnapshot,
+use crate::renderer::{
+    pass,
+    pipeline::rect::{self, Caret},
 };
 
 pub(super) struct WindowSurface {

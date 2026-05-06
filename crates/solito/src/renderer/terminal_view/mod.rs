@@ -1,9 +1,7 @@
 use ::glyphon::{Attrs, Family, Shaping};
+use solito_terminal::{ScreenCell, ScreenSnapshot};
 
-use crate::{
-    config::BufferAttr,
-    terminal::{ScreenCell, ScreenSnapshot},
-};
+use crate::config::BufferAttr;
 
 mod glyphon;
 mod resources;

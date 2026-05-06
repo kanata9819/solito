@@ -1,5 +1,6 @@
 use super::context::State;
-use crate::{renderer::terminal_view::TerminalView, terminal::ScreenSnapshot};
+use crate::renderer::terminal_view::TerminalView;
+use solito_terminal::ScreenSnapshot;
 use winit::dpi::PhysicalSize;
 
 pub(crate) trait TerminalViewRenderer {

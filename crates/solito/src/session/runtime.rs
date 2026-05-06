@@ -14,6 +14,11 @@ type TSlave = Box<dyn SlavePty + Send>;
 // spawned child
 type TChild = Box<dyn Child + Send + Sync>;
 
+// Default PTY row count (terminal height).
+const DEFAULT_TERMINAL_ROWS: u16 = 30;
+// Default PTY column count (terminal width).
+const DEFAULT_TERMINAL_COLS: u16 = 120;
+
 pub(crate) struct SessionRuntime {
     child: TChild,
     input_rx: Receiver<Vec<u8>>,
@@ -52,8 +57,8 @@ impl SessionRuntime {
     fn pty_pair() -> PtyPair {
         portable_pty::native_pty_system()
             .openpty(PtySize {
-                rows: 24,
-                cols: 80,
+                rows: DEFAULT_TERMINAL_ROWS,
+                cols: DEFAULT_TERMINAL_COLS,
                 pixel_height: 0,
                 pixel_width: 0,
             })

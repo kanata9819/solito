@@ -7,10 +7,10 @@ pub(super) struct CellStyle {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct ScreenCell {
-    pub(crate) ch: char,
+pub struct ScreenCell {
+    pub ch: char,
     pub(super) style: CellStyle,
-    pub(crate) is_wide_continuation: bool,
+    pub is_wide_continuation: bool,
 }
 
 impl ScreenCell {
@@ -40,8 +40,8 @@ impl ScreenCell {
 }
 
 #[derive(Clone, Debug, Default)]
-pub(crate) struct ScreenSnapshot {
-    pub(crate) lines: Vec<Vec<ScreenCell>>,
+pub struct ScreenSnapshot {
+    pub lines: Vec<Vec<ScreenCell>>,
 }
 
 pub(super) struct ScreenBuffer {

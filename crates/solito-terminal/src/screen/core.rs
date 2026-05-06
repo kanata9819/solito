@@ -1,29 +1,29 @@
 use decodesc::{DecodedEvent, VteEvent, decode};
 use vte::{Params, Perform};
 
-use crate::terminal::screen::buffer::ScreenSnapshot;
-use crate::terminal::screen::editor::ScreenEditor;
+use crate::screen::buffer::ScreenSnapshot;
+use crate::screen::editor::ScreenEditor;
 
-pub(in crate::terminal) struct Screen {
+pub struct Screen {
     buffer_editor: ScreenEditor,
 }
 
 impl Screen {
-    pub(in crate::terminal) fn new(cols: usize, rows: usize) -> Self {
+    pub fn new(cols: usize, rows: usize) -> Self {
         Self {
             buffer_editor: ScreenEditor::new(cols, rows),
         }
     }
 
-    pub(in crate::terminal) fn set_cols(&mut self, cols: usize) {
+    pub fn set_cols(&mut self, cols: usize) {
         self.buffer_editor.set_cols(cols);
     }
 
-    pub(in crate::terminal) fn set_rows(&mut self, rows: usize) {
+    pub fn set_rows(&mut self, rows: usize) {
         self.buffer_editor.set_rows(rows);
     }
 
-    pub(in crate::terminal) fn snapshot(&self) -> ScreenSnapshot {
+    pub fn snapshot(&self) -> ScreenSnapshot {
         self.buffer_editor.snapshot()
     }
 }

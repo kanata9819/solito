@@ -1,0 +1,9 @@
+[package]
+name = "solito-terminal"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+vte = "0.15.0"
+unicode-width = "0.2.0"
+decodesc = { path = "../decodesc" }

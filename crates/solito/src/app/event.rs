@@ -1,3 +1,4 @@
+use solito_terminal::TerminalState;
 use std::{
     collections::HashMap,
     error::Error,
@@ -15,7 +16,6 @@ use crate::{
     config::BufferAttr,
     renderer::state::context::TerminalViewRenderer,
     renderer::state::context::WindowRenderer,
-    terminal::TerminalState,
     util::{
         self,
         keycode_parser::{CodeKind, KeyState, ParseError, ParseResult},
