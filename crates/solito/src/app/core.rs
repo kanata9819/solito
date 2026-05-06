@@ -11,6 +11,7 @@ use std::{
 
 use crate::app::event as AppEvent;
 use crate::config::WindowAttr;
+use crate::session::runtime::{SessionInput, SessionRuntime};
 use tracing::error;
 use winit::{
     application::ApplicationHandler,
@@ -24,17 +25,26 @@ pub(crate) struct SolitoApplication {
     windows: HashMap<WindowId, Arc<Window>>,
     state: Option<State>,
     terminal: Option<TerminalState>,
-    input_tx: Sender<Vec<u8>>,
+    input_tx: Sender<SessionInput>,
+    input_rx: Option<Receiver<SessionInput>>,
+    output_tx: Option<Sender<Vec<u8>>>,
     output_rx: Receiver<Vec<u8>>,
 }
 
 impl SolitoApplication {
-    pub(crate) fn new(input_tx: Sender<Vec<u8>>, output_rx: Receiver<Vec<u8>>) -> Self {
+    pub(crate) fn new(
+        input_tx: Sender<SessionInput>,
+        input_rx: Receiver<SessionInput>,
+        output_tx: Sender<Vec<u8>>,
+        output_rx: Receiver<Vec<u8>>,
+    ) -> Self {
         Self {
             windows: HashMap::new(),
             state: None,
             terminal: None,
             input_tx,
+            input_rx: Some(input_rx),
+            output_tx: Some(output_tx),
             output_rx,
         }
     }
@@ -63,6 +73,7 @@ impl SolitoApplication {
         let mut state: State = pollster::block_on(State::new(window))?;
         let (cols, rows) = state.terminal_size();
         let terminal = TerminalState::new(cols, rows);
+        self.start_session(cols, rows);
         state.set_terminal_snapshot(terminal.snapshot());
 
         state.render()?;
@@ -71,6 +82,20 @@ impl SolitoApplication {
         self.drain_output()?;
 
         Ok(())
+    }
+
+    fn start_session(&mut self, cols: usize, rows: usize) {
+        let (Some(input_rx), Some(output_tx)) = (self.input_rx.take(), self.output_tx.take())
+        else {
+            return;
+        };
+
+        std::thread::spawn(move || {
+            let runtime: SessionRuntime = SessionRuntime::new(input_rx, output_tx, cols, rows);
+            if let Err(err) = runtime.run_session() {
+                error!("run session failed: {}", err);
+            };
+        });
     }
 }
 

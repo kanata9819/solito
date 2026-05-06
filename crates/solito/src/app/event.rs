@@ -13,6 +13,7 @@ use winit::{
     window::{Window, WindowId},
 };
 
+use crate::session::runtime::SessionInput;
 use crate::util::{
     self,
     keycode_parser::{CodeKind, KeyState, ParseError, ParseResult},
@@ -25,7 +26,7 @@ pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
     terminal: &mut TerminalState,
     event_loop: &ActiveEventLoop,
     event: WindowEvent,
-    input_tx: &Sender<Vec<u8>>,
+    input_tx: &Sender<SessionInput>,
 ) -> Result<(), Box<dyn Error>> {
     match event {
         WindowEvent::CloseRequested => {
@@ -62,6 +63,7 @@ pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
             let (cols, rows) = state.terminal_size_for(size);
             terminal.set_width(cols);
             terminal.set_height(rows);
+            input_tx.send(SessionInput::resize(cols, rows))?;
             state.resize(size, terminal.snapshot());
         }
         WindowEvent::MouseWheel {
@@ -97,11 +99,11 @@ pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
     Ok(())
 }
 
-fn handle_key(key_state: &KeyState, input_tx: &Sender<Vec<u8>>) -> Result<(), Box<dyn Error>> {
+fn handle_key(key_state: &KeyState, input_tx: &Sender<SessionInput>) -> Result<(), Box<dyn Error>> {
     match util::keycode_parser::parse(key_state) {
         ParseResult::Ok(kind) => match kind {
             CodeKind::Char(char) => {
-                input_tx.send(char.to_string().into_bytes())?;
+                input_tx.send(SessionInput::write(char.to_string().into_bytes()))?;
                 // The PTY echoes printable input back to us, so drawing here would duplicate
                 // or briefly conflict with the terminal output stream.
                 Ok(())
