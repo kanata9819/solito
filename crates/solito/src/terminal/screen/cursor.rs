@@ -31,11 +31,6 @@ impl Cursor {
         self.cursor_col = self.cursor_col.saturating_sub(1);
     }
 
-    #[allow(unused)]
-    pub(super) fn move_up(&mut self) {
-        self.cursor_row = self.cursor_row.saturating_sub(1);
-    }
-
     pub(super) fn move_down(&mut self) {
         self.cursor_row += 1;
     }
