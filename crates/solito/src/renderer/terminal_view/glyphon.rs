@@ -1,4 +1,6 @@
-use glyphon::{Buffer, Cache, FontSystem, Metrics, SwashCache, TextAtlas, TextRenderer, Viewport};
+use ::glyphon::{
+    Buffer, Cache, FontSystem, Metrics, SwashCache, TextAtlas, TextRenderer, Viewport,
+};
 use wgpu::MultisampleState;
 
 use crate::config::BufferAttr;

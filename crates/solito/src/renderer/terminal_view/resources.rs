@@ -1,4 +1,4 @@
-use glyphon::{Buffer, FontSystem, SwashCache, TextAtlas, TextRenderer, Viewport};
+use ::glyphon::{Buffer, FontSystem, SwashCache, TextAtlas, TextRenderer, Viewport};
 
 use super::glyphon::GlyphonResources;
 

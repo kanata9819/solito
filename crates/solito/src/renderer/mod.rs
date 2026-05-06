@@ -1,5 +1,5 @@
-pub(crate) mod screen;
 pub(crate) mod state;
+pub(crate) mod terminal_view;
 
 mod pass;
 mod pipeline;

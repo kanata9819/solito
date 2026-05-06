@@ -3,18 +3,18 @@ use wgpu::{Instance, Surface, TextureFormat};
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::renderer::{
-    screen::input_buffer::InputBuffer,
     state::{gpu::GpuContext, render::RenderResources, window::WindowSurface},
+    terminal_view::TerminalView,
 };
 
-pub(crate) use super::terminal::TerminalOutputSink;
+pub(crate) use super::terminal::TerminalViewRenderer;
 pub(crate) use super::window::WindowRenderer;
 
 pub(crate) struct State {
     pub(super) gpu: GpuContext,
     pub(super) window_surface: WindowSurface,
     pub(super) render_resources: RenderResources,
-    pub(super) buffer: InputBuffer,
+    pub(super) terminal_view: TerminalView,
 }
 
 impl State {
@@ -27,14 +27,14 @@ impl State {
         let render_resources: RenderResources =
             RenderResources::new(&gpu, &window_surface, size.width, size.height);
         let swapchain_format: TextureFormat = TextureFormat::Bgra8UnormSrgb;
-        let buffer: InputBuffer =
-            InputBuffer::new(&gpu.device, &gpu.queue, swapchain_format, size, 1.0);
+        let terminal_view: TerminalView =
+            TerminalView::new(&gpu.device, &gpu.queue, swapchain_format, size, 1.0);
 
         Ok(Self {
             gpu,
             window_surface,
             render_resources,
-            buffer,
+            terminal_view,
         })
     }
 }

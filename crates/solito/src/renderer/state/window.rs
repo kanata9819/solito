@@ -7,10 +7,12 @@ use wgpu::{
 use winit::{dpi::PhysicalSize, window::Window};
 
 use super::{context::State, gpu::GpuContext};
-use crate::renderer::{
-    pass,
-    pipeline::rect::{self, Caret},
-    screen::input_buffer::TerminalOutputHandler,
+use crate::{
+    renderer::{
+        pass,
+        pipeline::rect::{self, Caret},
+    },
+    terminal::ScreenSnapshot,
 };
 
 pub(super) struct WindowSurface {
@@ -57,7 +59,7 @@ impl WindowSurface {
 }
 
 pub(crate) trait WindowRenderer {
-    fn resize(&mut self, size: PhysicalSize<u32>);
+    fn resize(&mut self, size: PhysicalSize<u32>, snapshot: ScreenSnapshot);
     fn render(&mut self) -> Result<(), Box<dyn Error>>;
     fn redraw(&mut self) -> Result<(), Box<dyn Error>>;
     fn scroll(&mut self, x: f32, y: f32);
@@ -65,14 +67,14 @@ pub(crate) trait WindowRenderer {
 
 impl State {
     fn prepare_render(&mut self) -> Result<(), Box<dyn Error>> {
-        self.buffer.glyphs.text_renderer.prepare(
+        self.terminal_view.glyphs.text_renderer.prepare(
             &self.gpu.device,
             &self.gpu.queue,
-            &mut self.buffer.glyphs.font_system,
-            &mut self.buffer.glyphs.atlas,
-            &self.buffer.glyphs.viewport,
+            &mut self.terminal_view.glyphs.font_system,
+            &mut self.terminal_view.glyphs.atlas,
+            &self.terminal_view.glyphs.viewport,
             [TextArea {
-                buffer: &self.buffer.glyphs.text_buffer,
+                buffer: &self.terminal_view.glyphs.text_buffer,
                 left: 10.0,
                 top: 10.0,
                 scale: 1.0,
@@ -84,7 +86,7 @@ impl State {
                 default_color: Color::rgb(255, 255, 255),
                 custom_glyphs: &[],
             }],
-            &mut self.buffer.glyphs.swash_cache,
+            &mut self.terminal_view.glyphs.swash_cache,
         )?;
 
         Ok(())
@@ -97,9 +99,9 @@ impl State {
     ) -> Result<(), Box<dyn Error>> {
         let mut pass: wgpu::RenderPass<'_> = pass::begin_render_pass(encoder, &view);
 
-        self.buffer.glyphs.text_renderer.render(
-            &self.buffer.glyphs.atlas,
-            &self.buffer.glyphs.viewport,
+        self.terminal_view.glyphs.text_renderer.render(
+            &self.terminal_view.glyphs.atlas,
+            &self.terminal_view.glyphs.viewport,
             &mut pass,
         )?;
 
@@ -155,7 +157,7 @@ impl State {
 }
 
 impl WindowRenderer for State {
-    fn resize(&mut self, size: PhysicalSize<u32>) {
+    fn resize(&mut self, size: PhysicalSize<u32>, snapshot: ScreenSnapshot) {
         let size: PhysicalSize<u32> = size;
         if size.width > 0 && size.height > 0 {
             self.window_surface.config.width = size.width;
@@ -172,7 +174,7 @@ impl WindowRenderer for State {
                 self.window_surface.window.inner_size().height,
             );
 
-            self.buffer.resize(size.width, size.height);
+            self.terminal_view.resize(size.height, snapshot);
         }
     }
 
@@ -223,7 +225,7 @@ impl WindowRenderer for State {
     }
 
     fn redraw(&mut self) -> Result<(), Box<dyn Error>> {
-        self.buffer.glyphs.viewport.update(
+        self.terminal_view.glyphs.viewport.update(
             &self.gpu.queue,
             Resolution {
                 width: self.window_surface.config.width,
@@ -250,12 +252,12 @@ impl WindowRenderer for State {
             frame.present();
         }
 
-        self.buffer.glyphs.atlas.trim();
+        self.terminal_view.glyphs.atlas.trim();
 
         Ok(())
     }
 
     fn scroll(&mut self, x: f32, y: f32) {
-        self.buffer.scroll(x, y);
+        self.terminal_view.scroll(x, y);
     }
 }

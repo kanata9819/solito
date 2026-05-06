@@ -9,7 +9,8 @@ use std::{
 
 use crate::app::event as AppEvent;
 use crate::config::WindowAttr;
-use crate::renderer::state::context::{State, TerminalOutputSink, WindowRenderer};
+use crate::renderer::state::context::{State, TerminalViewRenderer, WindowRenderer};
+use crate::terminal::TerminalState;
 use tracing::error;
 use winit::{
     application::ApplicationHandler,
@@ -22,6 +23,7 @@ use winit::{
 pub(crate) struct SolitoApplication {
     windows: HashMap<WindowId, Arc<Window>>,
     state: Option<State>,
+    terminal: Option<TerminalState>,
     input_tx: Sender<Vec<u8>>,
     output_rx: Receiver<Vec<u8>>,
 }
@@ -31,6 +33,7 @@ impl SolitoApplication {
         Self {
             windows: HashMap::new(),
             state: None,
+            terminal: None,
             input_tx,
             output_rx,
         }
@@ -38,9 +41,10 @@ impl SolitoApplication {
 
     fn drain_output(&mut self) -> Result<(), Box<dyn Error>> {
         while let Ok(output) = self.output_rx.try_recv()
-            && let Some(state) = &mut self.state
+            && let (Some(state), Some(terminal)) = (&mut self.state, &mut self.terminal)
         {
-            state.apply_terminal_output(&output);
+            terminal.apply_terminal_output(&output);
+            state.set_terminal_snapshot(terminal.snapshot());
         }
         Ok(())
     }
@@ -57,8 +61,12 @@ impl SolitoApplication {
         let window_id: WindowId = window.id();
         self.windows.insert(window_id, window.clone());
         let mut state: State = pollster::block_on(State::new(window))?;
+        let (cols, rows) = state.terminal_size();
+        let terminal = TerminalState::new(cols, rows);
+        state.set_terminal_snapshot(terminal.snapshot());
 
         state.render()?;
+        self.terminal = Some(terminal);
         self.state = Some(state);
         self.drain_output()?;
 
@@ -83,11 +91,16 @@ impl ApplicationHandler for SolitoApplication {
             Some(canvas) => canvas,
             None => return,
         };
+        let terminal: &mut TerminalState = match &mut self.terminal {
+            Some(terminal) => terminal,
+            None => return,
+        };
 
         if let Err(err) = AppEvent::event_handler(
             &mut self.windows,
             window_id,
             state,
+            terminal,
             event_loop,
             event,
             &self.input_tx,

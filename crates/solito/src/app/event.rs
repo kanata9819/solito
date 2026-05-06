@@ -13,18 +13,20 @@ use winit::{
 
 use crate::{
     config::BufferAttr,
-    renderer::state::context::TerminalOutputSink,
+    renderer::state::context::TerminalViewRenderer,
     renderer::state::context::WindowRenderer,
+    terminal::TerminalState,
     util::{
         self,
         keycode_parser::{CodeKind, KeyState, ParseError, ParseResult},
     },
 };
 
-pub(super) fn event_handler<T: TerminalOutputSink + WindowRenderer>(
+pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
     windows: &mut HashMap<WindowId, Arc<Window>>,
     window_id: WindowId,
     state: &mut T,
+    terminal: &mut TerminalState,
     event_loop: &ActiveEventLoop,
     event: WindowEvent,
     input_tx: &Sender<Vec<u8>>,
@@ -61,7 +63,10 @@ pub(super) fn event_handler<T: TerminalOutputSink + WindowRenderer>(
             handle_key(&key_state, input_tx)?
         }
         WindowEvent::Resized(size) => {
-            state.resize(size);
+            let (cols, rows) = state.terminal_size_for(size);
+            terminal.set_width(cols);
+            terminal.set_height(rows);
+            state.resize(size, terminal.snapshot());
         }
         WindowEvent::MouseWheel {
             device_id: _,

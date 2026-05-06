@@ -1,21 +1,25 @@
-use glyphon::{Attrs, Family, Shaping};
+use ::glyphon::{Attrs, Family, Shaping};
 
 use crate::{
     config::BufferAttr,
-    terminal::{ScreenCell, TerminalState},
+    terminal::{ScreenCell, ScreenSnapshot},
 };
 
-use super::glyphon::GlyphonResources;
-use super::resources::GlyphResources;
-use super::viewport::ViewportState;
+mod glyphon;
+mod resources;
+mod viewport;
 
-pub(in crate::renderer) struct InputBuffer {
+use self::glyphon::GlyphonResources;
+use self::resources::GlyphResources;
+use self::viewport::ViewportState;
+
+pub(in crate::renderer) struct TerminalView {
     pub(in crate::renderer) glyphs: GlyphResources,
-    terminal: TerminalState,
+    snapshot: ScreenSnapshot,
     viewport: ViewportState,
 }
 
-impl InputBuffer {
+impl TerminalView {
     pub(in crate::renderer) fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -25,20 +29,28 @@ impl InputBuffer {
     ) -> Self {
         let glyphon: GlyphonResources =
             GlyphonResources::new(device, queue, swapchain, physical_size, scale_factor);
-        let cols: usize = Self::visible_cols(physical_size.width);
-        let rows: usize = Self::visible_rows(physical_size.height);
 
         Self {
             glyphs: GlyphResources::new(glyphon),
-            terminal: TerminalState::new(cols, rows),
+            snapshot: ScreenSnapshot::default(),
             viewport: ViewportState::new(physical_size.height),
         }
     }
 
-    pub(in crate::renderer) fn resize(&mut self, width: u32, height: u32) {
-        self.terminal.set_width(Self::visible_cols(width));
-        self.terminal.set_height(Self::visible_rows(height));
+    pub(in crate::renderer) fn resize(&mut self, height: u32, snapshot: ScreenSnapshot) {
+        self.snapshot = snapshot;
         self.viewport.resize(height, self.row_count());
+        self.set_text_to_buffer();
+    }
+
+    pub(in crate::renderer) fn set_snapshot(&mut self, snapshot: ScreenSnapshot) {
+        self.viewport.reset();
+        self.snapshot = snapshot;
+        self.set_text_to_buffer();
+    }
+
+    pub(in crate::renderer) fn scroll(&mut self, _x: f32, y: f32) {
+        self.viewport.scroll(y, self.row_count());
         self.set_text_to_buffer();
     }
 
@@ -55,12 +67,15 @@ impl InputBuffer {
     }
 
     fn visible_text(&mut self) -> String {
-        let snapshot = self.terminal.snapshot();
-        let row_count = snapshot.lines.len().max(1);
+        if self.snapshot.lines.is_empty() {
+            return String::new();
+        }
+
+        let row_count = self.row_count();
         self.viewport.clamp(row_count);
         let (start, end) = self.viewport.visible_range(row_count);
 
-        snapshot.lines[start..end]
+        self.snapshot.lines[start..end]
             .iter()
             .map(|line| {
                 line.iter()
@@ -73,37 +88,19 @@ impl InputBuffer {
     }
 
     fn row_count(&self) -> usize {
-        self.terminal.snapshot().lines.len().max(1)
+        self.snapshot.lines.len().max(1)
     }
 
     fn cell_char(cell: &ScreenCell) -> char {
         cell.ch
     }
 
-    fn visible_cols(width: u32) -> usize {
+    pub(crate) fn visible_cols(width: u32) -> usize {
         let cell_width = (BufferAttr::FONT_SIZE * 0.62).max(1.0);
         ((width as f32 / cell_width).floor() as usize).max(1)
     }
 
-    fn visible_rows(height: u32) -> usize {
+    pub(crate) fn visible_rows(height: u32) -> usize {
         ((height as f32 / BufferAttr::LINE_HEIGHT).floor() as usize).max(1)
-    }
-}
-
-pub(in crate::renderer) trait TerminalOutputHandler {
-    fn apply_terminal_output(&mut self, bytes: &[u8]);
-    fn scroll(&mut self, x: f32, y: f32);
-}
-
-impl TerminalOutputHandler for InputBuffer {
-    fn apply_terminal_output(&mut self, bytes: &[u8]) {
-        self.viewport.reset();
-        self.terminal.apply_terminal_output(bytes);
-        self.set_text_to_buffer();
-    }
-
-    fn scroll(&mut self, _x: f32, y: f32) {
-        self.viewport.scroll(y, self.row_count());
-        self.set_text_to_buffer();
     }
 }
