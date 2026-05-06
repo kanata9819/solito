@@ -15,8 +15,8 @@ impl TerminalViewRenderer for State {
     }
 
     fn terminal_size(&self) -> (usize, usize) {
-        let width = self.window_surface.config.width;
-        let height = self.window_surface.config.height;
+        let width: u32 = self.window_surface.config.width;
+        let height: u32 = self.window_surface.config.height;
 
         self.terminal_size_for(PhysicalSize::new(width, height))
     }

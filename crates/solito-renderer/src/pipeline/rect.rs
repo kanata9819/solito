@@ -107,10 +107,10 @@ impl Caret for RectPipeline {
     }
 
     fn update_caret_uniform(uniform_buffer: &Buffer, queue: &wgpu::Queue, width: u32, height: u32) {
-        let (caret_x, caret_y) = (50.0, 30.0);
-        let (caret_w, caret_h) = (15.0, 30.0);
-        let (padding_x, padding_y) = (0.0, 0.0);
-        let (screen_w, screen_h) = (width as f32, height as f32);
+        let (caret_x, caret_y): (f32, f32) = (50.0, 30.0);
+        let (caret_w, caret_h): (f32, f32) = (15.0, 30.0);
+        let (padding_x, padding_y): (f32, f32) = (0.0, 0.0);
+        let (screen_w, screen_h): (f32, f32) = (width as f32, height as f32);
         let caret_uniform: [f32; 8] = [
             caret_x, caret_y, // pos
             caret_w, caret_h, // size

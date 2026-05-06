@@ -69,9 +69,9 @@ impl TerminalView {
             return String::new();
         }
 
-        let row_count = self.row_count();
+        let row_count: usize = self.row_count();
         self.viewport.clamp(row_count);
-        let (start, end) = self.viewport.visible_range(row_count);
+        let (start, end): (usize, usize) = self.viewport.visible_range(row_count);
 
         self.snapshot.lines[start..end]
             .iter()
@@ -94,7 +94,7 @@ impl TerminalView {
     }
 
     pub(crate) fn visible_cols(width: u32) -> usize {
-        let cell_width = (RendererConfig::FONT_SIZE * 0.62).max(1.0);
+        let cell_width: f32 = (RendererConfig::FONT_SIZE * 0.62).max(1.0);
         ((width as f32 / cell_width).floor() as usize).max(1)
     }
 

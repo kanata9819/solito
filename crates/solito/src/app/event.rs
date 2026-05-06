@@ -30,7 +30,7 @@ pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
 ) -> Result<(), Box<dyn Error>> {
     match event {
         WindowEvent::CloseRequested => {
-            let _ = windows.remove(&window_id);
+            let _: Option<Arc<Window>> = windows.remove(&window_id);
             event_loop.exit();
         }
         WindowEvent::RedrawRequested => {
@@ -60,7 +60,7 @@ pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
             handle_key(&key_state, input_tx)?
         }
         WindowEvent::Resized(size) => {
-            let (cols, rows) = state.terminal_size_for(size);
+            let (cols, rows): (usize, usize) = state.terminal_size_for(size);
             terminal.set_width(cols);
             terminal.set_height(rows);
             input_tx.send(SessionInput::resize(cols, rows))?;

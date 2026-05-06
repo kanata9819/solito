@@ -144,7 +144,7 @@ fn param(params: &Params, index: usize, default: u16) -> u16 {
 }
 
 fn graphics_rendition_params(params: &Params) -> Vec<u16> {
-    let collected = params_to_vec(params);
+    let collected: Vec<u16> = params_to_vec(params);
 
     if collected.is_empty() {
         vec![0]

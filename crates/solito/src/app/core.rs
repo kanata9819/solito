@@ -71,8 +71,8 @@ impl SolitoApplication {
         let window_id: WindowId = window.id();
         self.windows.insert(window_id, window.clone());
         let mut state: State = pollster::block_on(State::new(window))?;
-        let (cols, rows) = state.terminal_size();
-        let terminal = TerminalState::new(cols, rows);
+        let (cols, rows): (usize, usize) = state.terminal_size();
+        let terminal: TerminalState = TerminalState::new(cols, rows);
         self.start_session(cols, rows);
         state.set_terminal_snapshot(terminal.snapshot());
 
@@ -85,8 +85,10 @@ impl SolitoApplication {
     }
 
     fn start_session(&mut self, cols: usize, rows: usize) {
-        let (Some(input_rx), Some(output_tx)) = (self.input_rx.take(), self.output_tx.take())
-        else {
+        let (Some(input_rx), Some(output_tx)): (
+            Option<Receiver<SessionInput>>,
+            Option<Sender<Vec<u8>>>,
+        ) = (self.input_rx.take(), self.output_tx.take()) else {
             return;
         };
 

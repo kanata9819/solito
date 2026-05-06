@@ -44,7 +44,7 @@ impl Perform for Screen {
     fn unhook(&mut self) {}
 
     fn osc_dispatch(&mut self, params: &[&[u8]], bell_terminated: bool) {
-        let _ = decode(VteEvent::Osc {
+        let _: Option<DecodedEvent> = decode(VteEvent::Osc {
             params,
             bell_terminated,
         });
@@ -62,7 +62,7 @@ impl Perform for Screen {
     }
 
     fn esc_dispatch(&mut self, intermediates: &[u8], ignore: bool, byte: u8) {
-        let _ = decode(VteEvent::Esc {
+        let _: Option<DecodedEvent> = decode(VteEvent::Esc {
             intermediates,
             ignore,
             byte,

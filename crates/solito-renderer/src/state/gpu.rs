@@ -32,7 +32,7 @@ impl GpuContext {
             })
             .await?;
 
-        let (device, queue) = adapter
+        let (device, queue): (Device, Queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: None,
                 required_features: wgpu::Features::empty(),
