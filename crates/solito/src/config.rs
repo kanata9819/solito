@@ -11,9 +11,3 @@ impl WindowAttr {
     pub(crate) const WINDOW_WIDTH: f32 = 900.0;
     pub(crate) const WINDOW_HIGHT: f32 = 650.0;
 }
-
-// pub struct TerminalAttr;
-// impl TerminalAttr {
-//     pub const TERMINAL_COL: usize = 120;
-//     pub const TERMINAL_ROW: usize = 30;
-// }
