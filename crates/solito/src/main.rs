@@ -4,6 +4,7 @@ mod app;
 mod config;
 mod renderer;
 mod session;
+mod terminal;
 mod util;
 
 use std::{
@@ -11,7 +12,7 @@ use std::{
     sync::mpsc::{Receiver, Sender, channel},
 };
 
-use session::{parser::TerminalEvent, runtime::SessionRuntime};
+use session::runtime::SessionRuntime;
 use tracing::error;
 use tracing_subscriber::EnvFilter;
 use winit::event_loop::EventLoop;
@@ -20,8 +21,7 @@ use crate::app::core::SolitoApplication;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let (input_tx, input_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel::<Vec<u8>>();
-    let (output_tx, output_rx): (Sender<TerminalEvent>, Receiver<TerminalEvent>) =
-        channel::<TerminalEvent>();
+    let (output_tx, output_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel::<Vec<u8>>();
 
     init_tracing();
     run_session(input_rx, output_tx);
@@ -37,7 +37,7 @@ fn init_tracing() {
         .init();
 }
 
-fn run_session(input_rx: Receiver<Vec<u8>>, output_tx: Sender<TerminalEvent>) {
+fn run_session(input_rx: Receiver<Vec<u8>>, output_tx: Sender<Vec<u8>>) {
     std::thread::spawn(move || {
         let runtime: SessionRuntime = SessionRuntime::new(input_rx, output_tx);
         if let Err(err) = runtime.run_session() {
@@ -46,10 +46,7 @@ fn run_session(input_rx: Receiver<Vec<u8>>, output_tx: Sender<TerminalEvent>) {
     });
 }
 
-fn run_app(
-    input_tx: Sender<Vec<u8>>,
-    output_rx: Receiver<TerminalEvent>,
-) -> Result<(), Box<dyn Error>> {
+fn run_app(input_tx: Sender<Vec<u8>>, output_rx: Receiver<Vec<u8>>) -> Result<(), Box<dyn Error>> {
     let event_loop: EventLoop<()> = EventLoop::new()?;
     let mut solito: SolitoApplication = SolitoApplication::new(input_tx, output_rx);
     event_loop.run_app(&mut solito)?;

@@ -96,7 +96,6 @@ pub(super) fn event_handler<T: TerminalOutputSink + WindowRenderer>(
     Ok(())
 }
 
-/// This is where we'll handle keyboard events.
 fn handle_key(key_state: &KeyState, input_tx: &Sender<Vec<u8>>) -> Result<(), Box<dyn Error>> {
     match util::keycode_parser::parse(key_state) {
         ParseResult::Ok(kind) => match kind {

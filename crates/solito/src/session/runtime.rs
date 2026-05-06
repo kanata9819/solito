@@ -5,8 +5,6 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::thread::{self, JoinHandle};
 use tracing::{debug, error, info};
 
-use crate::session::parser::{EscParser, TerminalEvent};
-
 // mpsc pair
 type TReader = Box<dyn Read + Send>;
 type TWriter = Box<dyn Write + Send>;
@@ -20,11 +18,11 @@ pub struct SessionRuntime {
     child: TChild,
     input_rx: Receiver<Vec<u8>>,
     master: TMaster,
-    parser: EscParser,
+    output_tx: Sender<Vec<u8>>,
 }
 
 impl SessionRuntime {
-    pub fn new(input_rx: Receiver<Vec<u8>>, output_tx: Sender<TerminalEvent>) -> Self {
+    pub fn new(input_rx: Receiver<Vec<u8>>, output_tx: Sender<Vec<u8>>) -> Self {
         let pty_pair: PtyPair = Self::pty_pair();
         let child: TChild = Self::spawn_command(pty_pair.slave);
 
@@ -32,7 +30,7 @@ impl SessionRuntime {
             child,
             input_rx,
             master: pty_pair.master,
-            parser: EscParser::new(output_tx),
+            output_tx,
         }
     }
 
@@ -41,7 +39,7 @@ impl SessionRuntime {
         let writer: TWriter = self.master.take_writer()?;
 
         // Thread to read output from the PTY.
-        Self::spawn_reading_thread(self.parser, reader);
+        Self::spawn_reading_thread(self.output_tx, reader);
         // Thread to write input into the PTY.
         Self::spawn_writing_thread(self.input_rx, writer);
 
@@ -70,7 +68,7 @@ impl SessionRuntime {
         child
     }
 
-    fn spawn_reading_thread(mut parser: EscParser, mut reader: TReader) -> JoinHandle<()> {
+    fn spawn_reading_thread(output_tx: Sender<Vec<u8>>, mut reader: TReader) -> JoinHandle<()> {
         thread::spawn(move || {
             let mut buffer: [u8; 1024] = [0u8; 1024];
 
@@ -81,7 +79,9 @@ impl SessionRuntime {
                         break;
                     }
                     Ok(n) => {
-                        parser.parse(&buffer[..n]);
+                        if output_tx.send(buffer[..n].to_vec()).is_err() {
+                            break;
+                        }
                     }
                     Err(err) => {
                         error!("error occured at reader.read() {}", err)

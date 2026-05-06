@@ -7,9 +7,9 @@ use std::{
     },
 };
 
+use crate::app::event as AppEvent;
 use crate::config::WindowAttr;
 use crate::renderer::state::context::{State, TerminalOutputSink, WindowRenderer};
-use crate::{app::event as AppEvent, session::parser::TerminalEvent};
 use tracing::error;
 use winit::{
     application::ApplicationHandler,
@@ -23,11 +23,11 @@ pub struct SolitoApplication {
     pub windows: HashMap<WindowId, Arc<Window>>,
     state: Option<State>,
     input_tx: Sender<Vec<u8>>,
-    output_rx: Receiver<TerminalEvent>,
+    output_rx: Receiver<Vec<u8>>,
 }
 
 impl SolitoApplication {
-    pub fn new(input_tx: Sender<Vec<u8>>, output_rx: Receiver<TerminalEvent>) -> Self {
+    pub fn new(input_tx: Sender<Vec<u8>>, output_rx: Receiver<Vec<u8>>) -> Self {
         Self {
             windows: HashMap::new(),
             state: None,
@@ -40,23 +40,7 @@ impl SolitoApplication {
         while let Ok(output) = self.output_rx.try_recv()
             && let Some(state) = &mut self.state
         {
-            match output {
-                TerminalEvent::Print(char) => {
-                    state.print_char(char);
-                }
-                TerminalEvent::CarriageReturn => {
-                    state.carriage_return();
-                }
-                TerminalEvent::LineFeed => {
-                    state.line_feed();
-                }
-                TerminalEvent::ClearLine => {
-                    state.clear_line();
-                }
-                TerminalEvent::MoveCursor(row, col) => {
-                    state.move_cursor_to(row, col);
-                }
-            }
+            state.apply_terminal_output(&output);
         }
         Ok(())
     }

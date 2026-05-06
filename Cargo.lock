@@ -1902,6 +1902,7 @@ dependencies = [
  "portable-pty",
  "tracing",
  "tracing-subscriber",
+ "unicode-width",
  "vte",
  "wgpu",
  "winit",

@@ -22,8 +22,6 @@ pub struct KeyState {
     pub is_released: bool,
 }
 
-/// This is where we'll parse the keycode
-/// TODO: released is not handled right now
 pub fn parse(key_state: &KeyState) -> ParseResult {
     match (key_state.key_code, key_state.is_pressed) {
         (KeyCode::KeyA, true) => ParseResult::Ok(CodeKind::Char('A')),
