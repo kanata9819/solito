@@ -2,6 +2,13 @@ use std::fmt::{self, Display};
 use vte::Params;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EraseMode {
+    ToEnd,
+    ToStart,
+    All,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CsiMessage {
     CursorUp(u16),
     CursorDown(u16),
@@ -14,8 +21,9 @@ pub enum CsiMessage {
         row: u16,
         col: u16,
     },
-    EraseDisplay(u16),
-    EraseLine(u16),
+    EraseDisplay(EraseMode),
+    EraseLine(EraseMode),
+    DeleteCharacters(u16),
     ScrollUp(u16),
     ScrollDown(u16),
     SaveCursor,
@@ -47,8 +55,9 @@ impl Display for CsiMessage {
             CsiMessage::CursorPosition { row, col } => {
                 write!(f, "CSI: CursorPosition(row={}, col={})", row, col)
             }
-            CsiMessage::EraseDisplay(mode) => write!(f, "CSI: EraseDisplay({})", mode),
-            CsiMessage::EraseLine(mode) => write!(f, "CSI: EraseLine({})", mode),
+            CsiMessage::EraseDisplay(mode) => write!(f, "CSI: EraseDisplay({:?})", mode),
+            CsiMessage::EraseLine(mode) => write!(f, "CSI: EraseLine({:?})", mode),
+            CsiMessage::DeleteCharacters(n) => write!(f, "CSI: DeleteCharacters({})", n),
             CsiMessage::ScrollUp(n) => write!(f, "CSI: ScrollUp({})", n),
             CsiMessage::ScrollDown(n) => write!(f, "CSI: ScrollDown({})", n),
             CsiMessage::SaveCursor => write!(f, "CSI: SaveCursor"),
@@ -95,11 +104,12 @@ pub(super) fn decode_csi(
             row: param(params, 0, 1),
             col: param(params, 1, 1),
         },
-        'J' => CsiMessage::EraseDisplay(param(params, 0, 0)),
-        'K' => CsiMessage::EraseLine(param(params, 0, 0)),
+        'J' => CsiMessage::EraseDisplay(EraseMode::from_csi_mode(param(params, 0, 0))),
+        'K' => CsiMessage::EraseLine(EraseMode::from_csi_mode(param(params, 0, 0))),
+        'P' => CsiMessage::DeleteCharacters(amount),
         'S' => CsiMessage::ScrollUp(amount),
         'T' => CsiMessage::ScrollDown(amount),
-        'm' => CsiMessage::SelectGraphicRendition(params_to_vec(params)),
+        'm' => CsiMessage::SelectGraphicRendition(graphics_rendition_params(params)),
         'n' => CsiMessage::DeviceStatusReport(param(params, 0, 0)),
         's' => CsiMessage::SaveCursor,
         'u' => CsiMessage::RestoreCursor,
@@ -114,12 +124,33 @@ pub(super) fn decode_csi(
     })
 }
 
+impl EraseMode {
+    fn from_csi_mode(mode: u16) -> Self {
+        match mode {
+            1 => Self::ToStart,
+            2 => Self::All,
+            _ => Self::ToEnd,
+        }
+    }
+}
+
 fn param(params: &Params, index: usize, default: u16) -> u16 {
     params
         .iter()
         .nth(index)
-        .map(|param| param[0])
+        .and_then(|param| param.iter().next().copied())
+        .filter(|value| *value > 0)
         .unwrap_or(default)
+}
+
+fn graphics_rendition_params(params: &Params) -> Vec<u16> {
+    let collected = params_to_vec(params);
+
+    if collected.is_empty() {
+        vec![0]
+    } else {
+        collected
+    }
 }
 
 fn params_to_vec(params: &Params) -> Vec<u16> {

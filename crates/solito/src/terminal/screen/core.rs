@@ -1,3 +1,4 @@
+use decodesc::{DecodedEvent, VteEvent, decode};
 use vte::{Params, Perform};
 
 use crate::terminal::screen::buffer::ScreenSnapshot;
@@ -22,7 +23,6 @@ impl Screen {
         self.buffer_editor.set_rows(rows);
     }
 
-    #[allow(dead_code)]
     pub fn cursor_position_1_based(&self) -> (usize, usize) {
         self.buffer_editor.buffer().cursor_position_1_based()
     }
@@ -47,22 +47,29 @@ impl Perform for Screen {
 
     fn unhook(&mut self) {}
 
-    fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
-        let _decoded: Vec<String> = params
-            .iter()
-            .map(|x| String::from_utf8_lossy(x).into_owned())
-            .collect();
+    fn osc_dispatch(&mut self, params: &[&[u8]], bell_terminated: bool) {
+        let _ = decode(VteEvent::Osc {
+            params,
+            bell_terminated,
+        });
     }
 
-    fn csi_dispatch(
-        &mut self,
-        params: &Params,
-        _intermediates: &[u8],
-        _ignore: bool,
-        action: char,
-    ) {
-        self.buffer_editor.apply_csi(params, action);
+    fn csi_dispatch(&mut self, params: &Params, intermediates: &[u8], ignore: bool, action: char) {
+        if let Some(DecodedEvent { csi: Some(csi), .. }) = decode(VteEvent::Csi {
+            params,
+            intermediates,
+            ignore,
+            action,
+        }) {
+            self.buffer_editor.apply_csi(csi);
+        }
     }
 
-    fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, _byte: u8) {}
+    fn esc_dispatch(&mut self, intermediates: &[u8], ignore: bool, byte: u8) {
+        let _ = decode(VteEvent::Esc {
+            intermediates,
+            ignore,
+            byte,
+        });
+    }
 }

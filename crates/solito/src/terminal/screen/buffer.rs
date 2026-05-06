@@ -14,7 +14,7 @@ pub struct ScreenCell {
 }
 
 impl ScreenCell {
-    pub fn new(ch: char, style: CellStyle) -> Self {
+    pub(super) fn new(ch: char, style: CellStyle) -> Self {
         Self {
             ch,
             style,
@@ -22,7 +22,7 @@ impl ScreenCell {
         }
     }
 
-    pub fn blank(style: CellStyle) -> Self {
+    pub(super) fn blank(style: CellStyle) -> Self {
         Self {
             ch: ' ',
             style,
@@ -30,7 +30,7 @@ impl ScreenCell {
         }
     }
 
-    pub fn wide_continuation(style: CellStyle) -> Self {
+    pub(super) fn wide_continuation(style: CellStyle) -> Self {
         Self {
             ch: ' ',
             style,
@@ -42,9 +42,7 @@ impl ScreenCell {
 #[derive(Clone, Debug, Default)]
 pub struct ScreenSnapshot {
     pub lines: Vec<Vec<ScreenCell>>,
-    #[allow(dead_code)]
     pub cursor_row: usize,
-    #[allow(dead_code)]
     pub cursor_col: usize,
 }
 
@@ -58,7 +56,7 @@ pub struct ScreenBuffer {
 }
 
 impl ScreenBuffer {
-    pub fn new(cols: usize, rows: usize) -> Self {
+    pub(super) fn new(cols: usize, rows: usize) -> Self {
         Self {
             cols: cols.max(1),
             rows: rows.max(1),
@@ -69,15 +67,15 @@ impl ScreenBuffer {
         }
     }
 
-    pub fn set_cols(&mut self, cols: usize) {
+    pub(super) fn set_cols(&mut self, cols: usize) {
         self.cols = cols.max(1);
     }
 
-    pub fn set_rows(&mut self, rows: usize) {
+    pub(super) fn set_rows(&mut self, rows: usize) {
         self.rows = rows.max(1);
     }
 
-    pub fn snapshot(&self) -> ScreenSnapshot {
+    pub(super) fn snapshot(&self) -> ScreenSnapshot {
         ScreenSnapshot {
             lines: self.lines.clone(),
             cursor_row: self.cursor.get_current_row(),
@@ -85,17 +83,17 @@ impl ScreenBuffer {
         }
     }
 
-    pub(crate) fn cols(&self) -> usize {
+    pub(super) fn cols(&self) -> usize {
         self.cols
     }
 
-    pub(crate) fn ensure_cursor_line(&mut self) {
+    pub(super) fn ensure_cursor_line(&mut self) {
         while self.lines.len() <= self.cursor.get_current_row() {
             self.lines.push(Vec::new());
         }
     }
 
-    pub(crate) fn ensure_cursor_col(&mut self) {
+    pub(super) fn ensure_cursor_col(&mut self) {
         self.ensure_cursor_line();
         let line: &mut Vec<ScreenCell> = &mut self.lines[self.cursor.get_current_row()];
 
@@ -104,7 +102,6 @@ impl ScreenBuffer {
         }
     }
 
-    #[allow(dead_code)]
     pub fn cursor_position_1_based(&self) -> (usize, usize) {
         let viewport_top: usize = self.lines.len().saturating_sub(self.rows);
         let visible_row: usize = self.cursor.get_current_row().saturating_sub(viewport_top);

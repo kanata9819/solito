@@ -2,7 +2,7 @@ mod csi;
 mod esc;
 mod osc;
 
-pub use csi::CsiMessage;
+pub use csi::{CsiMessage, EraseMode};
 pub use esc::EscMessage;
 pub use osc::OscMessage;
 

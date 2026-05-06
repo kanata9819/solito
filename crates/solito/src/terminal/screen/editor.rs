@@ -1,8 +1,7 @@
 use super::buffer::{CellStyle, ScreenBuffer, ScreenCell, ScreenSnapshot};
 use super::cursor::CursorPosition;
-use crate::terminal::esc::csi_command::{CsiCommand, EraseMode};
+use decodesc::{CsiMessage, EraseMode};
 use unicode_width::UnicodeWidthChar;
-use vte::Params;
 
 pub struct ScreenEditor {
     screen_buffer: ScreenBuffer,
@@ -14,7 +13,6 @@ impl ScreenEditor {
         Self { screen_buffer }
     }
 
-    #[allow(dead_code)]
     pub fn buffer(&self) -> &ScreenBuffer {
         &self.screen_buffer
     }
@@ -67,23 +65,33 @@ impl ScreenEditor {
         self.screen_buffer.pending_wrap = false;
     }
 
-    pub fn apply_csi(&mut self, params: &Params, action: char) {
-        // A CSI represents one escape command.
-        // Convert it to an internal command and dispatch to the matching edit logic.
-        match CsiCommand::parse(params, action) {
-            CsiCommand::MoveCursorUp(amount) => self.move_cursor_up(amount),
-            CsiCommand::MoveCursorDown(amount) => self.move_cursor_down(amount),
-            CsiCommand::MoveCursorForward(amount) => self.move_cursor_forward(amount),
-            CsiCommand::MoveCursorBackward(amount) => self.move_cursor_backward(amount),
-            CsiCommand::MoveCursorToColumn(col) => self.move_cursor_to_col(col),
-            CsiCommand::MoveCursorTo(position) => self.move_cursor_to(position),
-            CsiCommand::EraseDisplay(mode) => self.erase_display(mode),
-            CsiCommand::EraseLine(mode) => self.erase_line(mode),
-            CsiCommand::DeleteCharacters(amount) => self.delete_characters(amount),
-            CsiCommand::SaveCursorPosition => self.save_cursor_position(),
-            CsiCommand::RestoreCursorPosition => self.restore_cursor_position(),
-            CsiCommand::SetGraphicsRendition(params) => self.apply_graphics_rendition(&params),
-            CsiCommand::Unsupported => {}
+    pub fn apply_csi(&mut self, message: CsiMessage) {
+        match message {
+            CsiMessage::CursorUp(amount) => self.move_cursor_up(usize::from(amount)),
+            CsiMessage::CursorDown(amount) => self.move_cursor_down(usize::from(amount)),
+            CsiMessage::CursorForward(amount) => self.move_cursor_forward(usize::from(amount)),
+            CsiMessage::CursorBackward(amount) => self.move_cursor_backward(usize::from(amount)),
+            CsiMessage::CursorHorizontalAbsolute(col) => {
+                self.move_cursor_to_col(usize::from(col).saturating_sub(1))
+            }
+            CsiMessage::CursorPosition { row, col } => self.move_cursor_to(CursorPosition {
+                row: usize::from(row).saturating_sub(1),
+                col: usize::from(col).saturating_sub(1),
+            }),
+            CsiMessage::EraseDisplay(mode) => self.erase_display(mode),
+            CsiMessage::EraseLine(mode) => self.erase_line(mode),
+            CsiMessage::DeleteCharacters(amount) => self.delete_characters(usize::from(amount)),
+            CsiMessage::SaveCursor => self.save_cursor_position(),
+            CsiMessage::RestoreCursor => self.restore_cursor_position(),
+            CsiMessage::SelectGraphicRendition(params) => self.apply_graphics_rendition(&params),
+            CsiMessage::Unknown { .. }
+            | CsiMessage::CursorNextLine(_)
+            | CsiMessage::CursorPreviousLine(_)
+            | CsiMessage::ScrollUp(_)
+            | CsiMessage::ScrollDown(_)
+            | CsiMessage::DeviceStatusReport(_)
+            | CsiMessage::ShowCursor
+            | CsiMessage::HideCursor => {}
         }
     }
 
@@ -324,34 +332,35 @@ impl ScreenEditor {
         self.screen_buffer.ensure_cursor_line();
     }
 
-    fn apply_graphics_rendition(&mut self, params: &[usize]) {
-        const SGR_RESET: usize = 0;
-        const SGR_FAINT_ON: usize = 2;
-        const SGR_FAINT_OFF: usize = 22;
-        const SGR_FG_DEFAULT: usize = 39;
-        const SGR_FG_EXTENDED: usize = 38;
-        const SGR_BG_EXTENDED: usize = 48;
-        const SGR_UNDERLINE_COLOR_EXTENDED: usize = 58;
-        const SGR_FG_LOW_START: usize = 30;
-        const SGR_FG_LOW_END: usize = 37;
-        const SGR_FG_HIGH_START: usize = 90;
-        const SGR_FG_HIGH_END: usize = 97;
-        const SGR_FG_BRIGHT_OFFSET: usize = 8;
+    fn apply_graphics_rendition(&mut self, params: &[u16]) {
+        const SGR_RESET: u16 = 0;
+        const SGR_FAINT_ON: u16 = 2;
+        const SGR_FAINT_OFF: u16 = 22;
+        const SGR_FG_DEFAULT: u16 = 39;
+        const SGR_FG_EXTENDED: u16 = 38;
+        const SGR_BG_EXTENDED: u16 = 48;
+        const SGR_UNDERLINE_COLOR_EXTENDED: u16 = 58;
+        const SGR_FG_LOW_START: u16 = 30;
+        const SGR_FG_LOW_END: u16 = 37;
+        const SGR_FG_HIGH_START: u16 = 90;
+        const SGR_FG_HIGH_END: u16 = 97;
+        const SGR_FG_BRIGHT_OFFSET: u16 = 8;
 
         let mut index: usize = 0;
         while index < params.len() {
-            let code: usize = params[index];
+            let code: u16 = params[index];
             match code {
                 SGR_RESET => self.screen_buffer.style = CellStyle::default(),
                 SGR_FAINT_ON => self.screen_buffer.style.faint = true,
                 SGR_FAINT_OFF => self.screen_buffer.style.faint = false,
                 SGR_FG_LOW_START..=SGR_FG_LOW_END => {
-                    self.screen_buffer.style.fg_rgba = Some(ansi_16_color(code - SGR_FG_LOW_START));
+                    self.screen_buffer.style.fg_rgba =
+                        Some(ansi_16_color(usize::from(code - SGR_FG_LOW_START)));
                 }
                 SGR_FG_HIGH_START..=SGR_FG_HIGH_END => {
-                    self.screen_buffer.style.fg_rgba = Some(ansi_16_color(
+                    self.screen_buffer.style.fg_rgba = Some(ansi_16_color(usize::from(
                         (code - SGR_FG_HIGH_START) + SGR_FG_BRIGHT_OFFSET,
-                    ));
+                    )));
                 }
                 SGR_FG_DEFAULT => self.screen_buffer.style.fg_rgba = None,
                 SGR_FG_EXTENDED => {
@@ -381,7 +390,7 @@ impl ScreenEditor {
     }
 }
 
-fn sgr_skip_count(params: &[usize]) -> usize {
+fn sgr_skip_count(params: &[u16]) -> usize {
     match params.get(1).copied() {
         Some(5) => 3,
         Some(2) => 5,
@@ -389,11 +398,11 @@ fn sgr_skip_count(params: &[usize]) -> usize {
     }
 }
 
-fn apply_sgr_foreground(style: &mut CellStyle, params: &[usize]) -> usize {
+fn apply_sgr_foreground(style: &mut CellStyle, params: &[u16]) -> usize {
     match params.get(1).copied() {
         Some(5) => {
             if let Some(index) = params.get(2).copied() {
-                style.fg_rgba = Some(ansi_256_color(index));
+                style.fg_rgba = Some(ansi_256_color(usize::from(index)));
             }
             3
         }
