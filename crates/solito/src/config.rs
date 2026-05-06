@@ -17,3 +17,9 @@ impl BufferAttr {
     pub(crate) const FONT_SIZE: f32 = 20.0;
     pub(crate) const LINE_HEIGHT: f32 = 30.0;
 }
+
+pub struct TerminalAttr;
+impl TerminalAttr {
+    pub const TERMINAL_COL: usize = 120;
+    pub const TERMINAL_ROW: usize = 30;
+}

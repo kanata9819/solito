@@ -5,8 +5,8 @@ use crate::{
     terminal::{ScreenCell, TerminalState},
 };
 
-use super::glyph_resources::GlyphResources;
 use super::glyphon::GlyphonResources;
+use super::resources::GlyphResources;
 use super::viewport::ViewportState;
 
 pub(in crate::renderer) struct InputBuffer {
