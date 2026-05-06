@@ -1,28 +1,28 @@
 use winit::keyboard::KeyCode;
 
-pub enum ParseError {
+pub(crate) enum ParseError {
     InvalidCode(KeyCode),
     UnHandled(KeyCode),
 }
 
-pub enum CodeKind {
+pub(crate) enum CodeKind {
     Char(char),
     Special,
     Function,
 }
 
-pub enum ParseResult {
+pub(crate) enum ParseResult {
     Ok(CodeKind),
     Err(ParseError),
 }
 
-pub struct KeyState {
-    pub key_code: KeyCode,
-    pub is_pressed: bool,
-    pub is_released: bool,
+pub(crate) struct KeyState {
+    pub(crate) key_code: KeyCode,
+    pub(crate) is_pressed: bool,
+    pub(crate) is_released: bool,
 }
 
-pub fn parse(key_state: &KeyState) -> ParseResult {
+pub(crate) fn parse(key_state: &KeyState) -> ParseResult {
     match (key_state.key_code, key_state.is_pressed) {
         (KeyCode::KeyA, true) => ParseResult::Ok(CodeKind::Char('A')),
         (KeyCode::KeyB, true) => ParseResult::Ok(CodeKind::Char('B')),

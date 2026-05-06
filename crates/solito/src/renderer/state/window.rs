@@ -56,7 +56,7 @@ impl WindowSurface {
     }
 }
 
-pub trait WindowRenderer {
+pub(crate) trait WindowRenderer {
     fn resize(&mut self, size: PhysicalSize<u32>);
     fn render(&mut self) -> Result<(), Box<dyn Error>>;
     fn redraw(&mut self) -> Result<(), Box<dyn Error>>;

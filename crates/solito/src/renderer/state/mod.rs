@@ -1,4 +1,4 @@
-pub mod context;
+pub(crate) mod context;
 mod gpu;
 mod render;
 mod terminal;

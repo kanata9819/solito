@@ -1,7 +1,7 @@
 use super::context::State;
 use crate::renderer::screen::input_buffer::TerminalOutputHandler;
 
-pub trait TerminalOutputSink {
+pub(crate) trait TerminalOutputSink {
     fn apply_terminal_output(&mut self, bytes: &[u8]);
 }
 

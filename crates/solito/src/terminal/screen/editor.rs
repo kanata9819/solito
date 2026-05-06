@@ -3,29 +3,25 @@ use super::cursor::CursorPosition;
 use decodesc::{CsiMessage, EraseMode};
 use unicode_width::UnicodeWidthChar;
 
-pub struct ScreenEditor {
+pub(super) struct ScreenEditor {
     screen_buffer: ScreenBuffer,
 }
 
 impl ScreenEditor {
-    pub fn new(cols: usize, rows: usize) -> Self {
+    pub(super) fn new(cols: usize, rows: usize) -> Self {
         let screen_buffer: ScreenBuffer = ScreenBuffer::new(cols, rows);
         Self { screen_buffer }
     }
 
-    pub fn buffer(&self) -> &ScreenBuffer {
-        &self.screen_buffer
-    }
-
-    pub fn set_cols(&mut self, cols: usize) {
+    pub(super) fn set_cols(&mut self, cols: usize) {
         self.screen_buffer.set_cols(cols);
     }
 
-    pub fn set_rows(&mut self, rows: usize) {
+    pub(super) fn set_rows(&mut self, rows: usize) {
         self.screen_buffer.set_rows(rows);
     }
 
-    pub fn clear_screen(&mut self) {
+    pub(super) fn clear_screen(&mut self) {
         // Reset screen contents and move the cursor back to top-left.
         self.screen_buffer.lines.clear();
         self.screen_buffer.lines.push(Vec::new());
@@ -57,7 +53,7 @@ impl ScreenEditor {
         }
     }
 
-    pub fn move_cursor_to(&mut self, position: CursorPosition) {
+    pub(super) fn move_cursor_to(&mut self, position: CursorPosition) {
         self.screen_buffer.cursor.move_to(CursorPosition {
             row: position.row + self.screen_buffer.get_viewport_top(),
             col: position.col,
@@ -65,7 +61,7 @@ impl ScreenEditor {
         self.screen_buffer.pending_wrap = false;
     }
 
-    pub fn apply_csi(&mut self, message: CsiMessage) {
+    pub(super) fn apply_csi(&mut self, message: CsiMessage) {
         match message {
             CsiMessage::CursorUp(amount) => self.move_cursor_up(usize::from(amount)),
             CsiMessage::CursorDown(amount) => self.move_cursor_down(usize::from(amount)),
@@ -95,11 +91,11 @@ impl ScreenEditor {
         }
     }
 
-    pub fn apply_print(&mut self, c: char) {
+    pub(super) fn apply_print(&mut self, c: char) {
         self.put_char(c);
     }
 
-    pub fn apply_execute(&mut self, byte: u8) {
+    pub(super) fn apply_execute(&mut self, byte: u8) {
         match byte {
             b'\n' => self.new_line(),
             b'\r' => self.carriage_return(),
@@ -201,7 +197,7 @@ impl ScreenEditor {
         self.move_cursor_to_col(next_tab.min(self.screen_buffer.cols().saturating_sub(1)));
     }
 
-    pub fn snapshot(&self) -> ScreenSnapshot {
+    pub(super) fn snapshot(&self) -> ScreenSnapshot {
         self.screen_buffer.snapshot()
     }
 

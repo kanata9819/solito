@@ -7,10 +7,10 @@ use crate::renderer::{
     state::{gpu::GpuContext, render::RenderResources, window::WindowSurface},
 };
 
-pub use super::terminal::TerminalOutputSink;
-pub use super::window::WindowRenderer;
+pub(crate) use super::terminal::TerminalOutputSink;
+pub(crate) use super::window::WindowRenderer;
 
-pub struct State {
+pub(crate) struct State {
     pub(super) gpu: GpuContext,
     pub(super) window_surface: WindowSurface,
     pub(super) render_resources: RenderResources,
@@ -18,7 +18,7 @@ pub struct State {
 }
 
 impl State {
-    pub async fn new(window: Arc<Window>) -> Result<Self, Box<dyn Error>> {
+    pub(crate) async fn new(window: Arc<Window>) -> Result<Self, Box<dyn Error>> {
         let size: PhysicalSize<u32> = window.inner_size();
         let instance: Instance = GpuContext::create_instance();
         let surface: Surface<'_> = instance.create_surface(window.clone())?;

@@ -4,30 +4,26 @@ use vte::{Params, Perform};
 use crate::terminal::screen::buffer::ScreenSnapshot;
 use crate::terminal::screen::editor::ScreenEditor;
 
-pub struct Screen {
+pub(in crate::terminal) struct Screen {
     buffer_editor: ScreenEditor,
 }
 
 impl Screen {
-    pub fn new(cols: usize, rows: usize) -> Self {
+    pub(in crate::terminal) fn new(cols: usize, rows: usize) -> Self {
         Self {
             buffer_editor: ScreenEditor::new(cols, rows),
         }
     }
 
-    pub fn set_cols(&mut self, cols: usize) {
+    pub(in crate::terminal) fn set_cols(&mut self, cols: usize) {
         self.buffer_editor.set_cols(cols);
     }
 
-    pub fn set_rows(&mut self, rows: usize) {
+    pub(in crate::terminal) fn set_rows(&mut self, rows: usize) {
         self.buffer_editor.set_rows(rows);
     }
 
-    pub fn cursor_position_1_based(&self) -> (usize, usize) {
-        self.buffer_editor.buffer().cursor_position_1_based()
-    }
-
-    pub fn snapshot(&self) -> ScreenSnapshot {
+    pub(in crate::terminal) fn snapshot(&self) -> ScreenSnapshot {
         self.buffer_editor.snapshot()
     }
 }

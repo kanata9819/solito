@@ -1,19 +1,19 @@
-pub struct TracingFilter;
+pub(crate) struct TracingFilter;
 
 #[allow(unused)]
 impl TracingFilter {
-    pub const FILTER_DEBUG: &str = "debug";
-    pub const FILTER_ERROR: &str = "error";
+    pub(crate) const FILTER_DEBUG: &str = "debug";
+    pub(crate) const FILTER_ERROR: &str = "error";
 }
 
-pub struct WindowAttr;
+pub(crate) struct WindowAttr;
 impl WindowAttr {
-    pub const WINDOW_WIDTH: f32 = 900.0;
-    pub const WINDOW_HIGHT: f32 = 650.0;
+    pub(crate) const WINDOW_WIDTH: f32 = 900.0;
+    pub(crate) const WINDOW_HIGHT: f32 = 650.0;
 }
 
-pub struct BufferAttr;
+pub(crate) struct BufferAttr;
 impl BufferAttr {
-    pub const FONT_SIZE: f32 = 20.0;
-    pub const LINE_HEIGHT: f32 = 30.0;
+    pub(crate) const FONT_SIZE: f32 = 20.0;
+    pub(crate) const LINE_HEIGHT: f32 = 30.0;
 }

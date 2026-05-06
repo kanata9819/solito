@@ -3,11 +3,11 @@ use wgpu::{Buffer, ShaderModule};
 
 use crate::util::general_parser;
 
-pub struct RectPipeline {
+pub(in crate::renderer) struct RectPipeline {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
 }
-pub trait Rect {
+pub(in crate::renderer) trait Rect {
     fn new(
         device: &wgpu::Device,
         config: SurfaceConfiguration<Vec<wgpu::TextureFormat>>,

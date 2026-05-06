@@ -10,7 +10,7 @@ use super::glyphon::GlyphonResources;
 use super::viewport::ViewportState;
 
 pub(in crate::renderer) struct InputBuffer {
-    pub glyphs: GlyphResources,
+    pub(in crate::renderer) glyphs: GlyphResources,
     terminal: TerminalState,
     viewport: ViewportState,
 }

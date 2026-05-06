@@ -1,16 +1,16 @@
 use super::cursor::Cursor;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct CellStyle {
-    pub faint: bool,
-    pub fg_rgba: Option<[u8; 4]>,
+pub(super) struct CellStyle {
+    pub(super) faint: bool,
+    pub(super) fg_rgba: Option<[u8; 4]>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct ScreenCell {
-    pub ch: char,
-    pub style: CellStyle,
-    pub is_wide_continuation: bool,
+pub(crate) struct ScreenCell {
+    pub(crate) ch: char,
+    pub(super) style: CellStyle,
+    pub(crate) is_wide_continuation: bool,
 }
 
 impl ScreenCell {
@@ -40,19 +40,17 @@ impl ScreenCell {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct ScreenSnapshot {
-    pub lines: Vec<Vec<ScreenCell>>,
-    pub cursor_row: usize,
-    pub cursor_col: usize,
+pub(crate) struct ScreenSnapshot {
+    pub(crate) lines: Vec<Vec<ScreenCell>>,
 }
 
-pub struct ScreenBuffer {
+pub(super) struct ScreenBuffer {
     cols: usize,
     rows: usize,
-    pub lines: Vec<Vec<ScreenCell>>,
-    pub cursor: Cursor,
-    pub pending_wrap: bool,
-    pub style: CellStyle,
+    pub(super) lines: Vec<Vec<ScreenCell>>,
+    pub(super) cursor: Cursor,
+    pub(super) pending_wrap: bool,
+    pub(super) style: CellStyle,
 }
 
 impl ScreenBuffer {
@@ -78,8 +76,6 @@ impl ScreenBuffer {
     pub(super) fn snapshot(&self) -> ScreenSnapshot {
         ScreenSnapshot {
             lines: self.lines.clone(),
-            cursor_row: self.cursor.get_current_row(),
-            cursor_col: self.cursor.get_current_col(),
         }
     }
 
@@ -102,14 +98,7 @@ impl ScreenBuffer {
         }
     }
 
-    pub fn cursor_position_1_based(&self) -> (usize, usize) {
-        let viewport_top: usize = self.lines.len().saturating_sub(self.rows);
-        let visible_row: usize = self.cursor.get_current_row().saturating_sub(viewport_top);
-
-        (visible_row + 1, self.cursor.get_current_col() + 1)
-    }
-
-    pub fn get_viewport_top(&self) -> usize {
+    pub(super) fn get_viewport_top(&self) -> usize {
         self.lines.len().saturating_sub(self.rows)
     }
 }

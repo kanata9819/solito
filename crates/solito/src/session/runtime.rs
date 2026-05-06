@@ -14,7 +14,7 @@ type TSlave = Box<dyn SlavePty + Send>;
 // spawned child
 type TChild = Box<dyn Child + Send + Sync>;
 
-pub struct SessionRuntime {
+pub(crate) struct SessionRuntime {
     child: TChild,
     input_rx: Receiver<Vec<u8>>,
     master: TMaster,
@@ -22,7 +22,7 @@ pub struct SessionRuntime {
 }
 
 impl SessionRuntime {
-    pub fn new(input_rx: Receiver<Vec<u8>>, output_tx: Sender<Vec<u8>>) -> Self {
+    pub(crate) fn new(input_rx: Receiver<Vec<u8>>, output_tx: Sender<Vec<u8>>) -> Self {
         let pty_pair: PtyPair = Self::pty_pair();
         let child: TChild = Self::spawn_command(pty_pair.slave);
 
@@ -34,7 +34,7 @@ impl SessionRuntime {
         }
     }
 
-    pub fn run_session(mut self) -> Result<(), Box<dyn Error>> {
+    pub(crate) fn run_session(mut self) -> Result<(), Box<dyn Error>> {
         let reader: TReader = self.master.try_clone_reader()?;
         let writer: TWriter = self.master.take_writer()?;
 

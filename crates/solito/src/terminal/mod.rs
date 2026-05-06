@@ -1,5 +1,5 @@
 mod screen;
 mod state;
 
-pub use screen::buffer::ScreenCell;
-pub use state::TerminalState;
+pub(crate) use screen::buffer::ScreenCell;
+pub(crate) use state::TerminalState;

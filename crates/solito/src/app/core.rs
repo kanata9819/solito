@@ -19,15 +19,15 @@ use winit::{
     window::{Window, WindowAttributes, WindowId},
 };
 
-pub struct SolitoApplication {
-    pub windows: HashMap<WindowId, Arc<Window>>,
+pub(crate) struct SolitoApplication {
+    windows: HashMap<WindowId, Arc<Window>>,
     state: Option<State>,
     input_tx: Sender<Vec<u8>>,
     output_rx: Receiver<Vec<u8>>,
 }
 
 impl SolitoApplication {
-    pub fn new(input_tx: Sender<Vec<u8>>, output_rx: Receiver<Vec<u8>>) -> Self {
+    pub(crate) fn new(input_tx: Sender<Vec<u8>>, output_rx: Receiver<Vec<u8>>) -> Self {
         Self {
             windows: HashMap::new(),
             state: None,

@@ -1,1 +1,1 @@
-pub mod rect;
+pub(in crate::renderer) mod rect;

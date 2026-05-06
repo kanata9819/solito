@@ -2,32 +2,32 @@ use crate::terminal::screen::buffer::ScreenSnapshot;
 use crate::terminal::screen::core::Screen;
 use vte::Parser;
 
-pub struct TerminalState {
+pub(crate) struct TerminalState {
     parser: Parser,
     screen: Screen,
 }
 
 impl TerminalState {
-    pub fn new(cols: usize, rows: usize) -> Self {
+    pub(crate) fn new(cols: usize, rows: usize) -> Self {
         Self {
             parser: Parser::new(),
             screen: Screen::new(cols, rows),
         }
     }
 
-    pub fn apply_terminal_output(&mut self, bytes: &[u8]) {
+    pub(crate) fn apply_terminal_output(&mut self, bytes: &[u8]) {
         self.parser.advance(&mut self.screen, bytes);
     }
 
-    pub fn set_width(&mut self, cols: usize) {
+    pub(crate) fn set_width(&mut self, cols: usize) {
         self.screen.set_cols(cols.max(1));
     }
 
-    pub fn set_height(&mut self, rows: usize) {
+    pub(crate) fn set_height(&mut self, rows: usize) {
         self.screen.set_rows(rows.max(1));
     }
 
-    pub fn snapshot(&self) -> ScreenSnapshot {
+    pub(crate) fn snapshot(&self) -> ScreenSnapshot {
         self.screen.snapshot()
     }
 }

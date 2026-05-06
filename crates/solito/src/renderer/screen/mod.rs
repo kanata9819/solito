@@ -1,4 +1,4 @@
 mod glyph_resources;
 mod glyphon;
-pub mod input_buffer;
+pub(in crate::renderer) mod input_buffer;
 mod viewport;

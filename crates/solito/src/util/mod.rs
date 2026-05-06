@@ -1,2 +1,2 @@
-pub mod general_parser;
-pub mod keycode_parser;
+pub(crate) mod general_parser;
+pub(crate) mod keycode_parser;

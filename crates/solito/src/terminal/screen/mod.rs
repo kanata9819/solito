@@ -1,4 +1,4 @@
-pub mod buffer;
-pub mod core;
-pub mod cursor;
-pub mod editor;
+pub(super) mod buffer;
+pub(super) mod core;
+mod cursor;
+mod editor;
