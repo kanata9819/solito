@@ -95,6 +95,15 @@ fn handle_key(
     key_state: ElementState,
     input_tx: &Sender<SessionInput>,
 ) -> Result<(), Box<dyn Error>> {
+    const ENTER: &[u8; 1] = b"\r";
+    const BACKSPACE: &[u8; 1] = b"\x7f";
+    const TAB: &[u8; 1] = b"\t";
+    const ESCAPE: &[u8; 1] = b"\x1b";
+    const ARROWUP: &[u8; 3] = b"\x1b[A";
+    const ARROWDOWN: &[u8; 3] = b"\x1b[B";
+    const ARROWRIGHT: &[u8; 3] = b"\x1b[C";
+    const ARROWLEFT: &[u8; 3] = b"\x1b[D";
+
     if key_state == ElementState::Pressed {
         if let Some(text) = text {
             input_tx.send(SessionInput::Write(text.as_bytes().to_vec()))?;
@@ -102,23 +111,23 @@ fn handle_key(
         }
 
         match &logical_key {
-            Key::Named(NamedKey::Enter) => input_tx.send(SessionInput::write(b"\r".to_vec()))?,
+            Key::Named(NamedKey::Enter) => input_tx.send(SessionInput::write(ENTER.to_vec()))?,
             Key::Named(NamedKey::Backspace) => {
-                input_tx.send(SessionInput::write(b"\x7f".to_vec()))?
+                input_tx.send(SessionInput::write(BACKSPACE.to_vec()))?
             }
-            Key::Named(NamedKey::Tab) => input_tx.send(SessionInput::write(b"\t".to_vec()))?,
-            Key::Named(NamedKey::Escape) => input_tx.send(SessionInput::write(b"\x1b".to_vec()))?,
+            Key::Named(NamedKey::Tab) => input_tx.send(SessionInput::write(TAB.to_vec()))?,
+            Key::Named(NamedKey::Escape) => input_tx.send(SessionInput::write(ESCAPE.to_vec()))?,
             Key::Named(NamedKey::ArrowUp) => {
-                input_tx.send(SessionInput::write(b"\x1b[A".to_vec()))?
+                input_tx.send(SessionInput::write(ARROWUP.to_vec()))?
             }
             Key::Named(NamedKey::ArrowDown) => {
-                input_tx.send(SessionInput::write(b"\x1b[B".to_vec()))?
+                input_tx.send(SessionInput::write(ARROWDOWN.to_vec()))?
             }
             Key::Named(NamedKey::ArrowRight) => {
-                input_tx.send(SessionInput::write(b"\x1b[C".to_vec()))?
+                input_tx.send(SessionInput::write(ARROWRIGHT.to_vec()))?
             }
             Key::Named(NamedKey::ArrowLeft) => {
-                input_tx.send(SessionInput::write(b"\x1b[D".to_vec()))?
+                input_tx.send(SessionInput::write(ARROWLEFT.to_vec()))?
             }
             _ => {}
         }
