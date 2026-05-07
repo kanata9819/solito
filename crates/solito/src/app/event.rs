@@ -7,17 +7,13 @@ use std::{
 };
 use tracing::error;
 use winit::{
-    event::{KeyEvent, WindowEvent},
+    event::{ElementState, KeyEvent, WindowEvent},
     event_loop::ActiveEventLoop,
-    keyboard::PhysicalKey,
+    keyboard::{Key, NamedKey, SmolStr},
     window::{Window, WindowId},
 };
 
 use crate::session::runtime::SessionInput;
-use crate::util::{
-    self,
-    keycode_parser::{CodeKind, KeyState, ParseError, ParseResult},
-};
 
 pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
     windows: &mut HashMap<WindowId, Arc<Window>>,
@@ -46,19 +42,13 @@ pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
         WindowEvent::KeyboardInput {
             event:
                 KeyEvent {
-                    physical_key: PhysicalKey::Code(code),
+                    logical_key,
                     state: key_state,
+                    text,
                     ..
                 },
             ..
-        } => {
-            let key_state: KeyState = KeyState {
-                key_code: code,
-                is_pressed: key_state == winit::event::ElementState::Pressed,
-                is_released: key_state == winit::event::ElementState::Released,
-            };
-            handle_key(&key_state, input_tx)?
-        }
+        } => handle_key(text, logical_key, key_state, input_tx)?,
         WindowEvent::Resized(size) => {
             let (cols, rows): (usize, usize) = state.terminal_size_for(size);
             terminal.set_width(cols);
@@ -99,23 +89,40 @@ pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
     Ok(())
 }
 
-fn handle_key(key_state: &KeyState, input_tx: &Sender<SessionInput>) -> Result<(), Box<dyn Error>> {
-    match util::keycode_parser::parse(key_state) {
-        ParseResult::Ok(kind) => match kind {
-            CodeKind::Char(char) => {
-                input_tx.send(SessionInput::write(char.to_string().into_bytes()))?;
-                // The PTY echoes printable input back to us, so drawing here would duplicate
-                // or briefly conflict with the terminal output stream.
-                Ok(())
-            }
-            CodeKind::Function => Ok(()),
-            CodeKind::Special => Ok(()),
-        },
-        ParseResult::Err(ParseError::InvalidCode(code)) => {
-            Err((format!("Invalid Code: {:?}", code).to_string()).into())
+fn handle_key(
+    text: Option<SmolStr>,
+    logical_key: Key<SmolStr>,
+    key_state: ElementState,
+    input_tx: &Sender<SessionInput>,
+) -> Result<(), Box<dyn Error>> {
+    if key_state == ElementState::Pressed {
+        if let Some(text) = text {
+            input_tx.send(SessionInput::Write(text.as_bytes().to_vec()))?;
+            return Ok(());
         }
-        ParseResult::Err(ParseError::UnHandled(code)) => {
-            Err((format!("UnHandled Code: {:?}", code).to_string()).into())
+
+        match &logical_key {
+            Key::Named(NamedKey::Enter) => input_tx.send(SessionInput::write(b"\r".to_vec()))?,
+            Key::Named(NamedKey::Backspace) => {
+                input_tx.send(SessionInput::write(b"\x7f".to_vec()))?
+            }
+            Key::Named(NamedKey::Tab) => input_tx.send(SessionInput::write(b"\t".to_vec()))?,
+            Key::Named(NamedKey::Escape) => input_tx.send(SessionInput::write(b"\x1b".to_vec()))?,
+            Key::Named(NamedKey::ArrowUp) => {
+                input_tx.send(SessionInput::write(b"\x1b[A".to_vec()))?
+            }
+            Key::Named(NamedKey::ArrowDown) => {
+                input_tx.send(SessionInput::write(b"\x1b[B".to_vec()))?
+            }
+            Key::Named(NamedKey::ArrowRight) => {
+                input_tx.send(SessionInput::write(b"\x1b[C".to_vec()))?
+            }
+            Key::Named(NamedKey::ArrowLeft) => {
+                input_tx.send(SessionInput::write(b"\x1b[D".to_vec()))?
+            }
+            _ => {}
         }
     }
+
+    Ok(())
 }

@@ -3,7 +3,6 @@
 mod app;
 mod config;
 mod session;
-mod util;
 
 use std::{
     error::Error,
