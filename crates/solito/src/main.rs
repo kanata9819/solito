@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn init_tracing() {
-    let env_filter: String = format!("error,solito={}", config::TracingFilter::FILTER_DEBUG);
+    let env_filter: String = format!("error,solito={}", config::TracingFilter::FILTER_ERROR);
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::new(env_filter))
         .init();

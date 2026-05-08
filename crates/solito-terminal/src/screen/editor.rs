@@ -461,3 +461,15 @@ fn cube_component(level: usize) -> u8 {
         (55 + level * 40).min(255) as u8
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cube() {
+        let level = 0;
+        let cube = cube_component(level);
+        assert_eq!(cube, 0);
+    }
+}
