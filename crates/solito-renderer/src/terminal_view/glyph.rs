@@ -1,7 +1,7 @@
 use ::glyphon::{
-    Buffer, Cache, FontSystem, Metrics, SwashCache, TextAtlas, TextRenderer, Viewport,
+    Attrs, Buffer, Cache, Family, FontSystem, Metrics, Shaping, SwashCache, TextAtlas,
+    TextRenderer, Viewport, Wrap,
 };
-use glyphon::{Attrs, Family, Shaping, Wrap};
 use wgpu::MultisampleState;
 
 use crate::RendererConfig;
