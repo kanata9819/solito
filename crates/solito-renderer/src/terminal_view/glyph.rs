@@ -1,6 +1,7 @@
 use ::glyphon::{
     Buffer, Cache, FontSystem, Metrics, SwashCache, TextAtlas, TextRenderer, Viewport,
 };
+use glyphon::{Attrs, Family, Shaping, Wrap};
 use wgpu::MultisampleState;
 
 use crate::RendererConfig;
@@ -53,5 +54,29 @@ impl GlyphonResources {
             swash_cache,
             atlas,
         }
+    }
+
+    pub fn measure_font_width(font_system: &mut glyphon::FontSystem) -> f32 {
+        let mut buffer: Buffer = Buffer::new(
+            font_system,
+            Metrics::new(RendererConfig::FONT_SIZE, RendererConfig::LINE_HEIGHT),
+        );
+
+        buffer.set_wrap(font_system, Wrap::None);
+
+        buffer.set_text(
+            font_system,
+            "M",
+            &Attrs::new().family(Family::Name("Cascadia Mono")),
+            Shaping::Advanced,
+            None,
+        );
+
+        buffer
+            .layout_runs()
+            .next()
+            .map(|run| run.line_w)
+            .unwrap_or(RendererConfig::FONT_SIZE * 0.62)
+            .max(1.0)
     }
 }

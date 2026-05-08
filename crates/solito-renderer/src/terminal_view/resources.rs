@@ -1,6 +1,6 @@
 use ::glyphon::{Buffer, FontSystem, SwashCache, TextAtlas, TextRenderer, Viewport};
 
-use super::glyphon::GlyphonResources;
+use super::glyph::GlyphonResources;
 
 pub(crate) struct GlyphResources {
     pub(crate) text_buffer: Buffer,
