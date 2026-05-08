@@ -56,7 +56,7 @@ impl GlyphonResources {
         }
     }
 
-    pub fn measure_font_width(font_system: &mut glyphon::FontSystem) -> f32 {
+    pub(super) fn measure_font_width(font_system: &mut glyphon::FontSystem) -> f32 {
         let mut buffer: Buffer = Buffer::new(
             font_system,
             Metrics::new(RendererConfig::FONT_SIZE, RendererConfig::LINE_HEIGHT),
