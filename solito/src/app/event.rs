@@ -9,7 +9,7 @@ use winit::{
     dpi::PhysicalSize,
     event::{ElementState, KeyEvent, WindowEvent},
     event_loop::ActiveEventLoop,
-    keyboard::{Key, NamedKey, SmolStr},
+    keyboard::{Key, ModifiersState, NamedKey, SmolStr},
     window::{Window, WindowId},
 };
 
@@ -18,6 +18,7 @@ use crate::session::runtime::SessionInput;
 pub(super) enum AppCommand {
     None,
     NewTab,
+    CloseTab,
     NextTab,
     PreviousTab,
     Resize {
@@ -33,6 +34,7 @@ pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
     state: &mut T,
     event_loop: &ActiveEventLoop,
     event: WindowEvent,
+    modifiers_state: &mut ModifiersState,
     input_tx: &Sender<SessionInput>,
 ) -> Result<AppCommand, Box<dyn Error>> {
     match event {
@@ -61,7 +63,11 @@ pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
                     ..
                 },
             ..
-        } => handle_key(text, logical_key, key_state, input_tx),
+        } => handle_key(text, logical_key, key_state, *modifiers_state, input_tx),
+        WindowEvent::ModifiersChanged(modifiers) => {
+            *modifiers_state = modifiers.state();
+            Ok(AppCommand::None)
+        }
         WindowEvent::Resized(size) => {
             let (cols, rows): (usize, usize) = state.terminal_size_for(size);
             Ok(AppCommand::Resize { size, cols, rows })
@@ -106,6 +112,7 @@ fn handle_key(
     text: Option<SmolStr>,
     logical_key: Key<SmolStr>,
     key_state: ElementState,
+    modifiers: ModifiersState,
     input_tx: &Sender<SessionInput>,
 ) -> Result<AppCommand, Box<dyn Error>> {
     const ENTER: &[u8; 1] = b"\r";
@@ -118,6 +125,10 @@ fn handle_key(
     const ARROWLEFT: &[u8; 3] = b"\x1b[D";
 
     if key_state == ElementState::Pressed {
+        if let Some(command) = tab_shortcut_command(&logical_key, modifiers) {
+            return Ok(command);
+        }
+
         match &logical_key {
             Key::Named(NamedKey::F1) => return Ok(AppCommand::NewTab),
             Key::Named(NamedKey::F2) => return Ok(AppCommand::NextTab),
@@ -154,4 +165,51 @@ fn handle_key(
     }
 
     Ok(AppCommand::None)
+}
+
+fn tab_shortcut_command(
+    logical_key: &Key<SmolStr>,
+    modifiers: ModifiersState,
+) -> Option<AppCommand> {
+    if !modifiers.control_key() || !modifiers.shift_key() {
+        return None;
+    }
+
+    let Key::Character(character) = logical_key else {
+        return None;
+    };
+
+    if character.eq_ignore_ascii_case("t") {
+        Some(AppCommand::NewTab)
+    } else if character.eq_ignore_ascii_case("w") {
+        Some(AppCommand::CloseTab)
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AppCommand, tab_shortcut_command};
+    use winit::keyboard::{Key, ModifiersState, SmolStr};
+
+    #[test]
+    fn ctrl_shift_t_opens_new_tab() {
+        let command = tab_shortcut_command(
+            &Key::Character(SmolStr::new("T")),
+            ModifiersState::CONTROL | ModifiersState::SHIFT,
+        );
+
+        assert!(matches!(command, Some(AppCommand::NewTab)));
+    }
+
+    #[test]
+    fn ctrl_shift_w_closes_active_tab() {
+        let command = tab_shortcut_command(
+            &Key::Character(SmolStr::new("W")),
+            ModifiersState::CONTROL | ModifiersState::SHIFT,
+        );
+
+        assert!(matches!(command, Some(AppCommand::CloseTab)));
+    }
 }

@@ -88,6 +88,20 @@ impl<T> Tabs<T> {
         self.tabs.push(tab);
         self.active = self.tabs.len().saturating_sub(1);
     }
+
+    pub(super) fn close_active(&mut self) -> bool {
+        if self.tabs.is_empty() {
+            return false;
+        }
+
+        self.tabs.remove(self.active);
+        self.active = self.active.min(self.tabs.len().saturating_sub(1));
+        true
+    }
+
+    pub(super) fn is_empty(&self) -> bool {
+        self.tabs.is_empty()
+    }
 }
 
 impl Tabs<Tab> {
@@ -218,5 +232,31 @@ mod tests {
         assert_eq!(tabs.active, 0);
         assert!(tabs.activate_previous());
         assert_eq!(tabs.active, 1);
+    }
+
+    #[test]
+    fn closing_active_tab_selects_neighbor() {
+        let mut tabs: Tabs<FakeTab> = Tabs::new();
+        tabs.push(FakeTab::new());
+        tabs.push(FakeTab::new());
+        tabs.push(FakeTab::new());
+
+        assert_eq!(tabs.active, 2);
+        assert!(tabs.close_active());
+        assert_eq!(tabs.active, 1);
+        assert_eq!(
+            tabs.titles(),
+            vec!["Tab 1".to_string(), "Tab 2".to_string()]
+        );
+    }
+
+    #[test]
+    fn closing_last_tab_leaves_tabs_empty() {
+        let mut tabs: Tabs<FakeTab> = Tabs::new();
+        tabs.push(FakeTab::new());
+
+        assert!(tabs.close_active());
+        assert!(tabs.is_empty());
+        assert_eq!(tabs.active, 0);
     }
 }

@@ -11,6 +11,7 @@ use winit::{
     dpi::LogicalSize,
     event::WindowEvent,
     event_loop::ActiveEventLoop,
+    keyboard::ModifiersState,
     window::{Window, WindowAttributes, WindowId},
 };
 
@@ -18,6 +19,7 @@ pub(crate) struct SolitoApplication {
     windows: HashMap<WindowId, Arc<Window>>,
     state: Option<State>,
     tabs: AppTabs,
+    modifiers: ModifiersState,
 }
 
 impl SolitoApplication {
@@ -26,6 +28,7 @@ impl SolitoApplication {
             windows: HashMap::new(),
             state: None,
             tabs: AppTabs::new(),
+            modifiers: ModifiersState::default(),
         }
     }
 
@@ -64,7 +67,11 @@ impl SolitoApplication {
         Ok(())
     }
 
-    fn handle_command(&mut self, command: AppCommand) -> Result<(), Box<dyn Error>> {
+    fn handle_command(
+        &mut self,
+        command: AppCommand,
+        event_loop: &ActiveEventLoop,
+    ) -> Result<(), Box<dyn Error>> {
         match command {
             AppCommand::None => {}
             AppCommand::NewTab => {
@@ -73,6 +80,16 @@ impl SolitoApplication {
                     self.tabs.open(cols, rows);
                     self.set_tab_bar();
                     self.set_active_snapshot();
+                }
+            }
+            AppCommand::CloseTab => {
+                if self.tabs.close_active() {
+                    if self.tabs.is_empty() {
+                        event_loop.exit();
+                    } else {
+                        self.set_tab_bar();
+                        self.set_active_snapshot();
+                    }
                 }
             }
             AppCommand::NextTab => {
@@ -149,6 +166,7 @@ impl ApplicationHandler for SolitoApplication {
                 state,
                 event_loop,
                 event,
+                &mut self.modifiers,
                 input_tx,
             ) {
                 Ok(command) => command,
@@ -159,7 +177,7 @@ impl ApplicationHandler for SolitoApplication {
             }
         };
 
-        if let Err(err) = self.handle_command(command) {
+        if let Err(err) = self.handle_command(command, event_loop) {
             error!("event command error: {}", err);
         };
     }
