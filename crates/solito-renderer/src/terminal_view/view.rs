@@ -102,22 +102,46 @@ impl TerminalView {
         self.viewport.clamp(row_count);
         let (start, end): (usize, usize) = self.viewport.visible_range(row_count);
 
-        Self::text_spans_for_lines(&self.snapshot.lines[start..end])
+        Self::text_spans_for_lines(
+            &self.snapshot.lines[start..end],
+            start,
+            self.snapshot.cursor_row,
+            self.snapshot.cursor_col,
+            Self::cursor_text_color(self.caret_color()),
+        )
     }
 
-    fn text_spans_for_lines(lines: &[Vec<ScreenCell>]) -> Vec<(String, Attrs<'static>)> {
+    fn text_spans_for_lines(
+        lines: &[Vec<ScreenCell>],
+        first_row: usize,
+        cursor_row: usize,
+        cursor_col: usize,
+        cursor_text_color: [u8; 4],
+    ) -> Vec<(String, Attrs<'static>)> {
         let mut spans: Vec<(String, Attrs<'static>)> = Vec::new();
         let mut current_text: String = String::new();
         let mut current_color: Option<[u8; 4]> = None;
 
         for (line_index, line) in lines.iter().enumerate() {
-            for cell in line.iter().filter(|cell| !cell.is_wide_continuation) {
-                let color: Option<[u8; 4]> = cell.foreground_rgba();
+            let absolute_row: usize = first_row + line_index;
+            for (cell_col, cell) in line.iter().enumerate() {
+                if cell.is_wide_continuation {
+                    continue;
+                }
+
+                let color: Option<[u8; 4]> = Self::cell_text_color(
+                    absolute_row,
+                    cell_col,
+                    cursor_row,
+                    cursor_col,
+                    cursor_text_color,
+                    cell,
+                );
+
                 if current_text.is_empty() {
                     current_color = color;
-                } else if current_color != color {
-                    spans.push((current_text, Self::text_attrs(current_color)));
-                    current_text = String::new();
+                } else if Self::should_start_new_span(&current_text, current_color, color) {
+                    Self::push_text_span(&mut spans, &mut current_text, current_color);
                     current_color = color;
                 }
 
@@ -129,11 +153,59 @@ impl TerminalView {
             }
         }
 
-        if !current_text.is_empty() {
-            spans.push((current_text, Self::text_attrs(current_color)));
-        }
+        Self::push_text_span(&mut spans, &mut current_text, current_color);
 
         spans
+    }
+
+    fn cell_text_color(
+        absolute_row: usize,
+        cell_col: usize,
+        cursor_row: usize,
+        cursor_col: usize,
+        cursor_text_color: [u8; 4],
+        cell: &ScreenCell,
+    ) -> Option<[u8; 4]> {
+        if absolute_row == cursor_row && cell_col == cursor_col {
+            Some(cursor_text_color)
+        } else {
+            cell.foreground_rgba()
+        }
+    }
+
+    fn should_start_new_span(
+        current_text: &str,
+        current_color: Option<[u8; 4]>,
+        next_color: Option<[u8; 4]>,
+    ) -> bool {
+        !current_text.is_empty() && current_color != next_color
+    }
+
+    fn push_text_span(
+        spans: &mut Vec<(String, Attrs<'static>)>,
+        text: &mut String,
+        color: Option<[u8; 4]>,
+    ) {
+        if !text.is_empty() {
+            spans.push((std::mem::take(text), Self::text_attrs(color)));
+        }
+    }
+
+    fn cursor_text_color(caret_color: [f32; 4]) -> [u8; 4] {
+        const RED_LUMINANCE_WEIGHT: f32 = 0.2126;
+        const GREEN_LUMINANCE_WEIGHT: f32 = 0.7152;
+        const BLUE_LUMINANCE_WEIGHT: f32 = 0.0722;
+        const LIGHT_BACKGROUND_THRESHOLD: f32 = 0.5;
+
+        let luminance: f32 = RED_LUMINANCE_WEIGHT * caret_color[0]
+            + GREEN_LUMINANCE_WEIGHT * caret_color[1]
+            + BLUE_LUMINANCE_WEIGHT * caret_color[2];
+
+        if luminance > LIGHT_BACKGROUND_THRESHOLD {
+            [0, 0, 0, 255]
+        } else {
+            [255, 255, 255, 255]
+        }
     }
 
     fn text_attrs(color: Option<[u8; 4]>) -> Attrs<'static> {
@@ -205,5 +277,29 @@ mod tests {
     #[test]
     fn caret_color_defaults_to_white() {
         assert_eq!(TerminalView::DEFAULT_CARET_COLOR, [1.0, 1.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn cursor_text_color_contrasts_with_caret_color() {
+        assert_eq!(
+            TerminalView::cursor_text_color([1.0, 1.0, 1.0, 1.0]),
+            [0, 0, 0, 255]
+        );
+        assert_eq!(
+            TerminalView::cursor_text_color([0.0, 0.0, 0.0, 1.0]),
+            [255, 255, 255, 255]
+        );
+    }
+
+    #[test]
+    fn text_spans_override_cursor_cell_color() {
+        let mut cell: ScreenCell = ScreenCell::default();
+        cell.ch = 'A';
+
+        let spans = TerminalView::text_spans_for_lines(&[vec![cell]], 0, 0, 0, [0, 0, 0, 255]);
+
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].0, "A");
+        assert_eq!(spans[0].1.color_opt, Some(Color::rgba(0, 0, 0, 255)));
     }
 }

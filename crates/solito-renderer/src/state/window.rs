@@ -94,12 +94,6 @@ impl State {
     ) -> Result<(), Box<dyn Error>> {
         let mut pass: wgpu::RenderPass<'_> = pass::begin_render_pass(encoder, &view);
 
-        self.terminal_view.glyphs.text_renderer.render(
-            &self.terminal_view.glyphs.atlas,
-            &self.terminal_view.glyphs.viewport,
-            &mut pass,
-        )?;
-
         let bind_group: wgpu::BindGroup = self
             .render_resources
             .rect_pipeline
@@ -108,6 +102,12 @@ impl State {
         self.render_resources
             .rect_pipeline
             .draw_rect(&mut pass, bind_group);
+
+        self.terminal_view.glyphs.text_renderer.render(
+            &self.terminal_view.glyphs.atlas,
+            &self.terminal_view.glyphs.viewport,
+            &mut pass,
+        )?;
 
         Ok(())
     }
