@@ -1,4 +1,4 @@
-use solito_renderer::{State, TerminalViewRenderer, WindowRenderer};
+use solito_renderer::{State, TabBarSnapshot, TerminalViewRenderer, WindowRenderer};
 use std::{collections::HashMap, error::Error, sync::Arc};
 
 use crate::app::event as AppEvent;
@@ -51,6 +51,7 @@ impl SolitoApplication {
         let mut state: State = pollster::block_on(State::new(window))?;
         let (cols, rows): (usize, usize) = state.terminal_size();
         self.tabs.open(cols, rows);
+        state.set_tab_bar(self.tab_bar_snapshot());
 
         if let Some(snapshot) = self.tabs.active_snapshot() {
             state.set_terminal_snapshot(snapshot);
@@ -70,16 +71,19 @@ impl SolitoApplication {
                 if let Some(state) = &mut self.state {
                     let (cols, rows): (usize, usize) = state.terminal_size();
                     self.tabs.open(cols, rows);
+                    self.set_tab_bar();
                     self.set_active_snapshot();
                 }
             }
             AppCommand::NextTab => {
                 if self.tabs.activate_next() {
+                    self.set_tab_bar();
                     self.set_active_snapshot();
                 }
             }
             AppCommand::PreviousTab => {
                 if self.tabs.activate_previous() {
+                    self.set_tab_bar();
                     self.set_active_snapshot();
                 }
             }
@@ -101,6 +105,18 @@ impl SolitoApplication {
         if let (Some(state), Some(snapshot)) = (&mut self.state, self.tabs.active_snapshot()) {
             state.set_terminal_snapshot(snapshot);
         }
+    }
+
+    fn set_tab_bar(&mut self) {
+        let snapshot: TabBarSnapshot = self.tab_bar_snapshot();
+
+        if let Some(state) = &mut self.state {
+            state.set_tab_bar(snapshot);
+        }
+    }
+
+    fn tab_bar_snapshot(&self) -> TabBarSnapshot {
+        TabBarSnapshot::new(self.tabs.titles(), self.tabs.active_index())
     }
 }
 

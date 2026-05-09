@@ -3,11 +3,15 @@ use solito_terminal::{ScreenCell, ScreenSnapshot};
 
 use crate::RendererConfig;
 
-use super::{glyph::GlyphonResources, resources::GlyphResources, viewport::ViewportState};
+use super::{
+    glyph::GlyphonResources, resources::GlyphResources, tab_bar::TabBarSnapshot,
+    viewport::ViewportState,
+};
 
 pub(crate) struct TerminalView {
     pub(crate) glyphs: GlyphResources,
     snapshot: ScreenSnapshot,
+    tab_bar: TabBarSnapshot,
     viewport: ViewportState,
 }
 
@@ -15,6 +19,9 @@ impl TerminalView {
     pub(crate) const PADDING_X: f32 = 10.0;
     pub(crate) const PADDING_Y: f32 = 10.0;
     pub(crate) const DEFAULT_CARET_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
+    const TAB_ACTIVE_COLOR: [u8; 4] = [255, 255, 255, 255];
+    const TAB_INACTIVE_COLOR: [u8; 4] = [140, 148, 160, 255];
+    const TAB_SEPARATOR_COLOR: [u8; 4] = [80, 88, 100, 255];
 
     pub(crate) fn new(
         device: &wgpu::Device,
@@ -29,13 +36,20 @@ impl TerminalView {
         Self {
             glyphs: GlyphResources::new(glyphon),
             snapshot: ScreenSnapshot::default(),
-            viewport: ViewportState::new(physical_size.height),
+            tab_bar: TabBarSnapshot::default(),
+            viewport: ViewportState::new(Self::terminal_content_height(physical_size.height)),
         }
     }
 
     pub(crate) fn resize(&mut self, height: u32, snapshot: ScreenSnapshot) {
         self.snapshot = snapshot;
-        self.viewport.resize(height, self.row_count());
+        self.viewport
+            .resize(Self::terminal_content_height(height), self.row_count());
+        self.set_text_to_buffer();
+    }
+
+    pub(crate) fn set_tab_bar(&mut self, tab_bar: TabBarSnapshot) {
+        self.tab_bar = tab_bar;
         self.set_text_to_buffer();
     }
 
@@ -56,7 +70,7 @@ impl TerminalView {
         let (start, end): (usize, usize) = self.viewport.visible_range(row_count);
 
         if self.snapshot.cursor_row < start || self.snapshot.cursor_row >= end {
-            return (Self::PADDING_X, Self::PADDING_Y, 0.0, 0.0);
+            return (Self::PADDING_X, Self::terminal_origin_y(), 0.0, 0.0);
         }
 
         let cell_width: f32 =
@@ -65,7 +79,7 @@ impl TerminalView {
 
         (
             Self::PADDING_X + self.snapshot.cursor_col as f32 * cell_width,
-            Self::PADDING_Y + visible_row as f32 * RendererConfig::LINE_HEIGHT,
+            Self::terminal_origin_y() + visible_row as f32 * RendererConfig::LINE_HEIGHT,
             cell_width,
             RendererConfig::LINE_HEIGHT,
         )
@@ -94,21 +108,59 @@ impl TerminalView {
     }
 
     fn visible_text_spans(&mut self) -> Vec<(String, Attrs<'static>)> {
+        let mut spans: Vec<(String, Attrs<'static>)> = Self::tab_bar_spans(&self.tab_bar);
+        let has_tab_bar: bool = !spans.is_empty();
+
         if self.snapshot.lines.is_empty() {
-            return Vec::new();
+            return spans;
         }
 
         let row_count: usize = self.row_count();
         self.viewport.clamp(row_count);
         let (start, end): (usize, usize) = self.viewport.visible_range(row_count);
 
-        Self::text_spans_for_lines(
+        if has_tab_bar {
+            spans.push(("\n".to_string(), Self::text_attrs(None)));
+        }
+
+        spans.extend(Self::text_spans_for_lines(
             &self.snapshot.lines[start..end],
             start,
             self.snapshot.cursor_row,
             self.snapshot.cursor_col,
             Self::cursor_text_color(self.caret_color()),
-        )
+        ));
+
+        spans
+    }
+
+    fn tab_bar_spans(tab_bar: &TabBarSnapshot) -> Vec<(String, Attrs<'static>)> {
+        let mut spans: Vec<(String, Attrs<'static>)> = Vec::new();
+
+        for (index, title) in tab_bar.titles().iter().enumerate() {
+            if index > 0 {
+                spans.push((
+                    " | ".to_string(),
+                    Self::text_attrs(Some(Self::TAB_SEPARATOR_COLOR)),
+                ));
+            }
+
+            let active: bool = index == tab_bar.active_index();
+            let text: String = if active {
+                format!("[{}]", title)
+            } else {
+                title.to_string()
+            };
+            let color: [u8; 4] = if active {
+                Self::TAB_ACTIVE_COLOR
+            } else {
+                Self::TAB_INACTIVE_COLOR
+            };
+
+            spans.push((text, Self::text_attrs(Some(color))));
+        }
+
+        spans
     }
 
     fn text_spans_for_lines(
@@ -241,13 +293,23 @@ impl TerminalView {
     }
 
     pub(crate) fn visible_rows(&self, height: u32) -> usize {
-        ((height as f32 / RendererConfig::LINE_HEIGHT).floor() as usize).max(1)
+        let content_height: u32 = Self::terminal_content_height(height);
+        ((content_height as f32 / RendererConfig::LINE_HEIGHT).floor() as usize).max(1)
+    }
+
+    fn terminal_origin_y() -> f32 {
+        Self::PADDING_Y + RendererConfig::LINE_HEIGHT
+    }
+
+    fn terminal_content_height(height: u32) -> u32 {
+        height.saturating_sub(RendererConfig::LINE_HEIGHT.ceil() as u32)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::TerminalView;
+    use crate::terminal_view::TabBarSnapshot;
     use glyphon::Color;
     use solito_terminal::ScreenCell;
 
@@ -301,5 +363,22 @@ mod tests {
         assert_eq!(spans.len(), 1);
         assert_eq!(spans[0].0, "A");
         assert_eq!(spans[0].1.color_opt, Some(Color::rgba(0, 0, 0, 255)));
+    }
+
+    #[test]
+    fn tab_bar_spans_mark_active_tab() {
+        let snapshot: TabBarSnapshot =
+            TabBarSnapshot::new(vec!["Tab 1".to_string(), "Tab 2".to_string()], 0);
+        let spans = TerminalView::tab_bar_spans(&snapshot);
+
+        assert_eq!(spans[0].0, "[Tab 1]");
+        assert_eq!(spans[0].1.color_opt, Some(Color::rgba(255, 255, 255, 255)));
+        assert_eq!(spans[2].0, "Tab 2");
+        assert_eq!(spans[2].1.color_opt, Some(Color::rgba(140, 148, 160, 255)));
+    }
+
+    #[test]
+    fn visible_rows_reserve_one_row_for_tab_bar() {
+        assert_eq!(TerminalView::terminal_content_height(90), 60);
     }
 }

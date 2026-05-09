@@ -105,6 +105,16 @@ impl<T: TerminalTab> Tabs<T> {
         self.active_tab().map(TerminalTab::snapshot)
     }
 
+    pub(super) fn active_index(&self) -> usize {
+        self.active
+    }
+
+    pub(super) fn titles(&self) -> Vec<String> {
+        (0..self.tabs.len())
+            .map(|index| format!("Tab {}", index + 1))
+            .collect()
+    }
+
     pub(super) fn drain_outputs(&mut self) -> bool {
         let active: usize = self.active;
         let mut active_updated: bool = false;
