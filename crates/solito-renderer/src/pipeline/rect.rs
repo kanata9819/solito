@@ -84,6 +84,7 @@ impl Rect for RectPipeline {
             0.0,
             0.0,
             0.0,
+            [1.0, 1.0, 1.0, 1.0],
         );
 
         Self {
@@ -104,6 +105,7 @@ pub(crate) trait CaretRenderer {
         caret_y: f32,
         caret_w: f32,
         caret_h: f32,
+        caret_color: [f32; 4],
     );
     fn caret_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout;
     fn create_caret_uniform_buffer(device: &wgpu::Device) -> wgpu::Buffer;
@@ -133,14 +135,23 @@ impl CaretRenderer for RectPipeline {
         caret_y: f32,
         caret_w: f32,
         caret_h: f32,
+        caret_color: [f32; 4],
     ) {
         let (padding_x, padding_y): (f32, f32) = (0.0, 0.0);
         let (screen_w, screen_h): (f32, f32) = (width as f32, height as f32);
-        let caret_uniform: [f32; 8] = [
-            caret_x, caret_y, // pos
-            caret_w, caret_h, // size
-            screen_w, screen_h, // window size
-            padding_x, padding_y, // padding
+        let caret_uniform: [f32; 12] = [
+            caret_x,
+            caret_y, // pos
+            caret_w,
+            caret_h, // size
+            screen_w,
+            screen_h, // window size
+            padding_x,
+            padding_y, // padding
+            caret_color[0],
+            caret_color[1],
+            caret_color[2],
+            caret_color[3],
         ];
 
         queue.write_buffer(uniform_buffer, 0, as_bytes(&caret_uniform));
@@ -152,7 +163,7 @@ impl CaretRenderer for RectPipeline {
                 label: Some("Caret Layout"),
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -168,7 +179,7 @@ impl CaretRenderer for RectPipeline {
     fn create_caret_uniform_buffer(device: &wgpu::Device) -> wgpu::Buffer {
         let caret_uniform_buffer: wgpu::Buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Caret Uniform Buffer"),
-            size: std::mem::size_of::<[f32; 8]>() as u64,
+            size: std::mem::size_of::<[f32; 12]>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });

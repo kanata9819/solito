@@ -1,6 +1,6 @@
 use super::buffer::{CellStyle, ScreenBuffer, ScreenCell, ScreenSnapshot};
 use super::cursor::CursorPosition;
-use decodesc::{CsiMessage, EraseMode};
+use decodesc::{CsiMessage, EraseMode, OscMessage};
 use unicode_width::UnicodeWidthChar;
 
 pub(super) struct ScreenEditor {
@@ -88,6 +88,17 @@ impl ScreenEditor {
             | CsiMessage::DeviceStatusReport(_)
             | CsiMessage::ShowCursor
             | CsiMessage::HideCursor => {}
+        }
+    }
+
+    pub(super) fn apply_osc(&mut self, message: OscMessage) {
+        match message {
+            OscMessage::SetCursorColor(color) => self.screen_buffer.cursor_color = Some(color),
+            OscMessage::ResetCursorColor => self.screen_buffer.cursor_color = None,
+            OscMessage::SetIconName(_)
+            | OscMessage::SetWindowTitle(_)
+            | OscMessage::SetIconAndWindowTitle(_)
+            | OscMessage::Unknown { .. } => {}
         }
     }
 

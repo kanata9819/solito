@@ -18,10 +18,12 @@ impl Perform for Screen {
     fn unhook(&mut self) {}
 
     fn osc_dispatch(&mut self, params: &[&[u8]], bell_terminated: bool) {
-        let _: Option<DecodedEvent> = decode(VteEvent::Osc {
+        if let Some(DecodedEvent { osc: Some(osc), .. }) = decode(VteEvent::Osc {
             params,
             bell_terminated,
-        });
+        }) {
+            self.buffer_editor.apply_osc(osc);
+        }
     }
 
     fn csi_dispatch(&mut self, params: &Params, intermediates: &[u8], ignore: bool, action: char) {

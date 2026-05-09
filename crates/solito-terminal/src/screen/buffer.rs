@@ -37,6 +37,10 @@ impl ScreenCell {
             is_wide_continuation: true,
         }
     }
+
+    pub fn foreground_rgba(&self) -> Option<[u8; 4]> {
+        self.style.fg_rgba
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -44,6 +48,7 @@ pub struct ScreenSnapshot {
     pub lines: Vec<Vec<ScreenCell>>,
     pub cursor_row: usize,
     pub cursor_col: usize,
+    pub cursor_color: Option<[u8; 4]>,
 }
 
 pub(super) struct ScreenBuffer {
@@ -53,6 +58,7 @@ pub(super) struct ScreenBuffer {
     pub(super) cursor: Cursor,
     pub(super) pending_wrap: bool,
     pub(super) style: CellStyle,
+    pub(super) cursor_color: Option<[u8; 4]>,
 }
 
 impl ScreenBuffer {
@@ -64,6 +70,7 @@ impl ScreenBuffer {
             cursor: Cursor::new(),
             pending_wrap: false,
             style: CellStyle::default(),
+            cursor_color: None,
         }
     }
 
@@ -80,6 +87,7 @@ impl ScreenBuffer {
             lines: self.lines.clone(),
             cursor_row: self.cursor.get_current_row(),
             cursor_col: self.cursor.get_current_col(),
+            cursor_color: self.cursor_color,
         }
     }
 
