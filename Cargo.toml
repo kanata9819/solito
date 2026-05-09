@@ -1,8 +1,8 @@
 [workspace]
 members = [
-    "crates/decodesc",
-    "crates/solito",
-    "crates/solito-renderer",
-    "crates/solito-terminal",
+    "decodesc",
+    "solito",
+    "solito-renderer",
+    "solito-terminal",
 ]
 resolver = "3"
