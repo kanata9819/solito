@@ -129,13 +129,6 @@ fn handle_key(
             return Ok(command);
         }
 
-        match &logical_key {
-            Key::Named(NamedKey::F1) => return Ok(AppCommand::NewTab),
-            Key::Named(NamedKey::F2) => return Ok(AppCommand::NextTab),
-            Key::Named(NamedKey::F3) => return Ok(AppCommand::PreviousTab),
-            _ => {}
-        }
-
         if let Some(text) = text {
             input_tx.send(SessionInput::Write(text.as_bytes().to_vec()))?;
             return Ok(AppCommand::None);
@@ -171,24 +164,27 @@ fn tab_shortcut_command(
     logical_key: &Key<SmolStr>,
     modifiers: ModifiersState,
 ) -> Option<AppCommand> {
-    if modifiers.control_key() || modifiers.shift_key() {
-        if let Key::Character(character) = &logical_key {
-            if character.eq_ignore_ascii_case("t") {
-                return Some(AppCommand::NewTab);
-            } else if character.eq_ignore_ascii_case("w") {
-                return Some(AppCommand::CloseTab);
-            } else {
-                return None;
-            }
-        }
-    }
-
-    if modifiers.control_key() {
-        if let Key::Named(NamedKey::Tab) = &logical_key {
-            return Some(AppCommand::NextTab);
+    if modifiers.control_key()
+        && modifiers.shift_key()
+        && let Key::Character(character) = &logical_key
+    {
+        if character.eq_ignore_ascii_case("t") {
+            return Some(AppCommand::NewTab);
+        } else if character.eq_ignore_ascii_case("w") {
+            return Some(AppCommand::CloseTab);
         } else {
             return None;
         }
+    }
+
+    if modifiers.control_key() && modifiers.shift_key() {
+        if let Key::Named(NamedKey::Tab) = &logical_key {
+            Some(AppCommand::PreviousTab)
+        } else {
+            None
+        }
+    } else if modifiers.control_key() {
+        Some(AppCommand::NextTab)
     } else {
         None
     }
@@ -217,5 +213,25 @@ mod tests {
         );
 
         assert!(matches!(command, Some(AppCommand::CloseTab)));
+    }
+
+    #[test]
+    fn ctrl_tab_switch_next_tab() {
+        let command: Option<AppCommand> = tab_shortcut_command(
+            &Key::Named(winit::keyboard::NamedKey::Tab),
+            ModifiersState::CONTROL,
+        );
+
+        assert!(matches!(command, Some(AppCommand::NextTab)));
+    }
+
+    #[test]
+    fn ctrl_tab_switch_previous_tab() {
+        let command: Option<AppCommand> = tab_shortcut_command(
+            &Key::Named(winit::keyboard::NamedKey::Tab),
+            ModifiersState::SHIFT | ModifiersState::CONTROL,
+        );
+
+        assert!(matches!(command, Some(AppCommand::PreviousTab)));
     }
 }
