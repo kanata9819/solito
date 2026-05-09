@@ -75,4 +75,15 @@ mod tests {
         assert_eq!(line_text(&snapshot.lines[0]), "abc");
         assert_eq!(line_text(&snapshot.lines[1]), "あz");
     }
+
+    #[test]
+    fn exposes_cursor_position_in_snapshot() {
+        let mut state: TerminalState = TerminalState::new(10, 4);
+
+        state.apply_terminal_output(b"abc\r\nxy");
+        let snapshot: ScreenSnapshot = state.snapshot();
+
+        assert_eq!(snapshot.cursor_row, 1);
+        assert_eq!(snapshot.cursor_col, 2);
+    }
 }

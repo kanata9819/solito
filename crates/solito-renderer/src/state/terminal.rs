@@ -11,6 +11,7 @@ pub trait TerminalViewRenderer {
 impl TerminalViewRenderer for State {
     fn set_terminal_snapshot(&mut self, snapshot: ScreenSnapshot) {
         self.terminal_view.set_snapshot(snapshot);
+        self.update_caret_uniform();
     }
 
     fn terminal_size(&mut self) -> (usize, usize) {

@@ -75,7 +75,16 @@ impl Rect for RectPipeline {
                 cache: None,
             });
 
-        Self::update_caret_uniform(uniform_buffer, queue, window_width, window_height);
+        Self::update_caret_uniform(
+            uniform_buffer,
+            queue,
+            window_width,
+            window_height,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        );
 
         Self {
             pipeline: render_pipeline,
@@ -84,15 +93,24 @@ impl Rect for RectPipeline {
     }
 }
 
-pub(crate) trait Caret {
+pub(crate) trait CaretRenderer {
     fn caret_bind_group(&self, device: &wgpu::Device, uniform_buffer: &Buffer) -> wgpu::BindGroup;
-    fn update_caret_uniform(uniform_buffer: &Buffer, queue: &wgpu::Queue, width: u32, height: u32);
+    fn update_caret_uniform(
+        uniform_buffer: &Buffer,
+        queue: &wgpu::Queue,
+        width: u32,
+        height: u32,
+        caret_x: f32,
+        caret_y: f32,
+        caret_w: f32,
+        caret_h: f32,
+    );
     fn caret_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout;
     fn create_caret_uniform_buffer(device: &wgpu::Device) -> wgpu::Buffer;
     fn draw_rect(&self, pass: &mut wgpu::RenderPass, bind_group: wgpu::BindGroup);
 }
 
-impl Caret for RectPipeline {
+impl CaretRenderer for RectPipeline {
     fn caret_bind_group(&self, device: &wgpu::Device, uniform_buffer: &Buffer) -> wgpu::BindGroup {
         let bind_group: wgpu::BindGroup = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Caret Bind Group"),
@@ -106,9 +124,16 @@ impl Caret for RectPipeline {
         bind_group
     }
 
-    fn update_caret_uniform(uniform_buffer: &Buffer, queue: &wgpu::Queue, width: u32, height: u32) {
-        let (caret_x, caret_y): (f32, f32) = (50.0, 30.0);
-        let (caret_w, caret_h): (f32, f32) = (15.0, 30.0);
+    fn update_caret_uniform(
+        uniform_buffer: &Buffer,
+        queue: &wgpu::Queue,
+        width: u32,
+        height: u32,
+        caret_x: f32,
+        caret_y: f32,
+        caret_w: f32,
+        caret_h: f32,
+    ) {
         let (padding_x, padding_y): (f32, f32) = (0.0, 0.0);
         let (screen_w, screen_h): (f32, f32) = (width as f32, height as f32);
         let caret_uniform: [f32; 8] = [

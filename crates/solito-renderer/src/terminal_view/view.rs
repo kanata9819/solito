@@ -12,6 +12,9 @@ pub(crate) struct TerminalView {
 }
 
 impl TerminalView {
+    pub(crate) const PADDING_X: f32 = 10.0;
+    pub(crate) const PADDING_Y: f32 = 10.0;
+
     pub(crate) fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -44,6 +47,27 @@ impl TerminalView {
     pub(crate) fn scroll(&mut self, _x: f32, y: f32) {
         self.viewport.scroll(y, self.row_count());
         self.set_text_to_buffer();
+    }
+
+    pub(crate) fn caret_rect(&mut self) -> (f32, f32, f32, f32) {
+        let row_count: usize = self.row_count();
+        self.viewport.clamp(row_count);
+        let (start, end): (usize, usize) = self.viewport.visible_range(row_count);
+
+        if self.snapshot.cursor_row < start || self.snapshot.cursor_row >= end {
+            return (Self::PADDING_X, Self::PADDING_Y, 0.0, 0.0);
+        }
+
+        let cell_width: f32 =
+            GlyphonResources::measure_font_width(&mut self.glyphs.font_system).max(1.0);
+        let visible_row: usize = self.snapshot.cursor_row - start;
+
+        (
+            Self::PADDING_X + self.snapshot.cursor_col as f32 * cell_width,
+            Self::PADDING_Y + visible_row as f32 * RendererConfig::LINE_HEIGHT,
+            cell_width,
+            RendererConfig::LINE_HEIGHT,
+        )
     }
 
     fn set_text_to_buffer(&mut self) {

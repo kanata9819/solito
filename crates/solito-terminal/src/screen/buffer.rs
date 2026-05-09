@@ -42,6 +42,8 @@ impl ScreenCell {
 #[derive(Clone, Debug, Default)]
 pub struct ScreenSnapshot {
     pub lines: Vec<Vec<ScreenCell>>,
+    pub cursor_row: usize,
+    pub cursor_col: usize,
 }
 
 pub(super) struct ScreenBuffer {
@@ -76,6 +78,8 @@ impl ScreenBuffer {
     pub(super) fn snapshot(&self) -> ScreenSnapshot {
         ScreenSnapshot {
             lines: self.lines.clone(),
+            cursor_row: self.cursor.get_current_row(),
+            cursor_col: self.cursor.get_current_col(),
         }
     }
 

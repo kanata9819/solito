@@ -8,10 +8,7 @@ use wgpu::{
 use winit::{dpi::PhysicalSize, window::Window};
 
 use super::{context::State, gpu::GpuContext};
-use crate::{
-    pass,
-    pipeline::rect::{self, Caret},
-};
+use crate::{pass, pipeline::rect::CaretRenderer, terminal_view::TerminalView};
 
 pub(super) struct WindowSurface {
     pub(super) surface: Surface<'static>,
@@ -73,8 +70,8 @@ impl State {
             &self.terminal_view.glyphs.viewport,
             [TextArea {
                 buffer: &self.terminal_view.glyphs.text_buffer,
-                left: 10.0,
-                top: 10.0,
+                left: TerminalView::PADDING_X,
+                top: TerminalView::PADDING_Y,
                 scale: 1.0,
                 bounds: TextBounds {
                     left: 0,
@@ -165,14 +162,8 @@ impl WindowRenderer for State {
                 .configure(&self.gpu.device, &self.window_surface.config);
             self.window_surface.is_configured = true;
 
-            rect::RectPipeline::update_caret_uniform(
-                &self.render_resources.uniform_buffer,
-                &self.gpu.queue,
-                self.window_surface.window.inner_size().width,
-                self.window_surface.window.inner_size().height,
-            );
-
             self.terminal_view.resize(size.height, snapshot);
+            self.update_caret_uniform();
         }
     }
 
@@ -257,5 +248,6 @@ impl WindowRenderer for State {
 
     fn scroll(&mut self, x: f32, y: f32) {
         self.terminal_view.scroll(x, y);
+        self.update_caret_uniform();
     }
 }

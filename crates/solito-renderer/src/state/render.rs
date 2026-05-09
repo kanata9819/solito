@@ -1,5 +1,5 @@
 use super::{gpu::GpuContext, window::WindowSurface};
-use crate::pipeline::rect::{self, Caret, Rect};
+use crate::pipeline::rect::{self, CaretRenderer, Rect};
 
 pub(super) struct RenderResources {
     pub(super) rect_pipeline: rect::RectPipeline,
