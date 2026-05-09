@@ -171,18 +171,24 @@ fn tab_shortcut_command(
     logical_key: &Key<SmolStr>,
     modifiers: ModifiersState,
 ) -> Option<AppCommand> {
-    if !modifiers.control_key() || !modifiers.shift_key() {
-        return None;
+    if modifiers.control_key() || modifiers.shift_key() {
+        if let Key::Character(character) = &logical_key {
+            if character.eq_ignore_ascii_case("t") {
+                return Some(AppCommand::NewTab);
+            } else if character.eq_ignore_ascii_case("w") {
+                return Some(AppCommand::CloseTab);
+            } else {
+                return None;
+            }
+        }
     }
 
-    let Key::Character(character) = logical_key else {
-        return None;
-    };
-
-    if character.eq_ignore_ascii_case("t") {
-        Some(AppCommand::NewTab)
-    } else if character.eq_ignore_ascii_case("w") {
-        Some(AppCommand::CloseTab)
+    if modifiers.control_key() {
+        if let Key::Named(NamedKey::Tab) = &logical_key {
+            return Some(AppCommand::NextTab);
+        } else {
+            return None;
+        }
     } else {
         None
     }
