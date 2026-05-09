@@ -1,5 +1,4 @@
 use solito_renderer::{RendererConfig, TerminalViewRenderer, WindowRenderer};
-use solito_terminal::TerminalState;
 use std::{
     collections::HashMap,
     error::Error,
@@ -7,6 +6,7 @@ use std::{
 };
 use tracing::error;
 use winit::{
+    dpi::PhysicalSize,
     event::{ElementState, KeyEvent, WindowEvent},
     event_loop::ActiveEventLoop,
     keyboard::{Key, NamedKey, SmolStr},
@@ -15,19 +15,31 @@ use winit::{
 
 use crate::session::runtime::SessionInput;
 
+pub(super) enum AppCommand {
+    None,
+    NewTab,
+    NextTab,
+    PreviousTab,
+    Resize {
+        size: PhysicalSize<u32>,
+        cols: usize,
+        rows: usize,
+    },
+}
+
 pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
     windows: &mut HashMap<WindowId, Arc<Window>>,
     window_id: WindowId,
     state: &mut T,
-    terminal: &mut TerminalState,
     event_loop: &ActiveEventLoop,
     event: WindowEvent,
     input_tx: &Sender<SessionInput>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<AppCommand, Box<dyn Error>> {
     match event {
         WindowEvent::CloseRequested => {
             let _: Option<Arc<Window>> = windows.remove(&window_id);
             event_loop.exit();
+            Ok(AppCommand::None)
         }
         WindowEvent::RedrawRequested => {
             windows[&window_id].set_blur(true);
@@ -38,6 +50,7 @@ pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
             }
 
             state.redraw()?;
+            Ok(AppCommand::None)
         }
         WindowEvent::KeyboardInput {
             event:
@@ -48,45 +61,45 @@ pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
                     ..
                 },
             ..
-        } => handle_key(text, logical_key, key_state, input_tx)?,
+        } => handle_key(text, logical_key, key_state, input_tx),
         WindowEvent::Resized(size) => {
             let (cols, rows): (usize, usize) = state.terminal_size_for(size);
-            terminal.set_width(cols);
-            terminal.set_height(rows);
-            input_tx.send(SessionInput::resize(cols, rows))?;
-            state.resize(size, terminal.snapshot());
+            Ok(AppCommand::Resize { size, cols, rows })
         }
         WindowEvent::MouseWheel {
             device_id: _,
             delta,
             phase: _,
-        } => match delta {
-            winit::event::MouseScrollDelta::LineDelta(x, y) => {
-                tracing::debug!("MouseScrollDelta.LineDelta: x({:?}), y({:?})", x, y);
-                state.scroll(x, y);
+        } => {
+            match delta {
+                winit::event::MouseScrollDelta::LineDelta(x, y) => {
+                    tracing::debug!("MouseScrollDelta.LineDelta: x({:?}), y({:?})", x, y);
+                    state.scroll(x, y);
+                }
+                winit::event::MouseScrollDelta::PixelDelta(pos) => {
+                    tracing::debug!("MouseScrollDelta.PixelDelta: pos({:?})", pos);
+                    state.scroll(
+                        pos.x as f32 / RendererConfig::LINE_HEIGHT,
+                        pos.y as f32 / RendererConfig::LINE_HEIGHT,
+                    );
+                }
             }
-            winit::event::MouseScrollDelta::PixelDelta(pos) => {
-                tracing::debug!("MouseScrollDelta.PixelDelta: pos({:?})", pos);
-                state.scroll(
-                    pos.x as f32 / RendererConfig::LINE_HEIGHT,
-                    pos.y as f32 / RendererConfig::LINE_HEIGHT,
-                );
-            }
-        },
+            Ok(AppCommand::None)
+        }
         #[allow(unused)]
         WindowEvent::CursorMoved {
             device_id,
             position,
-        } => {}
+        } => Ok(AppCommand::None),
         #[allow(unused)]
-        WindowEvent::CursorLeft { device_id } => {}
+        WindowEvent::CursorLeft { device_id } => Ok(AppCommand::None),
         #[allow(unused)]
-        WindowEvent::CursorEntered { device_id } => {}
+        WindowEvent::CursorEntered { device_id } => Ok(AppCommand::None),
         _ => {
             tracing::debug!("unhandled event: {event:?}");
+            Ok(AppCommand::None)
         }
     }
-    Ok(())
 }
 
 fn handle_key(
@@ -94,7 +107,7 @@ fn handle_key(
     logical_key: Key<SmolStr>,
     key_state: ElementState,
     input_tx: &Sender<SessionInput>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<AppCommand, Box<dyn Error>> {
     const ENTER: &[u8; 1] = b"\r";
     const BACKSPACE: &[u8; 1] = b"\x7f";
     const TAB: &[u8; 1] = b"\t";
@@ -105,9 +118,16 @@ fn handle_key(
     const ARROWLEFT: &[u8; 3] = b"\x1b[D";
 
     if key_state == ElementState::Pressed {
+        match &logical_key {
+            Key::Named(NamedKey::F1) => return Ok(AppCommand::NewTab),
+            Key::Named(NamedKey::F2) => return Ok(AppCommand::NextTab),
+            Key::Named(NamedKey::F3) => return Ok(AppCommand::PreviousTab),
+            _ => {}
+        }
+
         if let Some(text) = text {
             input_tx.send(SessionInput::Write(text.as_bytes().to_vec()))?;
-            return Ok(());
+            return Ok(AppCommand::None);
         }
 
         match &logical_key {
@@ -133,5 +153,5 @@ fn handle_key(
         }
     }
 
-    Ok(())
+    Ok(AppCommand::None)
 }
