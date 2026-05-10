@@ -184,7 +184,11 @@ fn tab_shortcut_command(
             None
         }
     } else if modifiers.control_key() {
-        Some(AppCommand::NextTab)
+        if let Key::Named(NamedKey::Tab) = &logical_key {
+            Some(AppCommand::NextTab)
+        } else {
+            None
+        }
     } else {
         None
     }
