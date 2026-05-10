@@ -162,7 +162,7 @@ impl WindowRenderer for State {
                 .configure(&self.gpu.device, &self.window_surface.config);
             self.window_surface.is_configured = true;
 
-            self.terminal_view.resize(size.height, snapshot);
+            self.terminal_view.resize(size.width, size.height, snapshot);
             self.update_caret_uniform();
         }
     }

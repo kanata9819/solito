@@ -32,17 +32,21 @@ impl TerminalView {
     ) -> Self {
         let glyphon: GlyphonResources =
             GlyphonResources::new(device, queue, swapchain, physical_size, scale_factor);
+        let mut glyphs: GlyphResources = GlyphResources::new(glyphon);
+
+        Self::set_text_buffer_size(&mut glyphs, physical_size.width, physical_size.height);
 
         Self {
-            glyphs: GlyphResources::new(glyphon),
+            glyphs,
             snapshot: ScreenSnapshot::default(),
             tab_bar: TabBarSnapshot::default(),
             viewport: ViewportState::new(Self::terminal_content_height(physical_size.height)),
         }
     }
 
-    pub(crate) fn resize(&mut self, height: u32, snapshot: ScreenSnapshot) {
+    pub(crate) fn resize(&mut self, width: u32, height: u32, snapshot: ScreenSnapshot) {
         self.snapshot = snapshot;
+        Self::set_text_buffer_size(&mut self.glyphs, width, height);
         self.viewport
             .resize(Self::terminal_content_height(height), self.row_count());
         self.set_text_to_buffer();
@@ -289,7 +293,9 @@ impl TerminalView {
     pub(crate) fn visible_cols(&mut self, width: u32) -> usize {
         let cell_width: f32 =
             GlyphonResources::measure_font_width(&mut self.glyphs.font_system).max(1.0);
-        ((width as f32 / cell_width).floor() as usize).max(1)
+        let content_width: u32 = Self::terminal_content_width(width);
+
+        ((content_width as f32 / cell_width).floor() as usize).max(1)
     }
 
     pub(crate) fn visible_rows(&self, height: u32) -> usize {
@@ -303,6 +309,23 @@ impl TerminalView {
 
     fn terminal_content_height(height: u32) -> u32 {
         height.saturating_sub(RendererConfig::LINE_HEIGHT.ceil() as u32)
+    }
+
+    fn terminal_content_width(width: u32) -> u32 {
+        let horizontal_padding: u32 = (Self::PADDING_X * 2.0).ceil() as u32;
+
+        width.saturating_sub(horizontal_padding).max(1)
+    }
+
+    fn set_text_buffer_size(glyphs: &mut GlyphResources, width: u32, height: u32) {
+        glyphs.text_buffer.set_size(
+            &mut glyphs.font_system,
+            Some(Self::terminal_content_width(width) as f32),
+            Some(Self::terminal_content_height(height) as f32),
+        );
+        glyphs
+            .text_buffer
+            .shape_until_scroll(&mut glyphs.font_system, false);
     }
 }
 
@@ -380,5 +403,11 @@ mod tests {
     #[test]
     fn visible_rows_reserve_one_row_for_tab_bar() {
         assert_eq!(TerminalView::terminal_content_height(90), 60);
+    }
+
+    #[test]
+    fn terminal_content_width_reserves_horizontal_padding() {
+        assert_eq!(TerminalView::terminal_content_width(100), 80);
+        assert_eq!(TerminalView::terminal_content_width(10), 1);
     }
 }
