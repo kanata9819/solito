@@ -40,8 +40,7 @@ impl State {
     }
 
     pub(crate) fn update_caret_uniform(&mut self) {
-        let (caret_x, caret_y, caret_w, caret_h): (f32, f32, f32, f32) =
-            self.terminal_view.caret_rect();
+        let (caret_x, caret_y, caret_w, caret_h) = self.terminal_view.caret_rect();
         let caret_color: [f32; 4] = self.terminal_view.caret_color();
 
         rect::RectPipeline::update_caret_uniform(

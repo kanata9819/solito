@@ -81,12 +81,16 @@ impl TerminalView {
             GlyphonResources::measure_font_width(&mut self.glyphs.font_system).max(1.0);
         let visible_row: usize = self.snapshot.cursor_row - start;
 
-        (
-            Self::PADDING_X + self.snapshot.cursor_col as f32 * cell_width,
-            Self::terminal_origin_y() + visible_row as f32 * RendererConfig::LINE_HEIGHT,
-            cell_width,
-            RendererConfig::LINE_HEIGHT,
-        )
+        let caret_x: f32 = Self::PADDING_X + self.snapshot.cursor_col as f32 * cell_width;
+        let caret_y: f32 = if self.tab_bar.titles().len() <= 1 {
+            Self::PADDING_Y + visible_row as f32 * RendererConfig::LINE_HEIGHT
+        } else {
+            Self::PADDING_Y
+                + RendererConfig::LINE_HEIGHT
+                + visible_row as f32 * RendererConfig::LINE_HEIGHT
+        };
+
+        (caret_x, caret_y, cell_width, RendererConfig::LINE_HEIGHT)
     }
 
     pub(crate) fn caret_color(&self) -> [f32; 4] {
@@ -141,6 +145,10 @@ impl TerminalView {
     fn tab_bar_spans(tab_bar: &TabBarSnapshot) -> Vec<(String, Attrs<'static>)> {
         let mut spans: Vec<(String, Attrs<'static>)> = Vec::new();
 
+        if tab_bar.titles().len() <= 1 {
+            return spans;
+        }
+
         for (index, title) in tab_bar.titles().iter().enumerate() {
             if index > 0 {
                 spans.push((
@@ -155,6 +163,7 @@ impl TerminalView {
             } else {
                 title.to_string()
             };
+
             let color: [u8; 4] = if active {
                 Self::TAB_ACTIVE_COLOR
             } else {
