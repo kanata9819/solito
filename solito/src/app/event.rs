@@ -123,6 +123,7 @@ fn handle_key(
     const ARROWDOWN: &[u8; 3] = b"\x1b[B";
     const ARROWRIGHT: &[u8; 3] = b"\x1b[C";
     const ARROWLEFT: &[u8; 3] = b"\x1b[D";
+    const EXT: &[u8; 1] = b"\x03";
 
     if key_state == ElementState::Pressed {
         if let Some(command) = tab_shortcut_command(&logical_key, modifiers) {
@@ -149,6 +150,13 @@ fn handle_key(
                 input_tx.send(SessionInput::write(ARROWLEFT.to_vec()))?
             }
             _ => {
+                if let Key::Character(char) = &logical_key {
+                    if char.eq_ignore_ascii_case("c") {
+                        input_tx.send(SessionInput::Write(EXT.to_vec()))?;
+                        return Ok(AppCommand::None);
+                    }
+                }
+
                 if let Some(text) = text {
                     input_tx.send(SessionInput::Write(text.as_bytes().to_vec()))?;
                     return Ok(AppCommand::None);
@@ -164,28 +172,23 @@ fn tab_shortcut_command(
     logical_key: &Key<SmolStr>,
     modifiers: ModifiersState,
 ) -> Option<AppCommand> {
-    if modifiers.control_key()
-        && modifiers.shift_key()
-        && let Key::Character(character) = &logical_key
-    {
-        if character.eq_ignore_ascii_case("t") {
-            return Some(AppCommand::NewTab);
-        } else if character.eq_ignore_ascii_case("w") {
-            return Some(AppCommand::CloseTab);
-        } else {
-            return None;
-        }
-    }
-
-    if modifiers.control_key() && modifiers.shift_key() {
-        if let Key::Named(NamedKey::Tab) = &logical_key {
-            Some(AppCommand::PreviousTab)
-        } else {
-            None
-        }
-    } else if modifiers.control_key() {
-        if let Key::Named(NamedKey::Tab) = &logical_key {
-            Some(AppCommand::NextTab)
+    if let Key::Character(character) = &logical_key {
+        if modifiers.control_key() && modifiers.shift_key() {
+            if character.eq_ignore_ascii_case("t") {
+                return Some(AppCommand::NewTab);
+            } else if character.eq_ignore_ascii_case("w") {
+                return Some(AppCommand::CloseTab);
+            } else if let Key::Named(NamedKey::Tab) = &logical_key {
+                return Some(AppCommand::PreviousTab);
+            } else {
+                return None;
+            }
+        } else if modifiers.control_key() {
+            if let Key::Named(NamedKey::Tab) = &logical_key {
+                Some(AppCommand::NextTab)
+            } else {
+                None
+            }
         } else {
             None
         }
