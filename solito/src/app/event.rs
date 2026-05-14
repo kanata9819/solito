@@ -129,11 +129,6 @@ fn handle_key(
             return Ok(command);
         }
 
-        if let Some(text) = text {
-            input_tx.send(SessionInput::Write(text.as_bytes().to_vec()))?;
-            return Ok(AppCommand::None);
-        }
-
         match &logical_key {
             Key::Named(NamedKey::Enter) => input_tx.send(SessionInput::write(ENTER.to_vec()))?,
             Key::Named(NamedKey::Backspace) => {
@@ -153,7 +148,12 @@ fn handle_key(
             Key::Named(NamedKey::ArrowLeft) => {
                 input_tx.send(SessionInput::write(ARROWLEFT.to_vec()))?
             }
-            _ => {}
+            _ => {
+                if let Some(text) = text {
+                    input_tx.send(SessionInput::Write(text.as_bytes().to_vec()))?;
+                    return Ok(AppCommand::None);
+                }
+            }
         }
     }
 
