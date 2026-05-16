@@ -46,6 +46,7 @@ impl SolitoApplication {
                 WindowAttr::WINDOW_WIDTH,
                 WindowAttr::WINDOW_HIGHT,
             ))
+            .with_transparent(true)
             .with_title("Solito");
 
         let window: Arc<Window> = Arc::new(event_loop.create_window(window_attributes)?);
