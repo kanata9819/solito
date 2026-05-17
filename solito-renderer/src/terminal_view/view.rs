@@ -2,6 +2,7 @@ use ::glyphon::{Attrs, Color, Family, Shaping};
 use solito_terminal::{ScreenCell, ScreenSnapshot};
 
 use crate::RendererConfig;
+use crate::pipeline::rect::RectSpec;
 
 use super::{
     glyph::GlyphonResources, resources::GlyphResources, tab_bar::TabBarSnapshot,
@@ -22,6 +23,14 @@ impl TerminalView {
     const TAB_ACTIVE_COLOR: [u8; 4] = [255, 255, 255, 255];
     const TAB_INACTIVE_COLOR: [u8; 4] = [140, 148, 160, 255];
     const TAB_SEPARATOR_COLOR: [u8; 4] = [80, 88, 100, 255];
+    const TAB_BAR_HEIGHT: f32 = RendererConfig::LINE_HEIGHT;
+    const TAB_TEXT_PADDING: usize = 2;
+    const TAB_GAP_CHARS: usize = 1;
+    const TAB_BAR_BACKGROUND: [f32; 4] = [0.035, 0.051, 0.090, 0.86];
+    const TAB_ACTIVE_BACKGROUND: [f32; 4] = [0.118, 0.161, 0.220, 0.96];
+    const TAB_INACTIVE_BACKGROUND: [f32; 4] = [0.055, 0.075, 0.118, 0.72];
+    const TAB_ACTIVE_UNDERLINE: [f32; 4] = [0.125, 0.827, 0.933, 1.0];
+    const TAB_ACTIVE_TOP_GLOW: [f32; 4] = [0.408, 0.878, 1.0, 0.34];
 
     pub(crate) fn new(
         device: &wgpu::Device,
@@ -100,6 +109,13 @@ impl TerminalView {
             .unwrap_or(Self::DEFAULT_CARET_COLOR)
     }
 
+    pub(crate) fn tab_bar_rects(&mut self, width: u32) -> Vec<RectSpec> {
+        let cell_width: f32 =
+            GlyphonResources::measure_font_width(&mut self.glyphs.font_system).max(1.0);
+
+        Self::tab_bar_rects_for(&self.tab_bar, width, cell_width)
+    }
+
     fn set_text_to_buffer(&mut self) {
         let spans: Vec<(String, Attrs<'static>)> = self.visible_text_spans();
         let attrs: Attrs<'static> = Self::text_attrs(None);
@@ -152,17 +168,13 @@ impl TerminalView {
         for (index, title) in tab_bar.titles().iter().enumerate() {
             if index > 0 {
                 spans.push((
-                    " | ".to_string(),
+                    " ".repeat(Self::TAB_GAP_CHARS),
                     Self::text_attrs(Some(Self::TAB_SEPARATOR_COLOR)),
                 ));
             }
 
             let active: bool = index == tab_bar.active_index();
-            let text: String = if active {
-                format!("[{}]", title)
-            } else {
-                title.to_string()
-            };
+            let text: String = Self::padded_tab_title(title);
 
             let color: [u8; 4] = if active {
                 Self::TAB_ACTIVE_COLOR
@@ -174,6 +186,76 @@ impl TerminalView {
         }
 
         spans
+    }
+
+    fn tab_bar_rects_for(tab_bar: &TabBarSnapshot, width: u32, cell_width: f32) -> Vec<RectSpec> {
+        let mut rects: Vec<RectSpec> = Vec::new();
+
+        if tab_bar.titles().len() <= 1 {
+            return rects;
+        }
+
+        rects.push(RectSpec::new(
+            0.0,
+            0.0,
+            width as f32,
+            Self::terminal_origin_y(),
+            Self::TAB_BAR_BACKGROUND,
+        ));
+
+        let mut x: f32 = Self::PADDING_X;
+        let tab_y: f32 = 6.0;
+        let tab_height: f32 = Self::TAB_BAR_HEIGHT + 2.0;
+
+        for (index, title) in tab_bar.titles().iter().enumerate() {
+            if index > 0 {
+                x += cell_width * Self::TAB_GAP_CHARS as f32;
+            }
+
+            let tab_width: f32 = Self::tab_title_width(title, cell_width);
+            let active: bool = index == tab_bar.active_index();
+            let background: [f32; 4] = if active {
+                Self::TAB_ACTIVE_BACKGROUND
+            } else {
+                Self::TAB_INACTIVE_BACKGROUND
+            };
+
+            rects.push(RectSpec::new(x, tab_y, tab_width, tab_height, background));
+
+            if active {
+                rects.push(RectSpec::new(
+                    x,
+                    tab_y,
+                    tab_width,
+                    1.0,
+                    Self::TAB_ACTIVE_TOP_GLOW,
+                ));
+                rects.push(RectSpec::new(
+                    x,
+                    tab_y + tab_height - 3.0,
+                    tab_width,
+                    3.0,
+                    Self::TAB_ACTIVE_UNDERLINE,
+                ));
+            }
+
+            x += tab_width;
+        }
+
+        rects
+    }
+
+    fn padded_tab_title(title: &str) -> String {
+        format!(
+            "{}{}{}",
+            " ".repeat(Self::TAB_TEXT_PADDING),
+            title,
+            " ".repeat(Self::TAB_TEXT_PADDING)
+        )
+    }
+
+    fn tab_title_width(title: &str, cell_width: f32) -> f32 {
+        Self::padded_tab_title(title).chars().count() as f32 * cell_width
     }
 
     fn text_spans_for_lines(
@@ -313,11 +395,11 @@ impl TerminalView {
     }
 
     fn terminal_origin_y() -> f32 {
-        Self::PADDING_Y + RendererConfig::LINE_HEIGHT
+        Self::PADDING_Y + Self::TAB_BAR_HEIGHT
     }
 
     fn terminal_content_height(height: u32) -> u32 {
-        height.saturating_sub(RendererConfig::LINE_HEIGHT.ceil() as u32)
+        height.saturating_sub(Self::TAB_BAR_HEIGHT.ceil() as u32)
     }
 
     fn terminal_content_width(width: u32) -> u32 {
@@ -403,10 +485,37 @@ mod tests {
             TabBarSnapshot::new(vec!["Tab 1".to_string(), "Tab 2".to_string()], 0);
         let spans = TerminalView::tab_bar_spans(&snapshot);
 
-        assert_eq!(spans[0].0, "[Tab 1]");
+        assert_eq!(spans[0].0, "  Tab 1  ");
         assert_eq!(spans[0].1.color_opt, Some(Color::rgba(255, 255, 255, 255)));
-        assert_eq!(spans[2].0, "Tab 2");
+        assert_eq!(spans[1].0, " ");
+        assert_eq!(spans[2].0, "  Tab 2  ");
         assert_eq!(spans[2].1.color_opt, Some(Color::rgba(140, 148, 160, 255)));
+    }
+
+    #[test]
+    fn tab_bar_rects_include_background_tabs_and_active_accents() {
+        let snapshot: TabBarSnapshot =
+            TabBarSnapshot::new(vec!["Tab 1".to_string(), "Tab 2".to_string()], 0);
+        let rects = TerminalView::tab_bar_rects_for(&snapshot, 220, 10.0);
+
+        assert_eq!(rects.len(), 5);
+        assert_eq!(rects[0].x, 0.0);
+        assert_eq!(rects[0].width, 220.0);
+        assert_eq!(rects[0].height, TerminalView::terminal_origin_y());
+        assert_eq!(rects[1].x, TerminalView::PADDING_X);
+        assert_eq!(rects[1].width, 90.0);
+        assert_eq!(rects[1].color, TerminalView::TAB_ACTIVE_BACKGROUND);
+        assert_eq!(rects[3].height, 3.0);
+        assert_eq!(rects[3].color, TerminalView::TAB_ACTIVE_UNDERLINE);
+        assert_eq!(rects[4].x, 110.0);
+        assert_eq!(rects[4].color, TerminalView::TAB_INACTIVE_BACKGROUND);
+    }
+
+    #[test]
+    fn tab_bar_rects_hide_for_single_tab() {
+        let snapshot: TabBarSnapshot = TabBarSnapshot::new(vec!["Tab 1".to_string()], 0);
+
+        assert!(TerminalView::tab_bar_rects_for(&snapshot, 220, 10.0).is_empty());
     }
 
     #[test]
