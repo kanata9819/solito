@@ -13,9 +13,8 @@ impl RenderResources {
         width: u32,
         height: u32,
     ) -> Self {
-        let uniform_buffer: wgpu::Buffer =
-            rect::RectPipeline::create_screen_uniform_buffer(&gpu.device);
-        let rect_pipeline: rect::RectPipeline = rect::RectPipeline::new(
+        let uniform_buffer = rect::RectPipeline::create_screen_uniform_buffer(&gpu.device);
+        let rect_pipeline = rect::RectPipeline::new(
             &gpu.device,
             window_surface.config.clone(),
             &gpu.queue,

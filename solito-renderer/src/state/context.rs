@@ -27,13 +27,11 @@ impl State {
         let size: PhysicalSize<u32> = window.inner_size();
         let instance: Instance = GpuContext::create_instance();
         let surface: Surface<'_> = instance.create_surface(window.clone())?;
-        let gpu: GpuContext = GpuContext::new(instance, &surface).await?;
-        let window_surface: WindowSurface =
-            WindowSurface::new(window, surface, &gpu, size, &renderer_config);
-        let render_resources: RenderResources =
-            RenderResources::new(&gpu, &window_surface, size.width, size.height);
-        let swapchain_format: TextureFormat = TextureFormat::Bgra8UnormSrgb;
-        let terminal_view: TerminalView = TerminalView::new(
+        let gpu = GpuContext::new(instance, &surface).await?;
+        let window_surface = WindowSurface::new(window, surface, &gpu, size, &renderer_config);
+        let render_resources = RenderResources::new(&gpu, &window_surface, size.width, size.height);
+        let swapchain_format = TextureFormat::Bgra8UnormSrgb;
+        let terminal_view = TerminalView::new(
             &gpu.device,
             &gpu.queue,
             swapchain_format,

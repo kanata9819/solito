@@ -58,17 +58,17 @@ impl SolitoApplication {
             .with_transparent(self.renderer_config.window_backdrop.is_transparent())
             .with_window_icon(icon::window_icon())
             .with_title("Solito");
-        let window_attributes: WindowAttributes =
-            Self::with_platform_window_attributes(window_attributes);
 
-        let window: Arc<Window> = Arc::new(event_loop.create_window(window_attributes)?);
-        let window_id: WindowId = window.id();
-        self.windows.insert(window_id, window.clone());
-        let mut state: State =
-            pollster::block_on(State::new(window, self.renderer_config.clone()))?;
+        let window: Arc<Window> = Arc::new(
+            event_loop.create_window(Self::with_platform_window_attributes(window_attributes))?,
+        );
+        self.windows.insert(window.id(), window.clone());
+
+        let mut state = pollster::block_on(State::new(window, self.renderer_config.clone()))?;
         let (cols, rows): (usize, usize) = state.terminal_size();
         self.tabs
             .open(cols, rows, self.config.shell.program.clone());
+
         state.set_tab_bar(self.tab_bar_snapshot());
 
         if let Some(snapshot) = self.tabs.active_snapshot() {
@@ -83,16 +83,16 @@ impl SolitoApplication {
     }
 
     fn with_platform_window_attributes(window_attributes: WindowAttributes) -> WindowAttributes {
-        cfg_select! {
-            target_os = "windows" => {
+        if cfg!(target_os = "windows") {
+            #[cfg(target_os = "windows")]
+            {
                 use winit::platform::windows::WindowAttributesExtWindows;
 
-                window_attributes.with_taskbar_icon(icon::taskbar_icon())
-            }
-            _ => {
-                window_attributes
+                return window_attributes.with_taskbar_icon(icon::taskbar_icon());
             }
         }
+
+        window_attributes
     }
 
     fn handle_command(
