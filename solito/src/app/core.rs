@@ -58,6 +58,7 @@ impl SolitoApplication {
             .with_transparent(self.renderer_config.window_backdrop.is_transparent())
             .with_window_icon(icon::window_icon())
             .with_title("Solito");
+
         let window_attributes: WindowAttributes =
             Self::with_platform_window_attributes(window_attributes);
 
@@ -69,6 +70,7 @@ impl SolitoApplication {
         let (cols, rows): (usize, usize) = state.terminal_size();
         self.tabs
             .open(cols, rows, self.config.shell.program.clone());
+
         state.set_tab_bar(self.tab_bar_snapshot());
 
         if let Some(snapshot) = self.tabs.active_snapshot() {
