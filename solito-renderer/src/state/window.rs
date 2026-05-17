@@ -106,30 +106,28 @@ impl WindowSurface {
     }
 
     fn apply_platform_acrylic(window: &Window, renderer_config: &RendererConfig) {
-        cfg_select! {
-            target_os = "windows" => {
+        if cfg!(target_os = "windows") {
+            #[cfg(target_os = "windows")]
+            {
                 if !Self::apply_windows_system_acrylic(window) {
-                    Self::apply_windows_accent_acrylic(
-                        window,
-                        renderer_config.window_acrylic_tint,
-                    );
+                    Self::apply_windows_accent_acrylic(window, renderer_config.window_acrylic_tint);
                 }
             }
-            _ => {
-                let _ = (window, renderer_config);
-            }
+        } else {
+            let _ = (window, renderer_config);
         }
     }
 
     fn apply_windows_system_acrylic(window: &Window) -> bool {
-        cfg_select! {
-            target_os = "windows" => {
+        if cfg!(target_os = "windows") {
+            #[cfg(target_os = "windows")]
+            {
                 use std::ffi::c_void;
                 use windows_sys::Win32::{
                     Foundation::HWND,
                     Graphics::Dwm::{
-                        DwmSetWindowAttribute, DWMSBT_TRANSIENTWINDOW, DWMWA_SYSTEMBACKDROP_TYPE,
-                        DWMWA_USE_IMMERSIVE_DARK_MODE,
+                        DWMSBT_TRANSIENTWINDOW, DWMWA_SYSTEMBACKDROP_TYPE,
+                        DWMWA_USE_IMMERSIVE_DARK_MODE, DwmSetWindowAttribute,
                     },
                 };
                 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -168,28 +166,28 @@ impl WindowSurface {
 
                 if hr < 0 {
                     tracing::warn!(hr, "failed to apply DWM system acrylic backdrop");
-                    false
-                } else {
-                    tracing::info!("applied DWM system acrylic backdrop");
-                    true
+                    return false;
                 }
-            }
-            _ => {
-                let _ = window;
-                false
+
+                tracing::info!("applied DWM system acrylic backdrop");
+                return true;
             }
         }
+
+        let _ = window;
+        false
     }
 
     fn apply_windows_accent_acrylic(window: &Window, acrylic_tint: (u8, u8, u8, u8)) {
-        cfg_select! {
-            target_os = "windows" => {
+        if cfg!(target_os = "windows") {
+            #[cfg(target_os = "windows")]
+            {
                 use std::ffi::c_void;
-                use windows_sys::core::{BOOL, PCSTR};
                 use windows_sys::Win32::{
                     Foundation::HWND,
                     System::LibraryLoader::{GetProcAddress, LoadLibraryA},
                 };
+                use windows_sys::core::{BOOL, PCSTR};
                 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
                 #[repr(C)]
@@ -227,9 +225,9 @@ impl WindowSurface {
                     return;
                 }
 
-                let Some(function) =
-                    (unsafe { GetProcAddress(user32, c"SetWindowCompositionAttribute".as_ptr() as PCSTR) })
-                else {
+                let Some(function) = (unsafe {
+                    GetProcAddress(user32, c"SetWindowCompositionAttribute".as_ptr() as PCSTR)
+                }) else {
                     tracing::warn!("SetWindowCompositionAttribute is unavailable");
                     return;
                 };
@@ -257,16 +255,14 @@ impl WindowSurface {
                     size_of_data: std::mem::size_of::<AccentPolicy>(),
                 };
 
-                if unsafe {
-                    set_window_composition_attribute(handle.hwnd.get() as HWND, &mut data)
-                } == 0
+                if unsafe { set_window_composition_attribute(handle.hwnd.get() as HWND, &mut data) }
+                    == 0
                 {
                     tracing::warn!("failed to apply accent acrylic window backdrop");
                 }
             }
-            _ => {
-                let _ = (window, acrylic_tint);
-            }
+        } else {
+            let _ = (window, acrylic_tint);
         }
     }
 }

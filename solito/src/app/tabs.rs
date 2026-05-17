@@ -25,14 +25,12 @@ pub(super) struct Tab {
 
 impl Tab {
     fn spawn(cols: usize, rows: usize, shell_program: String) -> Self {
-        let (input_tx, input_rx): (Sender<SessionInput>, Receiver<SessionInput>) =
-            channel::<SessionInput>();
-        let (output_tx, output_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel::<Vec<u8>>();
+        let (input_tx, input_rx) = channel::<SessionInput>();
+        let (output_tx, output_rx) = channel::<Vec<u8>>();
         let title: String = tab_title_for_program(&shell_program);
 
         std::thread::spawn(move || {
-            let runtime: SessionRuntime =
-                SessionRuntime::new(input_rx, output_tx, cols, rows, shell_program);
+            let runtime = SessionRuntime::new(input_rx, output_tx, cols, rows, shell_program);
             if let Err(err) = runtime.run_session() {
                 error!("run session failed: {}", err);
             };

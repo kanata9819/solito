@@ -65,7 +65,6 @@ impl SolitoApplication {
         self.windows.insert(window.id(), window.clone());
 
         let mut state = pollster::block_on(State::new(window, self.renderer_config.clone()))?;
-
         let (cols, rows): (usize, usize) = state.terminal_size();
         self.tabs
             .open(cols, rows, self.config.shell.program.clone());
@@ -84,16 +83,16 @@ impl SolitoApplication {
     }
 
     fn with_platform_window_attributes(window_attributes: WindowAttributes) -> WindowAttributes {
-        cfg_select! {
-            target_os = "windows" => {
+        if cfg!(target_os = "windows") {
+            #[cfg(target_os = "windows")]
+            {
                 use winit::platform::windows::WindowAttributesExtWindows;
 
-                window_attributes.with_taskbar_icon(icon::taskbar_icon())
-            }
-            _ => {
-                window_attributes
+                return window_attributes.with_taskbar_icon(icon::taskbar_icon());
             }
         }
+
+        window_attributes
     }
 
     fn handle_command(

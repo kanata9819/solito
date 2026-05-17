@@ -40,7 +40,7 @@ pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
 ) -> Result<AppCommand, Box<dyn Error>> {
     match event {
         WindowEvent::CloseRequested => {
-            let _: Option<Arc<Window>> = windows.remove(&window_id);
+            windows.remove(&window_id);
             event_loop.exit();
             Ok(AppCommand::None)
         }
