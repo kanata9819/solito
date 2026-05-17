@@ -14,16 +14,29 @@ pub(crate) struct RectSpec {
     pub(crate) width: f32,
     pub(crate) height: f32,
     pub(crate) color: [f32; 4],
+    pub(crate) slant: f32,
 }
 
 impl RectSpec {
     pub(crate) fn new(x: f32, y: f32, width: f32, height: f32, color: [f32; 4]) -> Self {
+        Self::slanted(x, y, width, height, color, 0.0)
+    }
+
+    pub(crate) fn slanted(
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        color: [f32; 4],
+        slant: f32,
+    ) -> Self {
         Self {
             x,
             y,
             width,
             height,
             color,
+            slant,
         }
     }
 }
@@ -34,6 +47,8 @@ struct RectInstance {
     pos: [f32; 2],
     size: [f32; 2],
     color: [f32; 4],
+    slant: f32,
+    _pad: [f32; 3],
 }
 
 impl From<RectSpec> for RectInstance {
@@ -42,6 +57,8 @@ impl From<RectSpec> for RectInstance {
             pos: [rect.x, rect.y],
             size: [rect.width, rect.height],
             color: rect.color,
+            slant: rect.slant,
+            _pad: [0.0; 3],
         }
     }
 }
@@ -57,8 +74,8 @@ pub(crate) trait Rect {
     ) -> Self;
 }
 
-const RECT_INSTANCE_ATTRIBUTES: [wgpu::VertexAttribute; 3] =
-    wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32x4];
+const RECT_INSTANCE_ATTRIBUTES: [wgpu::VertexAttribute; 4] =
+    wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32x4, 3 => Float32];
 
 impl Rect for RectPipeline {
     fn new(

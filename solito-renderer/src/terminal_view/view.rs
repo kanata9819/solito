@@ -26,7 +26,7 @@ impl TerminalView {
     const TAB_BAR_HEIGHT: f32 = RendererConfig::LINE_HEIGHT;
     const TAB_TEXT_PADDING: usize = 2;
     const TAB_GAP_CHARS: usize = 1;
-    const TAB_BAR_BACKGROUND: [f32; 4] = [0.035, 0.051, 0.090, 0.86];
+    const TAB_SLANT: f32 = 10.0;
     const TAB_ACTIVE_BACKGROUND: [f32; 4] = [0.118, 0.161, 0.220, 0.96];
     const TAB_INACTIVE_BACKGROUND: [f32; 4] = [0.055, 0.075, 0.118, 0.72];
     const TAB_ACTIVE_UNDERLINE: [f32; 4] = [0.125, 0.827, 0.933, 1.0];
@@ -188,20 +188,12 @@ impl TerminalView {
         spans
     }
 
-    fn tab_bar_rects_for(tab_bar: &TabBarSnapshot, width: u32, cell_width: f32) -> Vec<RectSpec> {
+    fn tab_bar_rects_for(tab_bar: &TabBarSnapshot, _width: u32, cell_width: f32) -> Vec<RectSpec> {
         let mut rects: Vec<RectSpec> = Vec::new();
 
         if tab_bar.titles().len() <= 1 {
             return rects;
         }
-
-        rects.push(RectSpec::new(
-            0.0,
-            0.0,
-            width as f32,
-            Self::terminal_origin_y(),
-            Self::TAB_BAR_BACKGROUND,
-        ));
 
         let mut x: f32 = Self::PADDING_X;
         let tab_y: f32 = 6.0;
@@ -209,10 +201,11 @@ impl TerminalView {
 
         for (index, title) in tab_bar.titles().iter().enumerate() {
             if index > 0 {
-                x += cell_width * Self::TAB_GAP_CHARS as f32;
+                x += cell_width * Self::TAB_GAP_CHARS as f32 + Self::TAB_SLANT;
             }
 
             let tab_width: f32 = Self::tab_title_width(title, cell_width);
+            let slanted_width: f32 = tab_width + Self::TAB_SLANT;
             let active: bool = index == tab_bar.active_index();
             let background: [f32; 4] = if active {
                 Self::TAB_ACTIVE_BACKGROUND
@@ -220,26 +213,35 @@ impl TerminalView {
                 Self::TAB_INACTIVE_BACKGROUND
             };
 
-            rects.push(RectSpec::new(x, tab_y, tab_width, tab_height, background));
+            rects.push(RectSpec::slanted(
+                x,
+                tab_y,
+                slanted_width,
+                tab_height,
+                background,
+                Self::TAB_SLANT,
+            ));
 
             if active {
-                rects.push(RectSpec::new(
+                rects.push(RectSpec::slanted(
                     x,
                     tab_y,
-                    tab_width,
+                    slanted_width,
                     1.0,
                     Self::TAB_ACTIVE_TOP_GLOW,
+                    Self::TAB_SLANT,
                 ));
-                rects.push(RectSpec::new(
+                rects.push(RectSpec::slanted(
                     x,
                     tab_y + tab_height - 3.0,
-                    tab_width,
+                    slanted_width,
                     3.0,
                     Self::TAB_ACTIVE_UNDERLINE,
+                    Self::TAB_SLANT,
                 ));
             }
 
-            x += tab_width;
+            x += slanted_width;
         }
 
         rects
@@ -498,17 +500,16 @@ mod tests {
             TabBarSnapshot::new(vec!["Tab 1".to_string(), "Tab 2".to_string()], 0);
         let rects = TerminalView::tab_bar_rects_for(&snapshot, 220, 10.0);
 
-        assert_eq!(rects.len(), 5);
-        assert_eq!(rects[0].x, 0.0);
-        assert_eq!(rects[0].width, 220.0);
-        assert_eq!(rects[0].height, TerminalView::terminal_origin_y());
-        assert_eq!(rects[1].x, TerminalView::PADDING_X);
-        assert_eq!(rects[1].width, 90.0);
-        assert_eq!(rects[1].color, TerminalView::TAB_ACTIVE_BACKGROUND);
-        assert_eq!(rects[3].height, 3.0);
-        assert_eq!(rects[3].color, TerminalView::TAB_ACTIVE_UNDERLINE);
-        assert_eq!(rects[4].x, 110.0);
-        assert_eq!(rects[4].color, TerminalView::TAB_INACTIVE_BACKGROUND);
+        assert_eq!(rects.len(), 4);
+        assert_eq!(rects[0].x, TerminalView::PADDING_X);
+        assert_eq!(rects[0].width, 100.0);
+        assert_eq!(rects[0].height, TerminalView::TAB_BAR_HEIGHT + 2.0);
+        assert_eq!(rects[0].color, TerminalView::TAB_ACTIVE_BACKGROUND);
+        assert_eq!(rects[0].slant, TerminalView::TAB_SLANT);
+        assert_eq!(rects[2].height, 3.0);
+        assert_eq!(rects[2].color, TerminalView::TAB_ACTIVE_UNDERLINE);
+        assert_eq!(rects[3].x, 130.0);
+        assert_eq!(rects[3].color, TerminalView::TAB_INACTIVE_BACKGROUND);
     }
 
     #[test]
