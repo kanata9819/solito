@@ -148,7 +148,10 @@ fn handle_key(
                 input_tx.send(SessionInput::write(ARROWLEFT.to_vec()))?
             }
             _ => {
-                if let Key::Character(char) = &logical_key {
+                // Ctrl + c
+                if let Key::Character(char) = &logical_key
+                    && modifiers.control_key()
+                {
                     if char.eq_ignore_ascii_case("c") {
                         input_tx.send(SessionInput::Write(EXT.to_vec()))?;
                         return Ok(AppCommand::None);

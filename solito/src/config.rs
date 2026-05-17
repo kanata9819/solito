@@ -8,6 +8,6 @@ impl TracingFilter {
 
 pub(crate) struct WindowAttr;
 impl WindowAttr {
-    pub(crate) const WINDOW_WIDTH: f32 = 900.0;
+    pub(crate) const WINDOW_WIDTH: f32 = 1000.0;
     pub(crate) const WINDOW_HIGHT: f32 = 650.0;
 }
