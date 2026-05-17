@@ -27,6 +27,8 @@ impl TerminalView {
     const TAB_TEXT_PADDING: usize = 2;
     const TAB_GAP_CHARS: usize = 1;
     const TAB_SLANT: f32 = 10.0;
+    const TAB_TOP_GLOW_HEIGHT: f32 = 1.0;
+    const TAB_UNDERLINE_HEIGHT: f32 = 3.0;
     const TAB_ACTIVE_BACKGROUND: [f32; 4] = [0.118, 0.161, 0.220, 0.96];
     const TAB_INACTIVE_BACKGROUND: [f32; 4] = [0.055, 0.075, 0.118, 0.72];
     const TAB_ACTIVE_UNDERLINE: [f32; 4] = [0.125, 0.827, 0.933, 1.0];
@@ -223,21 +225,23 @@ impl TerminalView {
             ));
 
             if active {
-                rects.push(RectSpec::slanted(
+                rects.push(Self::tab_strip_rect(
                     x,
                     tab_y,
+                    tab_height,
+                    0.0,
+                    Self::TAB_TOP_GLOW_HEIGHT,
                     slanted_width,
-                    1.0,
                     Self::TAB_ACTIVE_TOP_GLOW,
-                    Self::TAB_SLANT,
                 ));
-                rects.push(RectSpec::slanted(
+                rects.push(Self::tab_strip_rect(
                     x,
-                    tab_y + tab_height - 3.0,
+                    tab_y,
+                    tab_height,
+                    tab_height - Self::TAB_UNDERLINE_HEIGHT,
+                    Self::TAB_UNDERLINE_HEIGHT,
                     slanted_width,
-                    3.0,
                     Self::TAB_ACTIVE_UNDERLINE,
-                    Self::TAB_SLANT,
                 ));
             }
 
@@ -245,6 +249,28 @@ impl TerminalView {
         }
 
         rects
+    }
+
+    fn tab_strip_rect(
+        tab_x: f32,
+        tab_y: f32,
+        tab_height: f32,
+        strip_y: f32,
+        strip_height: f32,
+        width: f32,
+        color: [f32; 4],
+    ) -> RectSpec {
+        let bottom_slant: f32 = Self::TAB_SLANT * (1.0 - (strip_y + strip_height) / tab_height);
+        let strip_slant: f32 = Self::TAB_SLANT * strip_height / tab_height;
+
+        RectSpec::slanted(
+            tab_x + bottom_slant,
+            tab_y + strip_y,
+            width,
+            strip_height,
+            color,
+            strip_slant,
+        )
     }
 
     fn padded_tab_title(title: &str) -> String {
@@ -506,8 +532,12 @@ mod tests {
         assert_eq!(rects[0].height, TerminalView::TAB_BAR_HEIGHT + 2.0);
         assert_eq!(rects[0].color, TerminalView::TAB_ACTIVE_BACKGROUND);
         assert_eq!(rects[0].slant, TerminalView::TAB_SLANT);
-        assert_eq!(rects[2].height, 3.0);
+        assert_eq!(rects[2].height, TerminalView::TAB_UNDERLINE_HEIGHT);
         assert_eq!(rects[2].color, TerminalView::TAB_ACTIVE_UNDERLINE);
+        assert_eq!(
+            rects[2].slant,
+            TerminalView::TAB_SLANT * TerminalView::TAB_UNDERLINE_HEIGHT / rects[0].height
+        );
         assert_eq!(rects[3].x, 130.0);
         assert_eq!(rects[3].color, TerminalView::TAB_INACTIVE_BACKGROUND);
     }
