@@ -1,4 +1,6 @@
-use solito_renderer::{State, TabBarSnapshot, TerminalViewRenderer, WindowRenderer};
+use solito_renderer::{
+    RendererConfig, State, TabBarSnapshot, TerminalViewRenderer, WindowRenderer,
+};
 use std::{collections::HashMap, error::Error, sync::Arc};
 
 use crate::app::event as AppEvent;
@@ -46,7 +48,7 @@ impl SolitoApplication {
                 WindowAttr::WINDOW_WIDTH,
                 WindowAttr::WINDOW_HIGHT,
             ))
-            .with_transparent(true)
+            .with_transparent(RendererConfig::WINDOW_BACKDROP.is_transparent())
             .with_title("Solito");
 
         let window: Arc<Window> = Arc::new(event_loop.create_window(window_attributes)?);

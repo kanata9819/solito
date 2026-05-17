@@ -44,8 +44,6 @@ pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
             Ok(AppCommand::None)
         }
         WindowEvent::RedrawRequested => {
-            windows[&window_id].set_blur(true);
-
             if let Err(e) = state.render() {
                 error!("{e}");
                 event_loop.exit();
@@ -172,23 +170,20 @@ fn tab_shortcut_command(
     logical_key: &Key<SmolStr>,
     modifiers: ModifiersState,
 ) -> Option<AppCommand> {
-    if let Key::Character(character) = &logical_key {
-        if modifiers.control_key() && modifiers.shift_key() {
-            if character.eq_ignore_ascii_case("t") {
-                return Some(AppCommand::NewTab);
-            } else if character.eq_ignore_ascii_case("w") {
-                return Some(AppCommand::CloseTab);
-            } else if let Key::Named(NamedKey::Tab) = &logical_key {
-                return Some(AppCommand::PreviousTab);
-            } else {
-                return None;
+    if modifiers.control_key() && modifiers.shift_key() {
+        match logical_key {
+            Key::Character(character) if character.eq_ignore_ascii_case("t") => {
+                Some(AppCommand::NewTab)
             }
-        } else if modifiers.control_key() {
-            if let Key::Named(NamedKey::Tab) = &logical_key {
-                Some(AppCommand::NextTab)
-            } else {
-                None
+            Key::Character(character) if character.eq_ignore_ascii_case("w") => {
+                Some(AppCommand::CloseTab)
             }
+            Key::Named(NamedKey::Tab) => Some(AppCommand::PreviousTab),
+            _ => None,
+        }
+    } else if modifiers.control_key() {
+        if let Key::Named(NamedKey::Tab) = logical_key {
+            Some(AppCommand::NextTab)
         } else {
             None
         }

@@ -81,7 +81,7 @@ impl WindowSurface {
     }
 
     fn clear_color(_alpha_mode: wgpu::CompositeAlphaMode) -> wgpu::Color {
-        if config::RendererConfig::WINDOW_ACRYLIC {
+        if config::RendererConfig::WINDOW_BACKDROP.is_transparent() {
             wgpu::Color::TRANSPARENT
         } else {
             wgpu::Color::BLACK
@@ -89,107 +89,83 @@ impl WindowSurface {
     }
 
     fn apply_window_effects(window: &Window) {
-        if config::RendererConfig::WINDOW_ACRYLIC {
-            Self::apply_platform_layered_opacity(window);
-            Self::apply_platform_transparent_composition(window);
-            Self::apply_platform_acrylic(window);
-        }
-    }
-
-    fn apply_platform_layered_opacity(window: &Window) {
-        cfg_select! {
-            target_os = "windows" => {
-                use windows_sys::Win32::{
-                    Foundation::HWND,
-                    UI::WindowsAndMessaging::{
-                        GWL_EXSTYLE, GetWindowLongPtrW, LWA_ALPHA, SetLayeredWindowAttributes,
-                        SetWindowLongPtrW, WS_EX_LAYERED,
-                    },
-                };
-                use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
-
-                let Ok(handle) = window.window_handle() else {
-                    tracing::warn!("failed to get window handle for opacity");
-                    return;
-                };
-                let RawWindowHandle::Win32(handle) = handle.as_raw() else {
-                    return;
-                };
-
-                let hwnd: HWND = handle.hwnd.get() as HWND;
-                unsafe {
-                    let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-                    SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED as isize);
-                    if SetLayeredWindowAttributes(
-                        hwnd,
-                        0,
-                        config::RendererConfig::WINDOW_OPACITY,
-                        LWA_ALPHA,
-                    ) == 0
-                    {
-                        tracing::warn!("failed to apply layered window opacity");
-                    }
-                }
+        match config::RendererConfig::WINDOW_BACKDROP {
+            config::WindowBackdrop::None | config::WindowBackdrop::Transparent => {}
+            config::WindowBackdrop::Acrylic => {
+                Self::apply_platform_acrylic(window);
             }
-            _ => {
-                let _ = window;
-            }
-        }
-    }
-
-    fn apply_platform_transparent_composition(window: &Window) {
-        cfg_select! {
-            target_os = "windows" => {
-                use windows_sys::Win32::{
-                    Foundation::HWND,
-                    Graphics::{
-                        Dwm::{
-                            DwmEnableBlurBehindWindow, DWM_BB_BLURREGION, DWM_BB_ENABLE,
-                            DWM_BLURBEHIND,
-                        },
-                        Gdi::{CreateRectRgn, DeleteObject, HGDIOBJ},
-                    },
-                };
-                use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
-
-                let Ok(handle) = window.window_handle() else {
-                    tracing::warn!("failed to get window handle for composition");
-                    return;
-                };
-                let RawWindowHandle::Win32(handle) = handle.as_raw() else {
-                    return;
-                };
-
-                let hwnd: HWND = handle.hwnd.get() as HWND;
-                let region = unsafe { CreateRectRgn(0, 0, -1, -1) };
-                let blur = DWM_BLURBEHIND {
-                    dwFlags: DWM_BB_ENABLE | DWM_BB_BLURREGION,
-                    fEnable: 1,
-                    hRgnBlur: region,
-                    fTransitionOnMaximized: 0,
-                };
-
-                let hr = unsafe { DwmEnableBlurBehindWindow(hwnd, &blur) };
-                if hr < 0 {
-                    tracing::warn!(hr, "failed to enable transparent DWM composition");
-                }
-                unsafe {
-                    DeleteObject(region as HGDIOBJ);
-                }
-            }
-            _ => {
-                let _ = window;
-            }
-        }
+        };
     }
 
     fn apply_platform_acrylic(window: &Window) {
         cfg_select! {
             target_os = "windows" => {
-                Self::apply_windows_accent_acrylic(window);
+                if !Self::apply_windows_system_acrylic(window) {
+                    Self::apply_windows_accent_acrylic(window);
+                }
             }
             _ => {
                 let _ = window;
+            }
+        }
+    }
+
+    fn apply_windows_system_acrylic(window: &Window) -> bool {
+        cfg_select! {
+            target_os = "windows" => {
+                use std::ffi::c_void;
+                use windows_sys::Win32::{
+                    Foundation::HWND,
+                    Graphics::Dwm::{
+                        DwmSetWindowAttribute, DWMSBT_TRANSIENTWINDOW, DWMWA_SYSTEMBACKDROP_TYPE,
+                        DWMWA_USE_IMMERSIVE_DARK_MODE,
+                    },
+                };
+                use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+                let Ok(handle) = window.window_handle() else {
+                    tracing::warn!("failed to get window handle for system acrylic");
+                    return false;
+                };
+                let RawWindowHandle::Win32(handle) = handle.as_raw() else {
+                    return false;
+                };
+
+                let hwnd: HWND = handle.hwnd.get() as HWND;
+                let dark_mode: i32 = 1;
+                let dark_hr = unsafe {
+                    DwmSetWindowAttribute(
+                        hwnd,
+                        DWMWA_USE_IMMERSIVE_DARK_MODE as u32,
+                        &dark_mode as *const _ as *const c_void,
+                        std::mem::size_of_val(&dark_mode) as u32,
+                    )
+                };
+                if dark_hr < 0 {
+                    tracing::debug!(hr = dark_hr, "failed to apply immersive dark mode");
+                }
+
+                let backdrop = DWMSBT_TRANSIENTWINDOW;
+                let hr = unsafe {
+                    DwmSetWindowAttribute(
+                        hwnd,
+                        DWMWA_SYSTEMBACKDROP_TYPE as u32,
+                        &backdrop as *const _ as *const c_void,
+                        std::mem::size_of_val(&backdrop) as u32,
+                    )
+                };
+
+                if hr < 0 {
+                    tracing::warn!(hr, "failed to apply DWM system acrylic backdrop");
+                    false
+                } else {
+                    tracing::info!("applied DWM system acrylic backdrop");
+                    true
+                }
+            }
+            _ => {
+                let _ = window;
+                false
             }
         }
     }
@@ -257,7 +233,7 @@ impl WindowSurface {
 
                 let mut policy: AccentPolicy = AccentPolicy {
                     accent_state: ACCENT_ENABLE_ACRYLICBLURBEHIND,
-                    accent_flags: 2,
+                    accent_flags: 0,
                     gradient_color: r as u32
                         | ((g as u32) << 8)
                         | ((b as u32) << 16)
