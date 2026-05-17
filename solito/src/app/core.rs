@@ -5,6 +5,7 @@ use std::{collections::HashMap, error::Error, sync::Arc};
 
 use crate::app::event as AppEvent;
 use crate::app::event::AppCommand;
+use crate::app::icon;
 use crate::app::tabs::AppTabs;
 use crate::config::WindowAttr;
 use tracing::error;
@@ -16,6 +17,9 @@ use winit::{
     keyboard::ModifiersState,
     window::{Window, WindowAttributes, WindowId},
 };
+
+#[cfg(target_os = "windows")]
+use winit::platform::windows::WindowAttributesExtWindows;
 
 pub(crate) struct SolitoApplication {
     windows: HashMap<WindowId, Arc<Window>>,
@@ -49,7 +53,11 @@ impl SolitoApplication {
                 WindowAttr::WINDOW_HIGHT,
             ))
             .with_transparent(RendererConfig::WINDOW_BACKDROP.is_transparent())
+            .with_window_icon(icon::window_icon())
             .with_title("Solito");
+        #[cfg(target_os = "windows")]
+        let window_attributes: WindowAttributes =
+            window_attributes.with_taskbar_icon(icon::taskbar_icon());
 
         let window: Arc<Window> = Arc::new(event_loop.create_window(window_attributes)?);
         let window_id: WindowId = window.id();
