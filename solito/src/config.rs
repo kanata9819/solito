@@ -224,9 +224,9 @@ impl AppPaths {
     fn resolve() -> Result<Self, Box<dyn Error>> {
         let base_dirs: BaseDirs =
             BaseDirs::new().ok_or("failed to resolve user directories for config")?;
-        let config_dir: PathBuf = base_dirs.config_dir().join(APP_DIR_NAME);
+        let config_dir: PathBuf = base_dirs.data_local_dir().join(APP_DIR_NAME);
         let config_file: PathBuf = config_dir.join("config.toml");
-        let state_dir: PathBuf = base_dirs.data_local_dir().join(APP_DIR_NAME);
+        let state_dir: PathBuf = config_dir.clone();
 
         Ok(Self {
             config_dir,
