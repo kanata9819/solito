@@ -18,9 +18,6 @@ use winit::{
     window::{Window, WindowAttributes, WindowId},
 };
 
-#[cfg(target_os = "windows")]
-use winit::platform::windows::WindowAttributesExtWindows;
-
 pub(crate) struct SolitoApplication {
     windows: HashMap<WindowId, Arc<Window>>,
     state: Option<State>,
@@ -55,9 +52,8 @@ impl SolitoApplication {
             .with_transparent(RendererConfig::WINDOW_BACKDROP.is_transparent())
             .with_window_icon(icon::window_icon())
             .with_title("Solito");
-        #[cfg(target_os = "windows")]
         let window_attributes: WindowAttributes =
-            window_attributes.with_taskbar_icon(icon::taskbar_icon());
+            Self::with_platform_window_attributes(window_attributes);
 
         let window: Arc<Window> = Arc::new(event_loop.create_window(window_attributes)?);
         let window_id: WindowId = window.id();
@@ -76,6 +72,19 @@ impl SolitoApplication {
         self.drain_output()?;
 
         Ok(())
+    }
+
+    fn with_platform_window_attributes(window_attributes: WindowAttributes) -> WindowAttributes {
+        cfg_select! {
+            target_os = "windows" => {
+                use winit::platform::windows::WindowAttributesExtWindows;
+
+                window_attributes.with_taskbar_icon(icon::taskbar_icon())
+            }
+            _ => {
+                window_attributes
+            }
+        }
     }
 
     fn handle_command(
