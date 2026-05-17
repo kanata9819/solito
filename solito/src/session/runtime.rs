@@ -41,6 +41,8 @@ impl SessionInput {
 }
 
 impl SessionRuntime {
+    pub(crate) const PROCESS_NAME: &str = "nu";
+
     pub(crate) fn new(
         input_rx: Receiver<SessionInput>,
         output_tx: Sender<Vec<u8>>,
@@ -85,7 +87,7 @@ impl SessionRuntime {
     }
 
     fn spawn_command(slave: TSlave) -> TChild {
-        let cmd: CommandBuilder = CommandBuilder::new("nu");
+        let cmd: CommandBuilder = CommandBuilder::new(Self::PROCESS_NAME);
         let slave: TSlave = slave;
         let child: TChild = slave.spawn_command(cmd).expect("failed to spawn command");
 

@@ -10,6 +10,7 @@ use crate::session::runtime::{SessionInput, SessionRuntime};
 pub(super) trait TerminalTab {
     fn input_tx(&self) -> &Sender<SessionInput>;
     fn snapshot(&self) -> ScreenSnapshot;
+    fn title(&self) -> &str;
     fn drain_output(&mut self) -> bool;
     fn resize(&mut self, cols: usize, rows: usize) -> Result<(), Box<dyn Error>>;
 }
@@ -18,6 +19,7 @@ pub(super) struct Tab {
     terminal: TerminalState,
     input_tx: Sender<SessionInput>,
     output_rx: Receiver<Vec<u8>>,
+    title: &'static str,
 }
 
 impl Tab {
@@ -37,6 +39,7 @@ impl Tab {
             terminal: TerminalState::new(cols, rows),
             input_tx,
             output_rx,
+            title: SessionRuntime::PROCESS_NAME,
         }
     }
 }
@@ -48,6 +51,10 @@ impl TerminalTab for Tab {
 
     fn snapshot(&self) -> ScreenSnapshot {
         self.terminal.snapshot()
+    }
+
+    fn title(&self) -> &str {
+        self.title
     }
 
     fn drain_output(&mut self) -> bool {
@@ -124,8 +131,9 @@ impl<T: TerminalTab> Tabs<T> {
     }
 
     pub(super) fn titles(&self) -> Vec<String> {
-        (0..self.tabs.len())
-            .map(|index| format!("Tab {}", index + 1))
+        self.tabs
+            .iter()
+            .map(|tab| tab.title().to_string())
             .collect()
     }
 
@@ -212,6 +220,10 @@ mod tests {
             ScreenSnapshot::default()
         }
 
+        fn title(&self) -> &str {
+            "fake"
+        }
+
         fn drain_output(&mut self) -> bool {
             false
         }
@@ -244,10 +256,7 @@ mod tests {
         assert_eq!(tabs.active, 2);
         assert!(tabs.close_active());
         assert_eq!(tabs.active, 1);
-        assert_eq!(
-            tabs.titles(),
-            vec!["Tab 1".to_string(), "Tab 2".to_string()]
-        );
+        assert_eq!(tabs.titles(), vec!["fake".to_string(), "fake".to_string()]);
     }
 
     #[test]

@@ -8,7 +8,11 @@ use wgpu::{
 use winit::{dpi::PhysicalSize, window::Window};
 
 use super::{context::State, gpu::GpuContext};
-use crate::{config, pass, pipeline::rect::CaretRenderer, terminal_view::TerminalView};
+use crate::{
+    config, pass,
+    pipeline::rect::{self, RectRenderer},
+    terminal_view::TerminalView,
+};
 
 pub(super) struct WindowSurface {
     pub(super) surface: Surface<'static>,
@@ -299,17 +303,41 @@ impl State {
         encoder: &mut CommandEncoder,
         view: TextureView,
     ) -> Result<(), Box<dyn Error>> {
+        self.update_rect_screen_uniform();
+
+        let mut rects: Vec<rect::RectSpec> = self
+            .terminal_view
+            .tab_bar_rects(self.window_surface.config.width);
+        let (caret_x, caret_y, caret_w, caret_h) = self.terminal_view.caret_rect();
+
+        if caret_w > 0.0 && caret_h > 0.0 {
+            rects.push(rect::RectSpec::new(
+                caret_x,
+                caret_y,
+                caret_w,
+                caret_h,
+                self.terminal_view.caret_color(),
+            ));
+        }
+
+        let rect_instance_buffer: Option<wgpu::Buffer> =
+            rect::RectPipeline::create_instance_buffer(&self.gpu.device, &rects);
+        let rect_bind_group: wgpu::BindGroup = self
+            .render_resources
+            .rect_pipeline
+            .rect_bind_group(&self.gpu.device, &self.render_resources.uniform_buffer);
+
         let mut pass: wgpu::RenderPass<'_> =
             pass::begin_render_pass(encoder, &view, self.window_surface.clear_color);
 
-        let bind_group: wgpu::BindGroup = self
-            .render_resources
-            .rect_pipeline
-            .caret_bind_group(&self.gpu.device, &self.render_resources.uniform_buffer);
-
-        self.render_resources
-            .rect_pipeline
-            .draw_rect(&mut pass, bind_group);
+        if let Some(rect_instance_buffer) = rect_instance_buffer.as_ref() {
+            self.render_resources.rect_pipeline.draw_rects(
+                &mut pass,
+                rect_bind_group,
+                rect_instance_buffer,
+                rects.len(),
+            );
+        }
 
         self.terminal_view.glyphs.text_renderer.render(
             &self.terminal_view.glyphs.atlas,
@@ -371,7 +399,7 @@ impl WindowRenderer for State {
             self.window_surface.is_configured = true;
 
             self.terminal_view.resize(size.width, size.height, snapshot);
-            self.update_caret_uniform();
+            self.update_rect_screen_uniform();
         }
     }
 
@@ -456,6 +484,5 @@ impl WindowRenderer for State {
 
     fn scroll(&mut self, x: f32, y: f32) {
         self.terminal_view.scroll(x, y);
-        self.update_caret_uniform();
     }
 }

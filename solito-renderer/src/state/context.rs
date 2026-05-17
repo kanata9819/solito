@@ -3,7 +3,7 @@ use wgpu::{Instance, Surface, TextureFormat};
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
-    pipeline::rect::{self, CaretRenderer},
+    pipeline::rect::{self, RectRenderer},
     state::{gpu::GpuContext, render::RenderResources, window::WindowSurface},
     terminal_view::TerminalView,
 };
@@ -39,20 +39,12 @@ impl State {
         })
     }
 
-    pub(crate) fn update_caret_uniform(&mut self) {
-        let (caret_x, caret_y, caret_w, caret_h) = self.terminal_view.caret_rect();
-        let caret_color: [f32; 4] = self.terminal_view.caret_color();
-
-        rect::RectPipeline::update_caret_uniform(rect::CaretUniform {
+    pub(crate) fn update_rect_screen_uniform(&mut self) {
+        rect::RectPipeline::update_screen_uniform(rect::ScreenUniform {
             uniform_buffer: &self.render_resources.uniform_buffer,
             queue: &self.gpu.queue,
             width: self.window_surface.config.width,
             height: self.window_surface.config.height,
-            caret_x,
-            caret_y,
-            caret_w,
-            caret_h,
-            caret_color,
         });
     }
 }
