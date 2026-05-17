@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Solito icon">
+  <rect x="26" y="26" width="204" height="204" rx="44" fill="#121827"/>
+  <path d="M58 54h112l28 38H86z" fill="#273447"/>
+  <path d="M86 92h112v16H74z" fill="#20d3ee"/>
+  <path d="M65 73h112l21 28H86z" fill="#5f7184"/>
+  <path d="M72 119l34 28-34 28" fill="none" stroke="#e6edf3" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="123" y="165" width="62" height="18" rx="9" fill="#20d3ee"/>
+</svg>
