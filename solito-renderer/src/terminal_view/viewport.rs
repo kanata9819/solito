@@ -1,22 +1,22 @@
-use crate::RendererConfig;
-
 pub(super) struct ViewportState {
+    line_height: f32,
     scroll_offset: usize,
     scroll_accumulator: f32,
     visible_rows: usize,
 }
 
 impl ViewportState {
-    pub(super) fn new(height: u32) -> Self {
+    pub(super) fn new(height: u32, line_height: f32) -> Self {
         Self {
+            line_height,
             scroll_offset: 0,
             scroll_accumulator: 0.0,
-            visible_rows: Self::visible_rows(height),
+            visible_rows: Self::visible_rows(height, line_height),
         }
     }
 
     pub(super) fn resize(&mut self, height: u32, row_count: usize) {
-        self.visible_rows = Self::visible_rows(height);
+        self.visible_rows = Self::visible_rows(height, self.line_height);
         self.clamp(row_count);
     }
 
@@ -51,8 +51,8 @@ impl ViewportState {
         self.clamp(row_count);
     }
 
-    fn visible_rows(height: u32) -> usize {
-        ((height as f32 / RendererConfig::LINE_HEIGHT).floor() as usize).max(1)
+    fn visible_rows(height: u32, line_height: f32) -> usize {
+        ((height as f32 / line_height).floor() as usize).max(1)
     }
 
     fn max_scroll_offset(&self, row_count: usize) -> usize {

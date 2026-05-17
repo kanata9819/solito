@@ -1,4 +1,4 @@
-use solito_renderer::{RendererConfig, TerminalViewRenderer, WindowRenderer};
+use solito_renderer::{TerminalViewRenderer, WindowRenderer};
 use std::{
     collections::HashMap,
     error::Error,
@@ -36,6 +36,7 @@ pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
     event: WindowEvent,
     modifiers_state: &mut ModifiersState,
     input_tx: &Sender<SessionInput>,
+    line_height: f32,
 ) -> Result<AppCommand, Box<dyn Error>> {
     match event {
         WindowEvent::CloseRequested => {
@@ -82,10 +83,7 @@ pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
                 }
                 winit::event::MouseScrollDelta::PixelDelta(pos) => {
                     tracing::debug!("MouseScrollDelta.PixelDelta: pos({:?})", pos);
-                    state.scroll(
-                        pos.x as f32 / RendererConfig::LINE_HEIGHT,
-                        pos.y as f32 / RendererConfig::LINE_HEIGHT,
-                    );
+                    state.scroll(pos.x as f32 / line_height, pos.y as f32 / line_height);
                 }
             }
             Ok(AppCommand::None)

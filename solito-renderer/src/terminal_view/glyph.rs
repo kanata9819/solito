@@ -22,6 +22,7 @@ impl GlyphonResources {
         swapchain: wgpu::TextureFormat,
         physical_size: winit::dpi::PhysicalSize<u32>,
         scale_factor: f64,
+        config: &RendererConfig,
     ) -> GlyphonResources {
         let mut font_system: FontSystem = FontSystem::new();
         let swash_cache: SwashCache = SwashCache::new();
@@ -32,7 +33,7 @@ impl GlyphonResources {
             TextRenderer::new(&mut atlas, device, MultisampleState::default(), None);
         let mut text_buffer: Buffer = Buffer::new(
             &mut font_system,
-            Metrics::new(RendererConfig::FONT_SIZE, RendererConfig::LINE_HEIGHT),
+            Metrics::new(config.font_size, config.line_height),
         );
 
         let physical_width: f32 = (f64::from(physical_size.width) * scale_factor) as f32;
@@ -56,10 +57,13 @@ impl GlyphonResources {
         }
     }
 
-    pub(super) fn measure_font_width(font_system: &mut glyphon::FontSystem) -> f32 {
+    pub(super) fn measure_font_width(
+        font_system: &mut glyphon::FontSystem,
+        config: &RendererConfig,
+    ) -> f32 {
         let mut buffer: Buffer = Buffer::new(
             font_system,
-            Metrics::new(RendererConfig::FONT_SIZE, RendererConfig::LINE_HEIGHT),
+            Metrics::new(config.font_size, config.line_height),
         );
 
         buffer.set_wrap(font_system, Wrap::None);
@@ -67,7 +71,7 @@ impl GlyphonResources {
         buffer.set_text(
             font_system,
             "M",
-            &Attrs::new().family(Family::Name("Cascadia Mono")),
+            &Attrs::new().family(Family::Name(config.font_family.as_str())),
             Shaping::Advanced,
             None,
         );
@@ -76,7 +80,7 @@ impl GlyphonResources {
             .layout_runs()
             .next()
             .map(|run| run.line_w)
-            .unwrap_or(RendererConfig::FONT_SIZE * 0.62)
+            .unwrap_or(config.font_size * 0.62)
             .max(1.0)
     }
 }

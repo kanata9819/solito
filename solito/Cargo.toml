@@ -4,13 +4,16 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+directories = "6"
 portable-pty = "0.9.0"
+serde = { version = "1", features = ["derive"] }
 winit = "0.30.13"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 pollster = "0.4.0"
 solito-renderer = { path = "../solito-renderer" }
 solito-terminal = { path = "../solito-terminal" }
+toml = "1"
 
 [build-dependencies]
 winresource = "0.1"

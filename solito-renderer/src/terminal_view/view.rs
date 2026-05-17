@@ -11,6 +11,7 @@ use super::{
 
 pub(crate) struct TerminalView {
     pub(crate) glyphs: GlyphResources,
+    config: RendererConfig,
     snapshot: ScreenSnapshot,
     tab_bar: TabBarSnapshot,
     viewport: ViewportState,
@@ -23,7 +24,6 @@ impl TerminalView {
     const TAB_ACTIVE_COLOR: [u8; 4] = [255, 255, 255, 255];
     const TAB_INACTIVE_COLOR: [u8; 4] = [140, 148, 160, 255];
     const TAB_SEPARATOR_COLOR: [u8; 4] = [80, 88, 100, 255];
-    const TAB_BAR_HEIGHT: f32 = RendererConfig::LINE_HEIGHT;
     const TAB_TEXT_PADDING: usize = 2;
     const TAB_GAP_CHARS: usize = 1;
     const TAB_SLANT: f32 = 10.0;
@@ -40,26 +40,45 @@ impl TerminalView {
         swapchain: wgpu::TextureFormat,
         physical_size: winit::dpi::PhysicalSize<u32>,
         scale_factor: f64,
+        config: RendererConfig,
     ) -> Self {
-        let glyphon: GlyphonResources =
-            GlyphonResources::new(device, queue, swapchain, physical_size, scale_factor);
+        let config: RendererConfig = config.sanitized();
+        let glyphon: GlyphonResources = GlyphonResources::new(
+            device,
+            queue,
+            swapchain,
+            physical_size,
+            scale_factor,
+            &config,
+        );
         let mut glyphs: GlyphResources = GlyphResources::new(glyphon);
 
-        Self::set_text_buffer_size(&mut glyphs, physical_size.width, physical_size.height);
+        Self::set_text_buffer_size(
+            &mut glyphs,
+            physical_size.width,
+            physical_size.height,
+            &config,
+        );
 
         Self {
             glyphs,
+            viewport: ViewportState::new(
+                Self::terminal_content_height(physical_size.height, config.line_height),
+                config.line_height,
+            ),
+            config,
             snapshot: ScreenSnapshot::default(),
             tab_bar: TabBarSnapshot::default(),
-            viewport: ViewportState::new(Self::terminal_content_height(physical_size.height)),
         }
     }
 
     pub(crate) fn resize(&mut self, width: u32, height: u32, snapshot: ScreenSnapshot) {
         self.snapshot = snapshot;
-        Self::set_text_buffer_size(&mut self.glyphs, width, height);
-        self.viewport
-            .resize(Self::terminal_content_height(height), self.row_count());
+        Self::set_text_buffer_size(&mut self.glyphs, width, height, &self.config);
+        self.viewport.resize(
+            Self::terminal_content_height(height, self.config.line_height),
+            self.row_count(),
+        );
         self.set_text_to_buffer();
     }
 
@@ -85,23 +104,22 @@ impl TerminalView {
         let (start, end): (usize, usize) = self.viewport.visible_range(row_count);
 
         if self.snapshot.cursor_row < start || self.snapshot.cursor_row >= end {
-            return (Self::PADDING_X, Self::terminal_origin_y(), 0.0, 0.0);
+            return (Self::PADDING_X, self.terminal_origin_y(), 0.0, 0.0);
         }
 
         let cell_width: f32 =
-            GlyphonResources::measure_font_width(&mut self.glyphs.font_system).max(1.0);
+            GlyphonResources::measure_font_width(&mut self.glyphs.font_system, &self.config)
+                .max(1.0);
         let visible_row: usize = self.snapshot.cursor_row - start;
 
         let caret_x: f32 = Self::PADDING_X + self.snapshot.cursor_col as f32 * cell_width;
         let caret_y: f32 = if self.tab_bar.titles().len() <= 1 {
-            Self::PADDING_Y + visible_row as f32 * RendererConfig::LINE_HEIGHT
+            Self::PADDING_Y + visible_row as f32 * self.config.line_height
         } else {
-            Self::PADDING_Y
-                + RendererConfig::LINE_HEIGHT
-                + visible_row as f32 * RendererConfig::LINE_HEIGHT
+            Self::PADDING_Y + self.config.line_height + visible_row as f32 * self.config.line_height
         };
 
-        (caret_x, caret_y, cell_width, RendererConfig::LINE_HEIGHT)
+        (caret_x, caret_y, cell_width, self.config.line_height)
     }
 
     pub(crate) fn caret_color(&self) -> [f32; 4] {
@@ -113,14 +131,16 @@ impl TerminalView {
 
     pub(crate) fn tab_bar_rects(&mut self, width: u32) -> Vec<RectSpec> {
         let cell_width: f32 =
-            GlyphonResources::measure_font_width(&mut self.glyphs.font_system).max(1.0);
+            GlyphonResources::measure_font_width(&mut self.glyphs.font_system, &self.config)
+                .max(1.0);
 
-        Self::tab_bar_rects_for(&self.tab_bar, width, cell_width)
+        Self::tab_bar_rects_for(&self.tab_bar, width, cell_width, self.config.line_height)
     }
 
     fn set_text_to_buffer(&mut self) {
-        let spans: Vec<(String, Attrs<'static>)> = self.visible_text_spans();
-        let attrs: Attrs<'static> = Self::text_attrs(None);
+        let font_family: String = self.config.font_family.clone();
+        let spans: Vec<(String, Attrs<'_>)> = self.visible_text_spans(font_family.as_str());
+        let attrs: Attrs<'_> = Self::text_attrs(None, font_family.as_str());
 
         self.glyphs.text_buffer.set_rich_text(
             &mut self.glyphs.font_system,
@@ -133,8 +153,9 @@ impl TerminalView {
         );
     }
 
-    fn visible_text_spans(&mut self) -> Vec<(String, Attrs<'static>)> {
-        let mut spans: Vec<(String, Attrs<'static>)> = Self::tab_bar_spans(&self.tab_bar);
+    fn visible_text_spans<'a>(&mut self, font_family: &'a str) -> Vec<(String, Attrs<'a>)> {
+        let mut spans: Vec<(String, Attrs<'a>)> =
+            Self::tab_bar_spans_for(&self.tab_bar, font_family);
         let has_tab_bar: bool = !spans.is_empty();
 
         if self.snapshot.lines.is_empty() {
@@ -146,7 +167,7 @@ impl TerminalView {
         let (start, end): (usize, usize) = self.viewport.visible_range(row_count);
 
         if has_tab_bar {
-            spans.push(("\n".to_string(), Self::text_attrs(None)));
+            spans.push(("\n".to_string(), Self::text_attrs(None, font_family)));
         }
 
         spans.extend(Self::text_spans_for_lines(
@@ -155,13 +176,17 @@ impl TerminalView {
             self.snapshot.cursor_row,
             self.snapshot.cursor_col,
             Self::cursor_text_color(self.caret_color()),
+            font_family,
         ));
 
         spans
     }
 
-    fn tab_bar_spans(tab_bar: &TabBarSnapshot) -> Vec<(String, Attrs<'static>)> {
-        let mut spans: Vec<(String, Attrs<'static>)> = Vec::new();
+    fn tab_bar_spans_for<'a>(
+        tab_bar: &TabBarSnapshot,
+        font_family: &'a str,
+    ) -> Vec<(String, Attrs<'a>)> {
+        let mut spans: Vec<(String, Attrs<'a>)> = Vec::new();
 
         if tab_bar.titles().len() <= 1 {
             return spans;
@@ -171,7 +196,7 @@ impl TerminalView {
             if index > 0 {
                 spans.push((
                     " ".repeat(Self::TAB_GAP_CHARS),
-                    Self::text_attrs(Some(Self::TAB_SEPARATOR_COLOR)),
+                    Self::text_attrs(Some(Self::TAB_SEPARATOR_COLOR), font_family),
                 ));
             }
 
@@ -184,13 +209,18 @@ impl TerminalView {
                 Self::TAB_INACTIVE_COLOR
             };
 
-            spans.push((text, Self::text_attrs(Some(color))));
+            spans.push((text, Self::text_attrs(Some(color), font_family)));
         }
 
         spans
     }
 
-    fn tab_bar_rects_for(tab_bar: &TabBarSnapshot, _width: u32, cell_width: f32) -> Vec<RectSpec> {
+    fn tab_bar_rects_for(
+        tab_bar: &TabBarSnapshot,
+        _width: u32,
+        cell_width: f32,
+        line_height: f32,
+    ) -> Vec<RectSpec> {
         let mut rects: Vec<RectSpec> = Vec::new();
 
         if tab_bar.titles().len() <= 1 {
@@ -199,7 +229,7 @@ impl TerminalView {
 
         let mut x: f32 = Self::PADDING_X;
         let tab_y: f32 = 6.0;
-        let tab_height: f32 = Self::TAB_BAR_HEIGHT + 2.0;
+        let tab_height: f32 = Self::tab_bar_height_for(line_height) + 2.0;
 
         for (index, title) in tab_bar.titles().iter().enumerate() {
             if index > 0 {
@@ -286,14 +316,15 @@ impl TerminalView {
         Self::padded_tab_title(title).chars().count() as f32 * cell_width
     }
 
-    fn text_spans_for_lines(
+    fn text_spans_for_lines<'a>(
         lines: &[Vec<ScreenCell>],
         first_row: usize,
         cursor_row: usize,
         cursor_col: usize,
         cursor_text_color: [u8; 4],
-    ) -> Vec<(String, Attrs<'static>)> {
-        let mut spans: Vec<(String, Attrs<'static>)> = Vec::new();
+        font_family: &'a str,
+    ) -> Vec<(String, Attrs<'a>)> {
+        let mut spans: Vec<(String, Attrs<'a>)> = Vec::new();
         let mut current_text: String = String::new();
         let mut current_color: Option<[u8; 4]> = None;
 
@@ -316,7 +347,7 @@ impl TerminalView {
                 if current_text.is_empty() {
                     current_color = color;
                 } else if Self::should_start_new_span(&current_text, current_color, color) {
-                    Self::push_text_span(&mut spans, &mut current_text, current_color);
+                    Self::push_text_span(&mut spans, &mut current_text, current_color, font_family);
                     current_color = color;
                 }
 
@@ -328,7 +359,7 @@ impl TerminalView {
             }
         }
 
-        Self::push_text_span(&mut spans, &mut current_text, current_color);
+        Self::push_text_span(&mut spans, &mut current_text, current_color, font_family);
 
         spans
     }
@@ -356,13 +387,14 @@ impl TerminalView {
         !current_text.is_empty() && current_color != next_color
     }
 
-    fn push_text_span(
-        spans: &mut Vec<(String, Attrs<'static>)>,
+    fn push_text_span<'a>(
+        spans: &mut Vec<(String, Attrs<'a>)>,
         text: &mut String,
         color: Option<[u8; 4]>,
+        font_family: &'a str,
     ) {
         if !text.is_empty() {
-            spans.push((std::mem::take(text), Self::text_attrs(color)));
+            spans.push((std::mem::take(text), Self::text_attrs(color, font_family)));
         }
     }
 
@@ -383,8 +415,8 @@ impl TerminalView {
         }
     }
 
-    fn text_attrs(color: Option<[u8; 4]>) -> Attrs<'static> {
-        let attrs: Attrs<'static> = Attrs::new().family(Family::Name("Cascadia Mono"));
+    fn text_attrs<'a>(color: Option<[u8; 4]>, font_family: &'a str) -> Attrs<'a> {
+        let attrs: Attrs<'a> = Attrs::new().family(Family::Name(font_family));
 
         match color {
             Some([r, g, b, a]) => attrs.color(Color::rgba(r, g, b, a)),
@@ -411,23 +443,32 @@ impl TerminalView {
 
     pub(crate) fn visible_cols(&mut self, width: u32) -> usize {
         let cell_width: f32 =
-            GlyphonResources::measure_font_width(&mut self.glyphs.font_system).max(1.0);
+            GlyphonResources::measure_font_width(&mut self.glyphs.font_system, &self.config)
+                .max(1.0);
         let content_width: u32 = Self::terminal_content_width(width);
 
         ((content_width as f32 / cell_width).floor() as usize).max(1)
     }
 
     pub(crate) fn visible_rows(&self, height: u32) -> usize {
-        let content_height: u32 = Self::terminal_content_height(height);
-        ((content_height as f32 / RendererConfig::LINE_HEIGHT).floor() as usize).max(1)
+        let content_height: u32 = Self::terminal_content_height(height, self.config.line_height);
+        ((content_height as f32 / self.config.line_height).floor() as usize).max(1)
     }
 
-    fn terminal_origin_y() -> f32 {
-        Self::PADDING_Y + Self::TAB_BAR_HEIGHT
+    fn terminal_origin_y(&self) -> f32 {
+        Self::terminal_origin_y_for(self.config.line_height)
     }
 
-    fn terminal_content_height(height: u32) -> u32 {
-        height.saturating_sub(Self::TAB_BAR_HEIGHT.ceil() as u32)
+    fn terminal_origin_y_for(line_height: f32) -> f32 {
+        Self::PADDING_Y + Self::tab_bar_height_for(line_height)
+    }
+
+    fn terminal_content_height(height: u32, line_height: f32) -> u32 {
+        height.saturating_sub(Self::tab_bar_height_for(line_height).ceil() as u32)
+    }
+
+    fn tab_bar_height_for(line_height: f32) -> f32 {
+        line_height
     }
 
     fn terminal_content_width(width: u32) -> u32 {
@@ -436,11 +477,16 @@ impl TerminalView {
         width.saturating_sub(horizontal_padding).max(1)
     }
 
-    fn set_text_buffer_size(glyphs: &mut GlyphResources, width: u32, height: u32) {
+    fn set_text_buffer_size(
+        glyphs: &mut GlyphResources,
+        width: u32,
+        height: u32,
+        config: &RendererConfig,
+    ) {
         glyphs.text_buffer.set_size(
             &mut glyphs.font_system,
             Some(Self::terminal_content_width(width) as f32),
-            Some(Self::terminal_content_height(height) as f32),
+            Some(Self::terminal_content_height(height, config.line_height) as f32),
         );
         glyphs
             .text_buffer
@@ -451,6 +497,7 @@ impl TerminalView {
 #[cfg(test)]
 mod tests {
     use super::TerminalView;
+    use crate::RendererConfig;
     use crate::terminal_view::TabBarSnapshot;
     use glyphon::Color;
     use solito_terminal::ScreenCell;
@@ -465,7 +512,8 @@ mod tests {
 
     #[test]
     fn text_attrs_include_foreground_color() {
-        let attrs = TerminalView::text_attrs(Some([1, 2, 3, 4]));
+        let attrs =
+            TerminalView::text_attrs(Some([1, 2, 3, 4]), RendererConfig::DEFAULT_FONT_FAMILY);
 
         assert_eq!(attrs.color_opt, Some(Color::rgba(1, 2, 3, 4)));
     }
@@ -500,7 +548,14 @@ mod tests {
         let mut cell: ScreenCell = ScreenCell::default();
         cell.ch = 'A';
 
-        let spans = TerminalView::text_spans_for_lines(&[vec![cell]], 0, 0, 0, [0, 0, 0, 255]);
+        let spans = TerminalView::text_spans_for_lines(
+            &[vec![cell]],
+            0,
+            0,
+            0,
+            [0, 0, 0, 255],
+            RendererConfig::DEFAULT_FONT_FAMILY,
+        );
 
         assert_eq!(spans.len(), 1);
         assert_eq!(spans[0].0, "A");
@@ -511,7 +566,7 @@ mod tests {
     fn tab_bar_spans_mark_active_tab() {
         let snapshot: TabBarSnapshot =
             TabBarSnapshot::new(vec!["Tab 1".to_string(), "Tab 2".to_string()], 0);
-        let spans = TerminalView::tab_bar_spans(&snapshot);
+        let spans = TerminalView::tab_bar_spans_for(&snapshot, RendererConfig::DEFAULT_FONT_FAMILY);
 
         assert_eq!(spans[0].0, "  Tab 1  ");
         assert_eq!(spans[0].1.color_opt, Some(Color::rgba(255, 255, 255, 255)));
@@ -524,12 +579,20 @@ mod tests {
     fn tab_bar_rects_include_background_tabs_and_active_accents() {
         let snapshot: TabBarSnapshot =
             TabBarSnapshot::new(vec!["Tab 1".to_string(), "Tab 2".to_string()], 0);
-        let rects = TerminalView::tab_bar_rects_for(&snapshot, 220, 10.0);
+        let rects = TerminalView::tab_bar_rects_for(
+            &snapshot,
+            220,
+            10.0,
+            RendererConfig::DEFAULT_LINE_HEIGHT,
+        );
 
         assert_eq!(rects.len(), 4);
         assert_eq!(rects[0].x, TerminalView::PADDING_X);
         assert_eq!(rects[0].width, 100.0);
-        assert_eq!(rects[0].height, TerminalView::TAB_BAR_HEIGHT + 2.0);
+        assert_eq!(
+            rects[0].height,
+            TerminalView::tab_bar_height_for(RendererConfig::DEFAULT_LINE_HEIGHT) + 2.0
+        );
         assert_eq!(rects[0].color, TerminalView::TAB_ACTIVE_BACKGROUND);
         assert_eq!(rects[0].slant, TerminalView::TAB_SLANT);
         assert_eq!(rects[2].height, TerminalView::TAB_UNDERLINE_HEIGHT);
@@ -546,12 +609,23 @@ mod tests {
     fn tab_bar_rects_hide_for_single_tab() {
         let snapshot: TabBarSnapshot = TabBarSnapshot::new(vec!["Tab 1".to_string()], 0);
 
-        assert!(TerminalView::tab_bar_rects_for(&snapshot, 220, 10.0).is_empty());
+        assert!(
+            TerminalView::tab_bar_rects_for(
+                &snapshot,
+                220,
+                10.0,
+                RendererConfig::DEFAULT_LINE_HEIGHT,
+            )
+            .is_empty()
+        );
     }
 
     #[test]
     fn visible_rows_reserve_one_row_for_tab_bar() {
-        assert_eq!(TerminalView::terminal_content_height(90), 60);
+        assert_eq!(
+            TerminalView::terminal_content_height(90, RendererConfig::DEFAULT_LINE_HEIGHT),
+            60
+        );
     }
 
     #[test]

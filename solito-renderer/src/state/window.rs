@@ -9,7 +9,7 @@ use winit::{dpi::PhysicalSize, window::Window};
 
 use super::{context::State, gpu::GpuContext};
 use crate::{
-    config, pass,
+    RendererConfig, WindowBackdrop, pass,
     pipeline::rect::{self, RectRenderer},
     terminal_view::TerminalView,
 };
@@ -28,8 +28,9 @@ impl WindowSurface {
         surface: Surface<'static>,
         gpu: &GpuContext,
         size: PhysicalSize<u32>,
+        renderer_config: &RendererConfig,
     ) -> Self {
-        Self::apply_window_effects(window.as_ref());
+        Self::apply_window_effects(window.as_ref(), renderer_config);
 
         let surface_caps: wgpu::SurfaceCapabilities = surface.get_capabilities(&gpu.adapter);
 
@@ -41,7 +42,7 @@ impl WindowSurface {
             .unwrap_or(surface_caps.formats[0]);
 
         let alpha_mode: wgpu::CompositeAlphaMode = Self::choose_alpha_mode(&surface_caps);
-        let clear_color: wgpu::Color = Self::clear_color(alpha_mode);
+        let clear_color: wgpu::Color = Self::clear_color(alpha_mode, renderer_config);
 
         let config: SurfaceConfiguration = SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -84,32 +85,38 @@ impl WindowSurface {
         }
     }
 
-    fn clear_color(_alpha_mode: wgpu::CompositeAlphaMode) -> wgpu::Color {
-        if config::RendererConfig::WINDOW_BACKDROP.is_transparent() {
+    fn clear_color(
+        _alpha_mode: wgpu::CompositeAlphaMode,
+        renderer_config: &RendererConfig,
+    ) -> wgpu::Color {
+        if renderer_config.window_backdrop.is_transparent() {
             wgpu::Color::TRANSPARENT
         } else {
             wgpu::Color::BLACK
         }
     }
 
-    fn apply_window_effects(window: &Window) {
-        match config::RendererConfig::WINDOW_BACKDROP {
-            config::WindowBackdrop::None | config::WindowBackdrop::Transparent => {}
-            config::WindowBackdrop::Acrylic => {
-                Self::apply_platform_acrylic(window);
+    fn apply_window_effects(window: &Window, renderer_config: &RendererConfig) {
+        match renderer_config.window_backdrop {
+            WindowBackdrop::None | WindowBackdrop::Transparent => {}
+            WindowBackdrop::Acrylic => {
+                Self::apply_platform_acrylic(window, renderer_config);
             }
         };
     }
 
-    fn apply_platform_acrylic(window: &Window) {
+    fn apply_platform_acrylic(window: &Window, renderer_config: &RendererConfig) {
         cfg_select! {
             target_os = "windows" => {
                 if !Self::apply_windows_system_acrylic(window) {
-                    Self::apply_windows_accent_acrylic(window);
+                    Self::apply_windows_accent_acrylic(
+                        window,
+                        renderer_config.window_acrylic_tint,
+                    );
                 }
             }
             _ => {
-                let _ = window;
+                let _ = (window, renderer_config);
             }
         }
     }
@@ -174,7 +181,7 @@ impl WindowSurface {
         }
     }
 
-    fn apply_windows_accent_acrylic(window: &Window) {
+    fn apply_windows_accent_acrylic(window: &Window, acrylic_tint: (u8, u8, u8, u8)) {
         cfg_select! {
             target_os = "windows" => {
                 use std::ffi::c_void;
@@ -230,7 +237,7 @@ impl WindowSurface {
                 let set_window_composition_attribute: SetWindowCompositionAttribute =
                     unsafe { std::mem::transmute(function) };
 
-                let (r, g, b, mut a) = config::RendererConfig::WINDOW_ACRYLIC_TINT;
+                let (r, g, b, mut a) = acrylic_tint;
                 if a == 0 {
                     a = 1;
                 }
@@ -258,7 +265,7 @@ impl WindowSurface {
                 }
             }
             _ => {
-                let _ = window;
+                let _ = (window, acrylic_tint);
             }
         }
     }

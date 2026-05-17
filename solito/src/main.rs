@@ -10,24 +10,26 @@ use tracing_subscriber::EnvFilter;
 use winit::event_loop::EventLoop;
 
 use crate::app::core::SolitoApplication;
+use crate::config::AppConfig;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    init_tracing();
-    run_app()?;
+    let config: AppConfig = AppConfig::load_or_create()?;
+    init_tracing(&config);
+    run_app(config)?;
 
     Ok(())
 }
 
-fn init_tracing() {
-    let env_filter: String = format!("error,solito={}", config::TracingFilter::FILTER_ERROR);
+fn init_tracing(config: &AppConfig) {
+    let env_filter: String = format!("error,solito={}", config.tracing.filter);
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::new(env_filter))
         .init();
 }
 
-fn run_app() -> Result<(), Box<dyn Error>> {
+fn run_app(config: AppConfig) -> Result<(), Box<dyn Error>> {
     let event_loop: EventLoop<()> = EventLoop::new()?;
-    let mut solito: SolitoApplication = SolitoApplication::new();
+    let mut solito: SolitoApplication = SolitoApplication::new(config);
     event_loop.run_app(&mut solito)?;
 
     Ok(())

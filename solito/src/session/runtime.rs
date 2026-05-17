@@ -41,16 +41,15 @@ impl SessionInput {
 }
 
 impl SessionRuntime {
-    pub(crate) const PROCESS_NAME: &str = "nu";
-
     pub(crate) fn new(
         input_rx: Receiver<SessionInput>,
         output_tx: Sender<Vec<u8>>,
         cols: usize,
         rows: usize,
+        shell_program: String,
     ) -> Self {
         let pty_pair: PtyPair = Self::pty_pair(cols, rows);
-        let child: TChild = Self::spawn_command(pty_pair.slave);
+        let child: TChild = Self::spawn_command(pty_pair.slave, &shell_program);
 
         Self {
             child,
@@ -86,8 +85,8 @@ impl SessionRuntime {
             .expect("failed to create pty pair")
     }
 
-    fn spawn_command(slave: TSlave) -> TChild {
-        let cmd: CommandBuilder = CommandBuilder::new(Self::PROCESS_NAME);
+    fn spawn_command(slave: TSlave, shell_program: &str) -> TChild {
+        let cmd: CommandBuilder = CommandBuilder::new(shell_program);
         let slave: TSlave = slave;
         let child: TChild = slave.spawn_command(cmd).expect("failed to spawn command");
 

@@ -1,6 +1,7 @@
 use solito_terminal::{ScreenSnapshot, TerminalState};
 use std::{
     error::Error,
+    path::Path,
     sync::mpsc::{Receiver, Sender, channel},
 };
 use tracing::error;
@@ -19,17 +20,19 @@ pub(super) struct Tab {
     terminal: TerminalState,
     input_tx: Sender<SessionInput>,
     output_rx: Receiver<Vec<u8>>,
-    title: &'static str,
+    title: String,
 }
 
 impl Tab {
-    fn spawn(cols: usize, rows: usize) -> Self {
+    fn spawn(cols: usize, rows: usize, shell_program: String) -> Self {
         let (input_tx, input_rx): (Sender<SessionInput>, Receiver<SessionInput>) =
             channel::<SessionInput>();
         let (output_tx, output_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel::<Vec<u8>>();
+        let title: String = tab_title_for_program(&shell_program);
 
         std::thread::spawn(move || {
-            let runtime: SessionRuntime = SessionRuntime::new(input_rx, output_tx, cols, rows);
+            let runtime: SessionRuntime =
+                SessionRuntime::new(input_rx, output_tx, cols, rows, shell_program);
             if let Err(err) = runtime.run_session() {
                 error!("run session failed: {}", err);
             };
@@ -39,7 +42,7 @@ impl Tab {
             terminal: TerminalState::new(cols, rows),
             input_tx,
             output_rx,
-            title: SessionRuntime::PROCESS_NAME,
+            title,
         }
     }
 }
@@ -54,7 +57,7 @@ impl TerminalTab for Tab {
     }
 
     fn title(&self) -> &str {
-        self.title
+        &self.title
     }
 
     fn drain_output(&mut self) -> bool {
@@ -112,8 +115,8 @@ impl<T> Tabs<T> {
 }
 
 impl Tabs<Tab> {
-    pub(super) fn open(&mut self, cols: usize, rows: usize) {
-        self.push(Tab::spawn(cols, rows));
+    pub(super) fn open(&mut self, cols: usize, rows: usize, shell_program: String) {
+        self.push(Tab::spawn(cols, rows, shell_program));
     }
 }
 
@@ -185,9 +188,25 @@ impl<T: TerminalTab> Tabs<T> {
     }
 }
 
+fn tab_title_for_program(program: &str) -> String {
+    let program: &str = program.trim();
+
+    if program.is_empty() {
+        return "shell".to_string();
+    }
+
+    Path::new(program)
+        .file_stem()
+        .or_else(|| Path::new(program).file_name())
+        .and_then(|title| title.to_str())
+        .filter(|title| !title.is_empty())
+        .unwrap_or(program)
+        .to_string()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Tabs, TerminalTab};
+    use super::{Tabs, TerminalTab, tab_title_for_program};
     use crate::session::runtime::SessionInput;
     use solito_terminal::ScreenSnapshot;
     use std::{
@@ -267,5 +286,11 @@ mod tests {
         assert!(tabs.close_active());
         assert!(tabs.is_empty());
         assert_eq!(tabs.active, 0);
+    }
+
+    #[test]
+    fn tab_title_uses_shell_program_name() {
+        assert_eq!(tab_title_for_program("nu"), "nu");
+        assert_eq!(tab_title_for_program("C:\\tools\\nu.exe"), "nu");
     }
 }

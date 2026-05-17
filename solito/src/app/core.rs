@@ -7,7 +7,7 @@ use crate::app::event as AppEvent;
 use crate::app::event::AppCommand;
 use crate::app::icon;
 use crate::app::tabs::AppTabs;
-use crate::config::WindowAttr;
+use crate::config::AppConfig;
 use tracing::error;
 use winit::{
     application::ApplicationHandler,
@@ -19,6 +19,8 @@ use winit::{
 };
 
 pub(crate) struct SolitoApplication {
+    config: AppConfig,
+    renderer_config: RendererConfig,
     windows: HashMap<WindowId, Arc<Window>>,
     state: Option<State>,
     tabs: AppTabs,
@@ -26,8 +28,12 @@ pub(crate) struct SolitoApplication {
 }
 
 impl SolitoApplication {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(config: AppConfig) -> Self {
+        let renderer_config: RendererConfig = config.renderer_config();
+
         Self {
+            config,
+            renderer_config,
             windows: HashMap::new(),
             state: None,
             tabs: AppTabs::new(),
@@ -46,10 +52,10 @@ impl SolitoApplication {
     fn create_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), Box<dyn Error>> {
         let window_attributes: WindowAttributes = WindowAttributes::default()
             .with_inner_size(LogicalSize::new(
-                WindowAttr::WINDOW_WIDTH,
-                WindowAttr::WINDOW_HIGHT,
+                self.config.window.width,
+                self.config.window.height,
             ))
-            .with_transparent(RendererConfig::WINDOW_BACKDROP.is_transparent())
+            .with_transparent(self.renderer_config.window_backdrop.is_transparent())
             .with_window_icon(icon::window_icon())
             .with_title("Solito");
         let window_attributes: WindowAttributes =
@@ -58,9 +64,11 @@ impl SolitoApplication {
         let window: Arc<Window> = Arc::new(event_loop.create_window(window_attributes)?);
         let window_id: WindowId = window.id();
         self.windows.insert(window_id, window.clone());
-        let mut state: State = pollster::block_on(State::new(window))?;
+        let mut state: State =
+            pollster::block_on(State::new(window, self.renderer_config.clone()))?;
         let (cols, rows): (usize, usize) = state.terminal_size();
-        self.tabs.open(cols, rows);
+        self.tabs
+            .open(cols, rows, self.config.shell.program.clone());
         state.set_tab_bar(self.tab_bar_snapshot());
 
         if let Some(snapshot) = self.tabs.active_snapshot() {
@@ -97,7 +105,8 @@ impl SolitoApplication {
             AppCommand::NewTab => {
                 if let Some(state) = &mut self.state {
                     let (cols, rows): (usize, usize) = state.terminal_size();
-                    self.tabs.open(cols, rows);
+                    self.tabs
+                        .open(cols, rows, self.config.shell.program.clone());
                     self.set_tab_bar();
                     self.set_active_snapshot();
                 }
@@ -188,6 +197,7 @@ impl ApplicationHandler for SolitoApplication {
                 event,
                 &mut self.modifiers,
                 input_tx,
+                self.renderer_config.line_height,
             ) {
                 Ok(command) => command,
                 Err(err) => {
