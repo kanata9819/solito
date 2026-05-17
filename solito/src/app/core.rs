@@ -59,14 +59,13 @@ impl SolitoApplication {
             .with_window_icon(icon::window_icon())
             .with_title("Solito");
 
-        let window_attributes: WindowAttributes =
-            Self::with_platform_window_attributes(window_attributes);
+        let window: Arc<Window> = Arc::new(
+            event_loop.create_window(Self::with_platform_window_attributes(window_attributes))?,
+        );
+        self.windows.insert(window.id(), window.clone());
 
-        let window: Arc<Window> = Arc::new(event_loop.create_window(window_attributes)?);
-        let window_id: WindowId = window.id();
-        self.windows.insert(window_id, window.clone());
-        let mut state: State =
-            pollster::block_on(State::new(window, self.renderer_config.clone()))?;
+        let mut state = pollster::block_on(State::new(window, self.renderer_config.clone()))?;
+
         let (cols, rows): (usize, usize) = state.terminal_size();
         self.tabs
             .open(cols, rows, self.config.shell.program.clone());
