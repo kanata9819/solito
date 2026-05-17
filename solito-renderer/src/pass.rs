@@ -6,6 +6,7 @@ use wgpu::{
 pub(crate) fn begin_render_pass<'a>(
     encoder: &'a mut CommandEncoder,
     view: &TextureView,
+    clear_color: wgpu::Color,
 ) -> RenderPass<'a> {
     encoder.begin_render_pass(&RenderPassDescriptor {
         label: None,
@@ -14,7 +15,7 @@ pub(crate) fn begin_render_pass<'a>(
             depth_slice: None,
             resolve_target: None,
             ops: Operations {
-                load: LoadOp::Clear(wgpu::Color::BLACK),
+                load: LoadOp::Clear(clear_color),
                 store: wgpu::StoreOp::Store,
             },
         })],

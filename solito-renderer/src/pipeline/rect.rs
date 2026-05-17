@@ -75,17 +75,17 @@ impl Rect for RectPipeline {
                 cache: None,
             });
 
-        Self::update_caret_uniform(
+        Self::update_caret_uniform(CaretUniform {
             uniform_buffer,
             queue,
-            window_width,
-            window_height,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            [1.0, 1.0, 1.0, 1.0],
-        );
+            width: window_width,
+            height: window_height,
+            caret_x: 0.0,
+            caret_y: 0.0,
+            caret_w: 0.0,
+            caret_h: 0.0,
+            caret_color: [1.0, 1.0, 1.0, 1.0],
+        });
 
         Self {
             pipeline: render_pipeline,
@@ -94,19 +94,21 @@ impl Rect for RectPipeline {
     }
 }
 
+pub(crate) struct CaretUniform<'a> {
+    pub uniform_buffer: &'a Buffer,
+    pub queue: &'a wgpu::Queue,
+    pub width: u32,
+    pub height: u32,
+    pub caret_x: f32,
+    pub caret_y: f32,
+    pub caret_w: f32,
+    pub caret_h: f32,
+    pub caret_color: [f32; 4],
+}
+
 pub(crate) trait CaretRenderer {
     fn caret_bind_group(&self, device: &wgpu::Device, uniform_buffer: &Buffer) -> wgpu::BindGroup;
-    fn update_caret_uniform(
-        uniform_buffer: &Buffer,
-        queue: &wgpu::Queue,
-        width: u32,
-        height: u32,
-        caret_x: f32,
-        caret_y: f32,
-        caret_w: f32,
-        caret_h: f32,
-        caret_color: [f32; 4],
-    );
+    fn update_caret_uniform(caret_uniform: CaretUniform);
     fn caret_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout;
     fn create_caret_uniform_buffer(device: &wgpu::Device) -> wgpu::Buffer;
     fn draw_rect(&self, pass: &mut wgpu::RenderPass, bind_group: wgpu::BindGroup);
@@ -126,35 +128,27 @@ impl CaretRenderer for RectPipeline {
         bind_group
     }
 
-    fn update_caret_uniform(
-        uniform_buffer: &Buffer,
-        queue: &wgpu::Queue,
-        width: u32,
-        height: u32,
-        caret_x: f32,
-        caret_y: f32,
-        caret_w: f32,
-        caret_h: f32,
-        caret_color: [f32; 4],
-    ) {
+    fn update_caret_uniform(uniform: CaretUniform) {
         let (padding_x, padding_y): (f32, f32) = (0.0, 0.0);
-        let (screen_w, screen_h): (f32, f32) = (width as f32, height as f32);
+        let (screen_w, screen_h): (f32, f32) = (uniform.width as f32, uniform.height as f32);
         let caret_uniform: [f32; 12] = [
-            caret_x,
-            caret_y, // pos
-            caret_w,
-            caret_h, // size
+            uniform.caret_x,
+            uniform.caret_y, // pos
+            uniform.caret_w,
+            uniform.caret_h, // size
             screen_w,
             screen_h, // window size
             padding_x,
             padding_y, // padding
-            caret_color[0],
-            caret_color[1],
-            caret_color[2],
-            caret_color[3],
+            uniform.caret_color[0],
+            uniform.caret_color[1],
+            uniform.caret_color[2],
+            uniform.caret_color[3],
         ];
 
-        queue.write_buffer(uniform_buffer, 0, as_bytes(&caret_uniform));
+        uniform
+            .queue
+            .write_buffer(uniform.uniform_buffer, 0, as_bytes(&caret_uniform));
     }
 
     fn caret_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {

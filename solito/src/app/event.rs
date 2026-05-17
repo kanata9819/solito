@@ -1,5 +1,4 @@
 use solito_renderer::{RendererConfig, TerminalViewRenderer, WindowRenderer};
-use solito_terminal::TerminalState;
 use std::{
     collections::HashMap,
     error::Error,
@@ -7,37 +6,51 @@ use std::{
 };
 use tracing::error;
 use winit::{
+    dpi::PhysicalSize,
     event::{ElementState, KeyEvent, WindowEvent},
     event_loop::ActiveEventLoop,
-    keyboard::{Key, NamedKey, SmolStr},
+    keyboard::{Key, ModifiersState, NamedKey, SmolStr},
     window::{Window, WindowId},
 };
 
 use crate::session::runtime::SessionInput;
 
+pub(super) enum AppCommand {
+    None,
+    NewTab,
+    CloseTab,
+    NextTab,
+    PreviousTab,
+    Resize {
+        size: PhysicalSize<u32>,
+        cols: usize,
+        rows: usize,
+    },
+}
+
 pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
     windows: &mut HashMap<WindowId, Arc<Window>>,
     window_id: WindowId,
     state: &mut T,
-    terminal: &mut TerminalState,
     event_loop: &ActiveEventLoop,
     event: WindowEvent,
+    modifiers_state: &mut ModifiersState,
     input_tx: &Sender<SessionInput>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<AppCommand, Box<dyn Error>> {
     match event {
         WindowEvent::CloseRequested => {
             let _: Option<Arc<Window>> = windows.remove(&window_id);
             event_loop.exit();
+            Ok(AppCommand::None)
         }
         WindowEvent::RedrawRequested => {
-            windows[&window_id].set_blur(true);
-
             if let Err(e) = state.render() {
                 error!("{e}");
                 event_loop.exit();
             }
 
             state.redraw()?;
+            Ok(AppCommand::None)
         }
         WindowEvent::KeyboardInput {
             event:
@@ -48,53 +61,58 @@ pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
                     ..
                 },
             ..
-        } => handle_key(text, logical_key, key_state, input_tx)?,
+        } => handle_key(text, logical_key, key_state, *modifiers_state, input_tx),
+        WindowEvent::ModifiersChanged(modifiers) => {
+            *modifiers_state = modifiers.state();
+            Ok(AppCommand::None)
+        }
         WindowEvent::Resized(size) => {
             let (cols, rows): (usize, usize) = state.terminal_size_for(size);
-            terminal.set_width(cols);
-            terminal.set_height(rows);
-            input_tx.send(SessionInput::resize(cols, rows))?;
-            state.resize(size, terminal.snapshot());
+            Ok(AppCommand::Resize { size, cols, rows })
         }
         WindowEvent::MouseWheel {
             device_id: _,
             delta,
             phase: _,
-        } => match delta {
-            winit::event::MouseScrollDelta::LineDelta(x, y) => {
-                tracing::debug!("MouseScrollDelta.LineDelta: x({:?}), y({:?})", x, y);
-                state.scroll(x, y);
+        } => {
+            match delta {
+                winit::event::MouseScrollDelta::LineDelta(x, y) => {
+                    tracing::debug!("MouseScrollDelta.LineDelta: x({:?}), y({:?})", x, y);
+                    state.scroll(x, y);
+                }
+                winit::event::MouseScrollDelta::PixelDelta(pos) => {
+                    tracing::debug!("MouseScrollDelta.PixelDelta: pos({:?})", pos);
+                    state.scroll(
+                        pos.x as f32 / RendererConfig::LINE_HEIGHT,
+                        pos.y as f32 / RendererConfig::LINE_HEIGHT,
+                    );
+                }
             }
-            winit::event::MouseScrollDelta::PixelDelta(pos) => {
-                tracing::debug!("MouseScrollDelta.PixelDelta: pos({:?})", pos);
-                state.scroll(
-                    pos.x as f32 / RendererConfig::LINE_HEIGHT,
-                    pos.y as f32 / RendererConfig::LINE_HEIGHT,
-                );
-            }
-        },
+            Ok(AppCommand::None)
+        }
         #[allow(unused)]
         WindowEvent::CursorMoved {
             device_id,
             position,
-        } => {}
+        } => Ok(AppCommand::None),
         #[allow(unused)]
-        WindowEvent::CursorLeft { device_id } => {}
+        WindowEvent::CursorLeft { device_id } => Ok(AppCommand::None),
         #[allow(unused)]
-        WindowEvent::CursorEntered { device_id } => {}
+        WindowEvent::CursorEntered { device_id } => Ok(AppCommand::None),
         _ => {
             tracing::debug!("unhandled event: {event:?}");
+            Ok(AppCommand::None)
         }
     }
-    Ok(())
 }
 
 fn handle_key(
     text: Option<SmolStr>,
     logical_key: Key<SmolStr>,
     key_state: ElementState,
+    modifiers: ModifiersState,
     input_tx: &Sender<SessionInput>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<AppCommand, Box<dyn Error>> {
     const ENTER: &[u8; 1] = b"\r";
     const BACKSPACE: &[u8; 1] = b"\x7f";
     const TAB: &[u8; 1] = b"\t";
@@ -105,9 +123,8 @@ fn handle_key(
     const ARROWLEFT: &[u8; 3] = b"\x1b[D";
 
     if key_state == ElementState::Pressed {
-        if let Some(text) = text {
-            input_tx.send(SessionInput::Write(text.as_bytes().to_vec()))?;
-            return Ok(());
+        if let Some(command) = tab_shortcut_command(&logical_key, modifiers) {
+            return Ok(command);
         }
 
         match &logical_key {
@@ -129,9 +146,108 @@ fn handle_key(
             Key::Named(NamedKey::ArrowLeft) => {
                 input_tx.send(SessionInput::write(ARROWLEFT.to_vec()))?
             }
-            _ => {}
+            _ => {
+                handle_ctrl_c(&logical_key, modifiers, input_tx)?;
+
+                if let Some(text) = text {
+                    input_tx.send(SessionInput::Write(text.as_bytes().to_vec()))?;
+                    return Ok(AppCommand::None);
+                }
+            }
         }
     }
 
-    Ok(())
+    Ok(AppCommand::None)
+}
+
+fn handle_ctrl_c(
+    logical_key: &Key<SmolStr>,
+    modifiers: ModifiersState,
+    input_tx: &Sender<SessionInput>,
+) -> Result<AppCommand, Box<dyn Error>> {
+    const EXT: &[u8; 1] = b"\x03";
+
+    // Ctrl + c
+    if let Key::Character(char) = &logical_key
+        && modifiers.control_key()
+    {
+        if char.eq_ignore_ascii_case("c") {
+            input_tx.send(SessionInput::Write(EXT.to_vec()))?;
+            return Ok(AppCommand::None);
+        }
+    }
+
+    Ok(AppCommand::None)
+}
+
+fn tab_shortcut_command(
+    logical_key: &Key<SmolStr>,
+    modifiers: ModifiersState,
+) -> Option<AppCommand> {
+    if modifiers.control_key() && modifiers.shift_key() {
+        match logical_key {
+            Key::Character(character) if character.eq_ignore_ascii_case("t") => {
+                Some(AppCommand::NewTab)
+            }
+            Key::Character(character) if character.eq_ignore_ascii_case("w") => {
+                Some(AppCommand::CloseTab)
+            }
+            Key::Named(NamedKey::Tab) => Some(AppCommand::PreviousTab),
+            _ => None,
+        }
+    } else if modifiers.control_key() {
+        if let Key::Named(NamedKey::Tab) = logical_key {
+            Some(AppCommand::NextTab)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AppCommand, tab_shortcut_command};
+    use winit::keyboard::{Key, ModifiersState, SmolStr};
+
+    #[test]
+    fn ctrl_shift_t_opens_new_tab() {
+        let command = tab_shortcut_command(
+            &Key::Character(SmolStr::new("T")),
+            ModifiersState::CONTROL | ModifiersState::SHIFT,
+        );
+
+        assert!(matches!(command, Some(AppCommand::NewTab)));
+    }
+
+    #[test]
+    fn ctrl_shift_w_closes_active_tab() {
+        let command = tab_shortcut_command(
+            &Key::Character(SmolStr::new("W")),
+            ModifiersState::CONTROL | ModifiersState::SHIFT,
+        );
+
+        assert!(matches!(command, Some(AppCommand::CloseTab)));
+    }
+
+    #[test]
+    fn ctrl_tab_switch_next_tab() {
+        let command: Option<AppCommand> = tab_shortcut_command(
+            &Key::Named(winit::keyboard::NamedKey::Tab),
+            ModifiersState::CONTROL,
+        );
+
+        assert!(matches!(command, Some(AppCommand::NextTab)));
+    }
+
+    #[test]
+    fn ctrl_tab_switch_previous_tab() {
+        let command: Option<AppCommand> = tab_shortcut_command(
+            &Key::Named(winit::keyboard::NamedKey::Tab),
+            ModifiersState::SHIFT | ModifiersState::CONTROL,
+        );
+
+        assert!(matches!(command, Some(AppCommand::PreviousTab)));
+    }
 }

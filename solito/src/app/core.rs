@@ -1,61 +1,44 @@
-use solito_renderer::{State, TerminalViewRenderer, WindowRenderer};
-use solito_terminal::TerminalState;
-use std::{
-    collections::HashMap,
-    error::Error,
-    sync::{
-        Arc,
-        mpsc::{Receiver, Sender},
-    },
+use solito_renderer::{
+    RendererConfig, State, TabBarSnapshot, TerminalViewRenderer, WindowRenderer,
 };
+use std::{collections::HashMap, error::Error, sync::Arc};
 
 use crate::app::event as AppEvent;
+use crate::app::event::AppCommand;
+use crate::app::tabs::AppTabs;
 use crate::config::WindowAttr;
-use crate::session::runtime::{SessionInput, SessionRuntime};
 use tracing::error;
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
     event::WindowEvent,
     event_loop::ActiveEventLoop,
+    keyboard::ModifiersState,
     window::{Window, WindowAttributes, WindowId},
 };
 
 pub(crate) struct SolitoApplication {
     windows: HashMap<WindowId, Arc<Window>>,
     state: Option<State>,
-    terminal: Option<TerminalState>,
-    input_tx: Sender<SessionInput>,
-    input_rx: Option<Receiver<SessionInput>>,
-    output_tx: Option<Sender<Vec<u8>>>,
-    output_rx: Receiver<Vec<u8>>,
+    tabs: AppTabs,
+    modifiers: ModifiersState,
 }
 
 impl SolitoApplication {
-    pub(crate) fn new(
-        input_tx: Sender<SessionInput>,
-        input_rx: Receiver<SessionInput>,
-        output_tx: Sender<Vec<u8>>,
-        output_rx: Receiver<Vec<u8>>,
-    ) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             windows: HashMap::new(),
             state: None,
-            terminal: None,
-            input_tx,
-            input_rx: Some(input_rx),
-            output_tx: Some(output_tx),
-            output_rx,
+            tabs: AppTabs::new(),
+            modifiers: ModifiersState::default(),
         }
     }
 
     fn drain_output(&mut self) -> Result<(), Box<dyn Error>> {
-        while let Ok(output) = self.output_rx.try_recv()
-            && let (Some(state), Some(terminal)) = (&mut self.state, &mut self.terminal)
-        {
-            terminal.apply_terminal_output(&output);
-            state.set_terminal_snapshot(terminal.snapshot());
+        if self.tabs.drain_outputs() {
+            self.set_active_snapshot();
         }
+
         Ok(())
     }
 
@@ -65,6 +48,7 @@ impl SolitoApplication {
                 WindowAttr::WINDOW_WIDTH,
                 WindowAttr::WINDOW_HIGHT,
             ))
+            .with_transparent(RendererConfig::WINDOW_BACKDROP.is_transparent())
             .with_title("Solito");
 
         let window: Arc<Window> = Arc::new(event_loop.create_window(window_attributes)?);
@@ -72,32 +56,87 @@ impl SolitoApplication {
         self.windows.insert(window_id, window.clone());
         let mut state: State = pollster::block_on(State::new(window))?;
         let (cols, rows): (usize, usize) = state.terminal_size();
-        let terminal: TerminalState = TerminalState::new(cols, rows);
-        self.start_session(cols, rows);
-        state.set_terminal_snapshot(terminal.snapshot());
+        self.tabs.open(cols, rows);
+        state.set_tab_bar(self.tab_bar_snapshot());
+
+        if let Some(snapshot) = self.tabs.active_snapshot() {
+            state.set_terminal_snapshot(snapshot);
+        }
 
         state.render()?;
-        self.terminal = Some(terminal);
         self.state = Some(state);
         self.drain_output()?;
 
         Ok(())
     }
 
-    fn start_session(&mut self, cols: usize, rows: usize) {
-        let (Some(input_rx), Some(output_tx)): (
-            Option<Receiver<SessionInput>>,
-            Option<Sender<Vec<u8>>>,
-        ) = (self.input_rx.take(), self.output_tx.take()) else {
-            return;
-        };
+    fn handle_command(
+        &mut self,
+        command: AppCommand,
+        event_loop: &ActiveEventLoop,
+    ) -> Result<(), Box<dyn Error>> {
+        match command {
+            AppCommand::None => {}
+            AppCommand::NewTab => {
+                if let Some(state) = &mut self.state {
+                    let (cols, rows): (usize, usize) = state.terminal_size();
+                    self.tabs.open(cols, rows);
+                    self.set_tab_bar();
+                    self.set_active_snapshot();
+                }
+            }
+            AppCommand::CloseTab => {
+                if self.tabs.close_active() {
+                    if self.tabs.is_empty() {
+                        event_loop.exit();
+                    } else {
+                        self.set_tab_bar();
+                        self.set_active_snapshot();
+                    }
+                }
+            }
+            AppCommand::NextTab => {
+                if self.tabs.activate_next() {
+                    self.set_tab_bar();
+                    self.set_active_snapshot();
+                }
+            }
+            AppCommand::PreviousTab => {
+                if self.tabs.activate_previous() {
+                    self.set_tab_bar();
+                    self.set_active_snapshot();
+                }
+            }
+            AppCommand::Resize { size, cols, rows } => {
+                self.tabs.resize_all(cols, rows)?;
 
-        std::thread::spawn(move || {
-            let runtime: SessionRuntime = SessionRuntime::new(input_rx, output_tx, cols, rows);
-            if let Err(err) = runtime.run_session() {
-                error!("run session failed: {}", err);
-            };
-        });
+                if let (Some(state), Some(snapshot)) =
+                    (&mut self.state, self.tabs.active_snapshot())
+                {
+                    state.resize(size, snapshot);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn set_active_snapshot(&mut self) {
+        if let (Some(state), Some(snapshot)) = (&mut self.state, self.tabs.active_snapshot()) {
+            state.set_terminal_snapshot(snapshot);
+        }
+    }
+
+    fn set_tab_bar(&mut self) {
+        let snapshot: TabBarSnapshot = self.tab_bar_snapshot();
+
+        if let Some(state) = &mut self.state {
+            state.set_tab_bar(snapshot);
+        }
+    }
+
+    fn tab_bar_snapshot(&self) -> TabBarSnapshot {
+        TabBarSnapshot::new(self.tabs.titles(), self.tabs.active_index())
     }
 }
 
@@ -114,25 +153,35 @@ impl ApplicationHandler for SolitoApplication {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        let state: &mut State = match &mut self.state {
-            Some(canvas) => canvas,
-            None => return,
-        };
-        let terminal: &mut TerminalState = match &mut self.terminal {
-            Some(terminal) => terminal,
-            None => return,
+        let command: AppCommand = {
+            let state: &mut State = match &mut self.state {
+                Some(canvas) => canvas,
+                None => return,
+            };
+            let input_tx = match self.tabs.active_input_tx() {
+                Some(input_tx) => input_tx,
+                None => return,
+            };
+
+            match AppEvent::event_handler(
+                &mut self.windows,
+                window_id,
+                state,
+                event_loop,
+                event,
+                &mut self.modifiers,
+                input_tx,
+            ) {
+                Ok(command) => command,
+                Err(err) => {
+                    error!("event handle error: {}", err);
+                    return;
+                }
+            }
         };
 
-        if let Err(err) = AppEvent::event_handler(
-            &mut self.windows,
-            window_id,
-            state,
-            terminal,
-            event_loop,
-            event,
-            &self.input_tx,
-        ) {
-            error!("event handle error: {}", err);
+        if let Err(err) = self.handle_command(command, event_loop) {
+            error!("event command error: {}", err);
         };
     }
 

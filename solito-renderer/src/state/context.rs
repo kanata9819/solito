@@ -40,20 +40,19 @@ impl State {
     }
 
     pub(crate) fn update_caret_uniform(&mut self) {
-        let (caret_x, caret_y, caret_w, caret_h): (f32, f32, f32, f32) =
-            self.terminal_view.caret_rect();
+        let (caret_x, caret_y, caret_w, caret_h) = self.terminal_view.caret_rect();
         let caret_color: [f32; 4] = self.terminal_view.caret_color();
 
-        rect::RectPipeline::update_caret_uniform(
-            &self.render_resources.uniform_buffer,
-            &self.gpu.queue,
-            self.window_surface.config.width,
-            self.window_surface.config.height,
+        rect::RectPipeline::update_caret_uniform(rect::CaretUniform {
+            uniform_buffer: &self.render_resources.uniform_buffer,
+            queue: &self.gpu.queue,
+            width: self.window_surface.config.width,
+            height: self.window_surface.config.height,
             caret_x,
             caret_y,
             caret_w,
             caret_h,
             caret_color,
-        );
+        });
     }
 }

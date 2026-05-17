@@ -8,13 +8,14 @@ use wgpu::{
 use winit::{dpi::PhysicalSize, window::Window};
 
 use super::{context::State, gpu::GpuContext};
-use crate::{pass, pipeline::rect::CaretRenderer, terminal_view::TerminalView};
+use crate::{config, pass, pipeline::rect::CaretRenderer, terminal_view::TerminalView};
 
 pub(super) struct WindowSurface {
     pub(super) surface: Surface<'static>,
     pub(super) config: SurfaceConfiguration,
     pub(super) is_configured: bool,
     pub(super) window: Arc<Window>,
+    clear_color: wgpu::Color,
 }
 
 impl WindowSurface {
@@ -24,6 +25,8 @@ impl WindowSurface {
         gpu: &GpuContext,
         size: PhysicalSize<u32>,
     ) -> Self {
+        Self::apply_window_effects(window.as_ref());
+
         let surface_caps: wgpu::SurfaceCapabilities = surface.get_capabilities(&gpu.adapter);
 
         let surface_format: wgpu::TextureFormat = surface_caps
@@ -33,13 +36,16 @@ impl WindowSurface {
             .copied()
             .unwrap_or(surface_caps.formats[0]);
 
+        let alpha_mode: wgpu::CompositeAlphaMode = Self::choose_alpha_mode(&surface_caps);
+        let clear_color: wgpu::Color = Self::clear_color(alpha_mode);
+
         let config: SurfaceConfiguration = SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: surface_caps.present_modes[0],
-            alpha_mode: surface_caps.alpha_modes[0],
+            present_mode: wgpu::PresentMode::AutoVsync,
+            alpha_mode,
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
@@ -49,6 +55,207 @@ impl WindowSurface {
             config,
             is_configured: false,
             window,
+            clear_color,
+        }
+    }
+
+    fn choose_alpha_mode(surface_caps: &wgpu::SurfaceCapabilities) -> wgpu::CompositeAlphaMode {
+        if surface_caps
+            .alpha_modes
+            .contains(&wgpu::CompositeAlphaMode::PostMultiplied)
+        {
+            wgpu::CompositeAlphaMode::PostMultiplied
+        } else if surface_caps
+            .alpha_modes
+            .contains(&wgpu::CompositeAlphaMode::PreMultiplied)
+        {
+            wgpu::CompositeAlphaMode::PreMultiplied
+        } else if surface_caps
+            .alpha_modes
+            .contains(&wgpu::CompositeAlphaMode::Inherit)
+        {
+            wgpu::CompositeAlphaMode::Inherit
+        } else {
+            wgpu::CompositeAlphaMode::Auto
+        }
+    }
+
+    fn clear_color(_alpha_mode: wgpu::CompositeAlphaMode) -> wgpu::Color {
+        if config::RendererConfig::WINDOW_BACKDROP.is_transparent() {
+            wgpu::Color::TRANSPARENT
+        } else {
+            wgpu::Color::BLACK
+        }
+    }
+
+    fn apply_window_effects(window: &Window) {
+        match config::RendererConfig::WINDOW_BACKDROP {
+            config::WindowBackdrop::None | config::WindowBackdrop::Transparent => {}
+            config::WindowBackdrop::Acrylic => {
+                Self::apply_platform_acrylic(window);
+            }
+        };
+    }
+
+    fn apply_platform_acrylic(window: &Window) {
+        cfg_select! {
+            target_os = "windows" => {
+                if !Self::apply_windows_system_acrylic(window) {
+                    Self::apply_windows_accent_acrylic(window);
+                }
+            }
+            _ => {
+                let _ = window;
+            }
+        }
+    }
+
+    fn apply_windows_system_acrylic(window: &Window) -> bool {
+        cfg_select! {
+            target_os = "windows" => {
+                use std::ffi::c_void;
+                use windows_sys::Win32::{
+                    Foundation::HWND,
+                    Graphics::Dwm::{
+                        DwmSetWindowAttribute, DWMSBT_TRANSIENTWINDOW, DWMWA_SYSTEMBACKDROP_TYPE,
+                        DWMWA_USE_IMMERSIVE_DARK_MODE,
+                    },
+                };
+                use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+                let Ok(handle) = window.window_handle() else {
+                    tracing::warn!("failed to get window handle for system acrylic");
+                    return false;
+                };
+                let RawWindowHandle::Win32(handle) = handle.as_raw() else {
+                    return false;
+                };
+
+                let hwnd: HWND = handle.hwnd.get() as HWND;
+                let dark_mode: i32 = 1;
+                let dark_hr = unsafe {
+                    DwmSetWindowAttribute(
+                        hwnd,
+                        DWMWA_USE_IMMERSIVE_DARK_MODE as u32,
+                        &dark_mode as *const _ as *const c_void,
+                        std::mem::size_of_val(&dark_mode) as u32,
+                    )
+                };
+                if dark_hr < 0 {
+                    tracing::debug!(hr = dark_hr, "failed to apply immersive dark mode");
+                }
+
+                let backdrop = DWMSBT_TRANSIENTWINDOW;
+                let hr = unsafe {
+                    DwmSetWindowAttribute(
+                        hwnd,
+                        DWMWA_SYSTEMBACKDROP_TYPE as u32,
+                        &backdrop as *const _ as *const c_void,
+                        std::mem::size_of_val(&backdrop) as u32,
+                    )
+                };
+
+                if hr < 0 {
+                    tracing::warn!(hr, "failed to apply DWM system acrylic backdrop");
+                    false
+                } else {
+                    tracing::info!("applied DWM system acrylic backdrop");
+                    true
+                }
+            }
+            _ => {
+                let _ = window;
+                false
+            }
+        }
+    }
+
+    fn apply_windows_accent_acrylic(window: &Window) {
+        cfg_select! {
+            target_os = "windows" => {
+                use std::ffi::c_void;
+                use windows_sys::core::{BOOL, PCSTR};
+                use windows_sys::Win32::{
+                    Foundation::HWND,
+                    System::LibraryLoader::{GetProcAddress, LoadLibraryA},
+                };
+                use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+                #[repr(C)]
+                struct AccentPolicy {
+                    accent_state: u32,
+                    accent_flags: u32,
+                    gradient_color: u32,
+                    animation_id: u32,
+                }
+
+                #[repr(C)]
+                struct WindowCompositionAttribData {
+                    attrib: u32,
+                    data: *mut c_void,
+                    size_of_data: usize,
+                }
+
+                type SetWindowCompositionAttribute =
+                    unsafe extern "system" fn(HWND, *mut WindowCompositionAttribData) -> BOOL;
+
+                const WCA_ACCENT_POLICY: u32 = 0x13;
+                const ACCENT_ENABLE_ACRYLICBLURBEHIND: u32 = 4;
+
+                let Ok(handle) = window.window_handle() else {
+                    tracing::warn!("failed to get window handle for acrylic");
+                    return;
+                };
+                let RawWindowHandle::Win32(handle) = handle.as_raw() else {
+                    return;
+                };
+
+                let user32 = unsafe { LoadLibraryA(c"user32.dll".as_ptr() as PCSTR) };
+                if user32.is_null() {
+                    tracing::warn!("failed to load user32.dll for acrylic");
+                    return;
+                }
+
+                let Some(function) =
+                    (unsafe { GetProcAddress(user32, c"SetWindowCompositionAttribute".as_ptr() as PCSTR) })
+                else {
+                    tracing::warn!("SetWindowCompositionAttribute is unavailable");
+                    return;
+                };
+
+                let set_window_composition_attribute: SetWindowCompositionAttribute =
+                    unsafe { std::mem::transmute(function) };
+
+                let (r, g, b, mut a) = config::RendererConfig::WINDOW_ACRYLIC_TINT;
+                if a == 0 {
+                    a = 1;
+                }
+
+                let mut policy: AccentPolicy = AccentPolicy {
+                    accent_state: ACCENT_ENABLE_ACRYLICBLURBEHIND,
+                    accent_flags: 0,
+                    gradient_color: r as u32
+                        | ((g as u32) << 8)
+                        | ((b as u32) << 16)
+                        | ((a as u32) << 24),
+                    animation_id: 0,
+                };
+                let mut data = WindowCompositionAttribData {
+                    attrib: WCA_ACCENT_POLICY,
+                    data: &mut policy as *mut _ as *mut c_void,
+                    size_of_data: std::mem::size_of::<AccentPolicy>(),
+                };
+
+                if unsafe {
+                    set_window_composition_attribute(handle.hwnd.get() as HWND, &mut data)
+                } == 0
+                {
+                    tracing::warn!("failed to apply accent acrylic window backdrop");
+                }
+            }
+            _ => {
+                let _ = window;
+            }
         }
     }
 }
@@ -92,7 +299,8 @@ impl State {
         encoder: &mut CommandEncoder,
         view: TextureView,
     ) -> Result<(), Box<dyn Error>> {
-        let mut pass: wgpu::RenderPass<'_> = pass::begin_render_pass(encoder, &view);
+        let mut pass: wgpu::RenderPass<'_> =
+            pass::begin_render_pass(encoder, &view, self.window_surface.clear_color);
 
         let bind_group: wgpu::BindGroup = self
             .render_resources
@@ -162,7 +370,7 @@ impl WindowRenderer for State {
                 .configure(&self.gpu.device, &self.window_surface.config);
             self.window_surface.is_configured = true;
 
-            self.terminal_view.resize(size.height, snapshot);
+            self.terminal_view.resize(size.width, size.height, snapshot);
             self.update_caret_uniform();
         }
     }

@@ -4,24 +4,16 @@ mod app;
 mod config;
 mod session;
 
-use std::{
-    error::Error,
-    sync::mpsc::{Receiver, Sender, channel},
-};
+use std::error::Error;
 
-use session::runtime::SessionInput;
 use tracing_subscriber::EnvFilter;
 use winit::event_loop::EventLoop;
 
 use crate::app::core::SolitoApplication;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let (input_tx, input_rx): (Sender<SessionInput>, Receiver<SessionInput>) =
-        channel::<SessionInput>();
-    let (output_tx, output_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel::<Vec<u8>>();
-
     init_tracing();
-    run_app(input_tx, input_rx, output_tx, output_rx)?;
+    run_app()?;
 
     Ok(())
 }
@@ -33,15 +25,9 @@ fn init_tracing() {
         .init();
 }
 
-fn run_app(
-    input_tx: Sender<SessionInput>,
-    input_rx: Receiver<SessionInput>,
-    output_tx: Sender<Vec<u8>>,
-    output_rx: Receiver<Vec<u8>>,
-) -> Result<(), Box<dyn Error>> {
+fn run_app() -> Result<(), Box<dyn Error>> {
     let event_loop: EventLoop<()> = EventLoop::new()?;
-    let mut solito: SolitoApplication =
-        SolitoApplication::new(input_tx, input_rx, output_tx, output_rx);
+    let mut solito: SolitoApplication = SolitoApplication::new();
     event_loop.run_app(&mut solito)?;
 
     Ok(())
