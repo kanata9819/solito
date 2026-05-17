@@ -121,7 +121,6 @@ fn handle_key(
     const ARROWDOWN: &[u8; 3] = b"\x1b[B";
     const ARROWRIGHT: &[u8; 3] = b"\x1b[C";
     const ARROWLEFT: &[u8; 3] = b"\x1b[D";
-    const EXT: &[u8; 1] = b"\x03";
 
     if key_state == ElementState::Pressed {
         if let Some(command) = tab_shortcut_command(&logical_key, modifiers) {
@@ -148,21 +147,33 @@ fn handle_key(
                 input_tx.send(SessionInput::write(ARROWLEFT.to_vec()))?
             }
             _ => {
-                // Ctrl + c
-                if let Key::Character(char) = &logical_key
-                    && modifiers.control_key()
-                {
-                    if char.eq_ignore_ascii_case("c") {
-                        input_tx.send(SessionInput::Write(EXT.to_vec()))?;
-                        return Ok(AppCommand::None);
-                    }
-                }
+                handle_ctrl_c(&logical_key, modifiers, input_tx)?;
 
                 if let Some(text) = text {
                     input_tx.send(SessionInput::Write(text.as_bytes().to_vec()))?;
                     return Ok(AppCommand::None);
                 }
             }
+        }
+    }
+
+    Ok(AppCommand::None)
+}
+
+fn handle_ctrl_c(
+    logical_key: &Key<SmolStr>,
+    modifiers: ModifiersState,
+    input_tx: &Sender<SessionInput>,
+) -> Result<AppCommand, Box<dyn Error>> {
+    const EXT: &[u8; 1] = b"\x03";
+
+    // Ctrl + c
+    if let Key::Character(char) = &logical_key
+        && modifiers.control_key()
+    {
+        if char.eq_ignore_ascii_case("c") {
+            input_tx.send(SessionInput::Write(EXT.to_vec()))?;
+            return Ok(AppCommand::None);
         }
     }
 
