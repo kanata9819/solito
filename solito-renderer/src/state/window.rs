@@ -107,11 +107,8 @@ impl WindowSurface {
 
     fn apply_platform_acrylic(window: &Window, renderer_config: &RendererConfig) {
         if cfg!(target_os = "windows") {
-            #[cfg(target_os = "windows")]
-            {
-                if !Self::apply_windows_system_acrylic(window) {
-                    Self::apply_windows_accent_acrylic(window, renderer_config.window_acrylic_tint);
-                }
+            if !Self::apply_windows_system_acrylic(window) {
+                Self::apply_windows_accent_acrylic(window, renderer_config.window_acrylic_tint);
             }
         } else {
             let _ = (window, renderer_config);
@@ -120,58 +117,55 @@ impl WindowSurface {
 
     fn apply_windows_system_acrylic(window: &Window) -> bool {
         if cfg!(target_os = "windows") {
-            #[cfg(target_os = "windows")]
-            {
-                use std::ffi::c_void;
-                use windows_sys::Win32::{
-                    Foundation::HWND,
-                    Graphics::Dwm::{
-                        DWMSBT_TRANSIENTWINDOW, DWMWA_SYSTEMBACKDROP_TYPE,
-                        DWMWA_USE_IMMERSIVE_DARK_MODE, DwmSetWindowAttribute,
-                    },
-                };
-                use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+            use std::ffi::c_void;
+            use windows_sys::Win32::{
+                Foundation::HWND,
+                Graphics::Dwm::{
+                    DWMSBT_TRANSIENTWINDOW, DWMWA_SYSTEMBACKDROP_TYPE,
+                    DWMWA_USE_IMMERSIVE_DARK_MODE, DwmSetWindowAttribute,
+                },
+            };
+            use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-                let Ok(handle) = window.window_handle() else {
-                    tracing::warn!("failed to get window handle for system acrylic");
-                    return false;
-                };
-                let RawWindowHandle::Win32(handle) = handle.as_raw() else {
-                    return false;
-                };
+            let Ok(handle) = window.window_handle() else {
+                tracing::warn!("failed to get window handle for system acrylic");
+                return false;
+            };
+            let RawWindowHandle::Win32(handle) = handle.as_raw() else {
+                return false;
+            };
 
-                let hwnd: HWND = handle.hwnd.get() as HWND;
-                let dark_mode: i32 = 1;
-                let dark_hr = unsafe {
-                    DwmSetWindowAttribute(
-                        hwnd,
-                        DWMWA_USE_IMMERSIVE_DARK_MODE as u32,
-                        &dark_mode as *const _ as *const c_void,
-                        std::mem::size_of_val(&dark_mode) as u32,
-                    )
-                };
-                if dark_hr < 0 {
-                    tracing::debug!(hr = dark_hr, "failed to apply immersive dark mode");
-                }
-
-                let backdrop = DWMSBT_TRANSIENTWINDOW;
-                let hr = unsafe {
-                    DwmSetWindowAttribute(
-                        hwnd,
-                        DWMWA_SYSTEMBACKDROP_TYPE as u32,
-                        &backdrop as *const _ as *const c_void,
-                        std::mem::size_of_val(&backdrop) as u32,
-                    )
-                };
-
-                if hr < 0 {
-                    tracing::warn!(hr, "failed to apply DWM system acrylic backdrop");
-                    return false;
-                }
-
-                tracing::info!("applied DWM system acrylic backdrop");
-                return true;
+            let hwnd: HWND = handle.hwnd.get() as HWND;
+            let dark_mode: i32 = 1;
+            let dark_hr = unsafe {
+                DwmSetWindowAttribute(
+                    hwnd,
+                    DWMWA_USE_IMMERSIVE_DARK_MODE as u32,
+                    &dark_mode as *const _ as *const c_void,
+                    std::mem::size_of_val(&dark_mode) as u32,
+                )
+            };
+            if dark_hr < 0 {
+                tracing::debug!(hr = dark_hr, "failed to apply immersive dark mode");
             }
+
+            let backdrop = DWMSBT_TRANSIENTWINDOW;
+            let hr = unsafe {
+                DwmSetWindowAttribute(
+                    hwnd,
+                    DWMWA_SYSTEMBACKDROP_TYPE as u32,
+                    &backdrop as *const _ as *const c_void,
+                    std::mem::size_of_val(&backdrop) as u32,
+                )
+            };
+
+            if hr < 0 {
+                tracing::warn!(hr, "failed to apply DWM system acrylic backdrop");
+                return false;
+            }
+
+            tracing::info!("applied DWM system acrylic backdrop");
+            return true;
         }
 
         let _ = window;
@@ -180,86 +174,83 @@ impl WindowSurface {
 
     fn apply_windows_accent_acrylic(window: &Window, acrylic_tint: (u8, u8, u8, u8)) {
         if cfg!(target_os = "windows") {
-            #[cfg(target_os = "windows")]
+            use std::ffi::c_void;
+            use windows_sys::Win32::{
+                Foundation::HWND,
+                System::LibraryLoader::{GetProcAddress, LoadLibraryA},
+            };
+            use windows_sys::core::{BOOL, PCSTR};
+            use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+            #[repr(C)]
+            struct AccentPolicy {
+                accent_state: u32,
+                accent_flags: u32,
+                gradient_color: u32,
+                animation_id: u32,
+            }
+
+            #[repr(C)]
+            struct WindowCompositionAttribData {
+                attrib: u32,
+                data: *mut c_void,
+                size_of_data: usize,
+            }
+
+            type SetWindowCompositionAttribute =
+                unsafe extern "system" fn(HWND, *mut WindowCompositionAttribData) -> BOOL;
+
+            const WCA_ACCENT_POLICY: u32 = 0x13;
+            const ACCENT_ENABLE_ACRYLICBLURBEHIND: u32 = 4;
+
+            let Ok(handle) = window.window_handle() else {
+                tracing::warn!("failed to get window handle for acrylic");
+                return;
+            };
+            let RawWindowHandle::Win32(handle) = handle.as_raw() else {
+                return;
+            };
+
+            let user32 = unsafe { LoadLibraryA(c"user32.dll".as_ptr() as PCSTR) };
+            if user32.is_null() {
+                tracing::warn!("failed to load user32.dll for acrylic");
+                return;
+            }
+
+            let Some(function) = (unsafe {
+                GetProcAddress(user32, c"SetWindowCompositionAttribute".as_ptr() as PCSTR)
+            }) else {
+                tracing::warn!("SetWindowCompositionAttribute is unavailable");
+                return;
+            };
+
+            let set_window_composition_attribute: SetWindowCompositionAttribute =
+                unsafe { std::mem::transmute(function) };
+
+            let (r, g, b, mut a) = acrylic_tint;
+            if a == 0 {
+                a = 1;
+            }
+
+            let mut policy: AccentPolicy = AccentPolicy {
+                accent_state: ACCENT_ENABLE_ACRYLICBLURBEHIND,
+                accent_flags: 0,
+                gradient_color: r as u32
+                    | ((g as u32) << 8)
+                    | ((b as u32) << 16)
+                    | ((a as u32) << 24),
+                animation_id: 0,
+            };
+            let mut data = WindowCompositionAttribData {
+                attrib: WCA_ACCENT_POLICY,
+                data: &mut policy as *mut _ as *mut c_void,
+                size_of_data: std::mem::size_of::<AccentPolicy>(),
+            };
+
+            if unsafe { set_window_composition_attribute(handle.hwnd.get() as HWND, &mut data) }
+                == 0
             {
-                use std::ffi::c_void;
-                use windows_sys::Win32::{
-                    Foundation::HWND,
-                    System::LibraryLoader::{GetProcAddress, LoadLibraryA},
-                };
-                use windows_sys::core::{BOOL, PCSTR};
-                use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
-
-                #[repr(C)]
-                struct AccentPolicy {
-                    accent_state: u32,
-                    accent_flags: u32,
-                    gradient_color: u32,
-                    animation_id: u32,
-                }
-
-                #[repr(C)]
-                struct WindowCompositionAttribData {
-                    attrib: u32,
-                    data: *mut c_void,
-                    size_of_data: usize,
-                }
-
-                type SetWindowCompositionAttribute =
-                    unsafe extern "system" fn(HWND, *mut WindowCompositionAttribData) -> BOOL;
-
-                const WCA_ACCENT_POLICY: u32 = 0x13;
-                const ACCENT_ENABLE_ACRYLICBLURBEHIND: u32 = 4;
-
-                let Ok(handle) = window.window_handle() else {
-                    tracing::warn!("failed to get window handle for acrylic");
-                    return;
-                };
-                let RawWindowHandle::Win32(handle) = handle.as_raw() else {
-                    return;
-                };
-
-                let user32 = unsafe { LoadLibraryA(c"user32.dll".as_ptr() as PCSTR) };
-                if user32.is_null() {
-                    tracing::warn!("failed to load user32.dll for acrylic");
-                    return;
-                }
-
-                let Some(function) = (unsafe {
-                    GetProcAddress(user32, c"SetWindowCompositionAttribute".as_ptr() as PCSTR)
-                }) else {
-                    tracing::warn!("SetWindowCompositionAttribute is unavailable");
-                    return;
-                };
-
-                let set_window_composition_attribute: SetWindowCompositionAttribute =
-                    unsafe { std::mem::transmute(function) };
-
-                let (r, g, b, mut a) = acrylic_tint;
-                if a == 0 {
-                    a = 1;
-                }
-
-                let mut policy: AccentPolicy = AccentPolicy {
-                    accent_state: ACCENT_ENABLE_ACRYLICBLURBEHIND,
-                    accent_flags: 0,
-                    gradient_color: r as u32
-                        | ((g as u32) << 8)
-                        | ((b as u32) << 16)
-                        | ((a as u32) << 24),
-                    animation_id: 0,
-                };
-                let mut data = WindowCompositionAttribData {
-                    attrib: WCA_ACCENT_POLICY,
-                    data: &mut policy as *mut _ as *mut c_void,
-                    size_of_data: std::mem::size_of::<AccentPolicy>(),
-                };
-
-                if unsafe { set_window_composition_attribute(handle.hwnd.get() as HWND, &mut data) }
-                    == 0
-                {
-                    tracing::warn!("failed to apply accent acrylic window backdrop");
-                }
+                tracing::warn!("failed to apply accent acrylic window backdrop");
             }
         } else {
             let _ = (window, acrylic_tint);
