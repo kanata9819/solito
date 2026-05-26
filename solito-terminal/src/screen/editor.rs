@@ -117,7 +117,7 @@ impl ScreenEditor {
     }
 
     fn put_char(&mut self, c: char) {
-        if c == '\u{7f}' {
+        if c == '\u{7f}' || c == '\u{8}' {
             return;
         }
 
