@@ -1,6 +1,7 @@
 mod config;
 mod state;
 mod terminal_view;
+mod util;
 
 mod pass;
 mod pipeline;

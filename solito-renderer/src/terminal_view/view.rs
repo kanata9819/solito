@@ -1,8 +1,9 @@
 use ::glyphon::{Attrs, Color, Family, Shaping};
 use solito_terminal::{ScreenCell, ScreenSnapshot};
 
-use crate::RendererConfig;
 use crate::pipeline::rect::RectSpec;
+use crate::util;
+use crate::{RendererConfig, terminal_view::tab_bar::TabView};
 
 use super::{
     glyph::GlyphonResources, resources::GlyphResources, tab_bar::TabBarSnapshot,
@@ -21,18 +22,6 @@ impl TerminalView {
     pub(crate) const PADDING_X: f32 = 10.0;
     pub(crate) const PADDING_Y: f32 = 10.0;
     pub(crate) const DEFAULT_CARET_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
-    const TAB_ACTIVE_COLOR: [u8; 4] = [255, 255, 255, 255];
-    const TAB_INACTIVE_COLOR: [u8; 4] = [140, 148, 160, 255];
-    const TAB_SEPARATOR_COLOR: [u8; 4] = [80, 88, 100, 255];
-    const TAB_TEXT_PADDING: usize = 2;
-    const TAB_GAP_CHARS: usize = 1;
-    const TAB_SLANT: f32 = 10.0;
-    const TAB_TOP_GLOW_HEIGHT: f32 = 1.0;
-    const TAB_UNDERLINE_HEIGHT: f32 = 3.0;
-    const TAB_ACTIVE_BACKGROUND: [f32; 4] = [0.118, 0.161, 0.220, 0.96];
-    const TAB_INACTIVE_BACKGROUND: [f32; 4] = [0.055, 0.075, 0.118, 0.72];
-    const TAB_ACTIVE_UNDERLINE: [f32; 4] = [0.125, 0.827, 0.933, 1.0];
-    const TAB_ACTIVE_TOP_GLOW: [f32; 4] = [0.408, 0.878, 1.0, 0.34];
 
     pub(crate) fn new(
         device: &wgpu::Device,
@@ -110,6 +99,7 @@ impl TerminalView {
         let cell_width: f32 =
             GlyphonResources::measure_font_width(&mut self.glyphs.font_system, &self.config)
                 .max(1.0);
+
         let visible_row: usize = self.snapshot.cursor_row - start;
 
         let caret_x: f32 = Self::PADDING_X + self.snapshot.cursor_col as f32 * cell_width;
@@ -125,7 +115,7 @@ impl TerminalView {
     pub(crate) fn caret_color(&self) -> [f32; 4] {
         self.snapshot
             .cursor_color
-            .map(Self::rgba_to_f32)
+            .map(util::color::rgba_to_f32)
             .unwrap_or(Self::DEFAULT_CARET_COLOR)
     }
 
@@ -195,8 +185,8 @@ impl TerminalView {
         for (index, title) in tab_bar.titles().iter().enumerate() {
             if index > 0 {
                 spans.push((
-                    " ".repeat(Self::TAB_GAP_CHARS),
-                    Self::text_attrs(Some(Self::TAB_SEPARATOR_COLOR), font_family),
+                    " ".repeat(TabView::TAB_GAP_CHARS),
+                    Self::text_attrs(Some(TabView::TAB_SEPARATOR_COLOR), font_family),
                 ));
             }
 
@@ -204,9 +194,9 @@ impl TerminalView {
             let text: String = Self::padded_tab_title(title);
 
             let color: [u8; 4] = if active {
-                Self::TAB_ACTIVE_COLOR
+                TabView::TAB_ACTIVE_TEXT_COLOR
             } else {
-                Self::TAB_INACTIVE_COLOR
+                TabView::TAB_INACTIVE_TEXT_COLOR
             };
 
             spans.push((text, Self::text_attrs(Some(color), font_family)));
@@ -233,16 +223,16 @@ impl TerminalView {
 
         for (index, title) in tab_bar.titles().iter().enumerate() {
             if index > 0 {
-                x += cell_width * Self::TAB_GAP_CHARS as f32 + Self::TAB_SLANT;
+                x += cell_width * TabView::TAB_GAP_CHARS as f32 + TabView::TAB_SLANT;
             }
 
             let tab_width: f32 = Self::tab_title_width(title, cell_width);
-            let slanted_width: f32 = tab_width + Self::TAB_SLANT;
+            let slanted_width: f32 = tab_width + TabView::TAB_SLANT;
             let active: bool = index == tab_bar.active_index();
             let background: [f32; 4] = if active {
-                Self::TAB_ACTIVE_BACKGROUND
+                TabView::TAB_ACTIVE_BACKGROUND
             } else {
-                Self::TAB_INACTIVE_BACKGROUND
+                TabView::TAB_INACTIVE_BACKGROUND
             };
 
             rects.push(RectSpec::slanted(
@@ -251,7 +241,7 @@ impl TerminalView {
                 slanted_width,
                 tab_height,
                 background,
-                Self::TAB_SLANT,
+                TabView::TAB_SLANT,
             ));
 
             if active {
@@ -260,18 +250,18 @@ impl TerminalView {
                     tab_y,
                     tab_height,
                     0.0,
-                    Self::TAB_TOP_GLOW_HEIGHT,
+                    TabView::TAB_TOP_GLOW_HEIGHT,
                     slanted_width,
-                    Self::TAB_ACTIVE_TOP_GLOW,
+                    TabView::TAB_ACTIVE_TOP_GLOW,
                 ));
                 rects.push(Self::tab_strip_rect(
                     x,
                     tab_y,
                     tab_height,
-                    tab_height - Self::TAB_UNDERLINE_HEIGHT,
-                    Self::TAB_UNDERLINE_HEIGHT,
+                    tab_height - TabView::TAB_UNDERLINE_HEIGHT,
+                    TabView::TAB_UNDERLINE_HEIGHT,
                     slanted_width,
-                    Self::TAB_ACTIVE_UNDERLINE,
+                    TabView::TAB_ACTIVE_UNDERLINE,
                 ));
             }
 
@@ -290,8 +280,8 @@ impl TerminalView {
         width: f32,
         color: [f32; 4],
     ) -> RectSpec {
-        let bottom_slant: f32 = Self::TAB_SLANT * (1.0 - (strip_y + strip_height) / tab_height);
-        let strip_slant: f32 = Self::TAB_SLANT * strip_height / tab_height;
+        let bottom_slant: f32 = TabView::TAB_SLANT * (1.0 - (strip_y + strip_height) / tab_height);
+        let strip_slant: f32 = TabView::TAB_SLANT * strip_height / tab_height;
 
         RectSpec::slanted(
             tab_x + bottom_slant,
@@ -306,9 +296,9 @@ impl TerminalView {
     fn padded_tab_title(title: &str) -> String {
         format!(
             "{}{}{}",
-            " ".repeat(Self::TAB_TEXT_PADDING),
+            " ".repeat(TabView::TAB_TEXT_PADDING),
             title,
-            " ".repeat(Self::TAB_TEXT_PADDING)
+            " ".repeat(TabView::TAB_TEXT_PADDING)
         )
     }
 
@@ -424,15 +414,6 @@ impl TerminalView {
         }
     }
 
-    fn rgba_to_f32([r, g, b, a]: [u8; 4]) -> [f32; 4] {
-        [
-            f32::from(r) / 255.0,
-            f32::from(g) / 255.0,
-            f32::from(b) / 255.0,
-            f32::from(a) / 255.0,
-        ]
-    }
-
     fn row_count(&self) -> usize {
         self.snapshot.lines.len().max(1)
     }
@@ -497,8 +478,9 @@ impl TerminalView {
 #[cfg(test)]
 mod tests {
     use super::TerminalView;
-    use crate::RendererConfig;
     use crate::terminal_view::TabBarSnapshot;
+    use crate::terminal_view::tab_bar::TabView;
+    use crate::{RendererConfig, util};
     use glyphon::Color;
     use solito_terminal::ScreenCell;
 
@@ -521,7 +503,7 @@ mod tests {
     #[test]
     fn rgba_to_f32_normalizes_color_channels() {
         assert_eq!(
-            TerminalView::rgba_to_f32([0, 128, 255, 255]),
+            util::color::rgba_to_f32([0, 128, 255, 255]),
             [0.0, 128.0 / 255.0, 1.0, 1.0]
         );
     }
@@ -593,16 +575,16 @@ mod tests {
             rects[0].height,
             TerminalView::tab_bar_height_for(RendererConfig::DEFAULT_LINE_HEIGHT) + 2.0
         );
-        assert_eq!(rects[0].color, TerminalView::TAB_ACTIVE_BACKGROUND);
-        assert_eq!(rects[0].slant, TerminalView::TAB_SLANT);
-        assert_eq!(rects[2].height, TerminalView::TAB_UNDERLINE_HEIGHT);
-        assert_eq!(rects[2].color, TerminalView::TAB_ACTIVE_UNDERLINE);
+        assert_eq!(rects[0].color, TabView::TAB_ACTIVE_BACKGROUND);
+        assert_eq!(rects[0].slant, TabView::TAB_SLANT);
+        assert_eq!(rects[2].height, TabView::TAB_UNDERLINE_HEIGHT);
+        assert_eq!(rects[2].color, TabView::TAB_ACTIVE_UNDERLINE);
         assert_eq!(
             rects[2].slant,
-            TerminalView::TAB_SLANT * TerminalView::TAB_UNDERLINE_HEIGHT / rects[0].height
+            TabView::TAB_SLANT * TabView::TAB_UNDERLINE_HEIGHT / rects[0].height
         );
         assert_eq!(rects[3].x, 130.0);
-        assert_eq!(rects[3].color, TerminalView::TAB_INACTIVE_BACKGROUND);
+        assert_eq!(rects[3].color, TabView::TAB_INACTIVE_BACKGROUND);
     }
 
     #[test]
