@@ -1,5 +1,6 @@
 use solito_renderer::{
     RendererConfig, State, TabBarSnapshot, TerminalViewRenderer, WindowRenderer,
+    estimate_terminal_size,
 };
 use std::{collections::HashMap, error::Error, sync::Arc};
 
@@ -53,6 +54,8 @@ impl SolitoApplication {
     }
 
     fn create_window(&mut self, event_loop: &ActiveEventLoop) -> Result<(), Box<dyn Error>> {
+        // Keep the native window hidden while GPU setup runs; the renderer also
+        // sets a black native fallback background for the first visible acquire.
         let window_attributes: WindowAttributes = WindowAttributes::default()
             .with_inner_size(LogicalSize::new(
                 self.config.window.width,
@@ -60,25 +63,41 @@ impl SolitoApplication {
             ))
             .with_transparent(self.renderer_config.window_backdrop.is_transparent())
             .with_window_icon(icon::window_icon())
-            .with_title("Solito");
+            .with_title("Solito")
+            .with_visible(false);
 
         let window: Arc<Window> = Arc::new(
             event_loop.create_window(Self::with_platform_window_attributes(window_attributes))?,
         );
         self.windows.insert(window.id(), window.clone());
 
-        let mut state = pollster::block_on(State::new(window, self.renderer_config.clone()))?;
-        let (cols, rows): (usize, usize) = state.terminal_size();
+        let initial_size = window.inner_size();
+        let (cols, rows): (usize, usize) = estimate_terminal_size(
+            initial_size.width,
+            initial_size.height,
+            &self.renderer_config,
+        );
         self.tabs
             .open(cols, rows, self.config.shell.program.clone());
+
+        let mut state =
+            pollster::block_on(State::new(window.clone(), self.renderer_config.clone()))?;
+        let actual_size: (usize, usize) = state.terminal_size();
+        if actual_size != (cols, rows) {
+            self.tabs.resize_all(actual_size.0, actual_size.1)?;
+        }
+
+        self.tabs.drain_outputs();
 
         state.set_tab_bar(self.tab_bar_snapshot());
 
         if let Some(snapshot) = self.tabs.active_snapshot() {
-            state.set_terminal_snapshot(snapshot);
+            state.resize(initial_size, snapshot);
         }
 
-        state.render()?;
+        state.draw_frame()?;
+        window.set_visible(true);
+        state.draw_frame()?;
         self.state = Some(state);
         self.drain_output()?;
 

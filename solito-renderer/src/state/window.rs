@@ -31,6 +31,7 @@ impl WindowSurface {
         size: PhysicalSize<u32>,
         renderer_config: &RendererConfig,
     ) -> Self {
+        Self::apply_initial_window_background(window.as_ref());
         Self::apply_window_effects(window.as_ref(), renderer_config);
 
         let surface_caps: wgpu::SurfaceCapabilities = surface.get_capabilities(&gpu.adapter);
@@ -104,6 +105,44 @@ impl WindowSurface {
                 Self::apply_platform_acrylic(window, renderer_config);
             }
         };
+    }
+
+    fn apply_initial_window_background(window: &Window) {
+        if cfg!(target_os = "windows") {
+            use windows_sys::Win32::{
+                Foundation::HWND,
+                Graphics::Gdi::{BLACK_BRUSH, GetStockObject},
+                UI::WindowsAndMessaging::{GCLP_HBRBACKGROUND, SetClassLongPtrW},
+            };
+            use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+            let Ok(handle) = window.window_handle() else {
+                tracing::warn!("failed to get window handle for initial background");
+                return;
+            };
+            let RawWindowHandle::Win32(handle) = handle.as_raw() else {
+                return;
+            };
+
+            let brush = unsafe { GetStockObject(BLACK_BRUSH) };
+            if brush.is_null() {
+                tracing::warn!("failed to get stock black brush for initial background");
+                return;
+            }
+
+            // wgpu can fail to acquire a surface texture while the window is hidden
+            // or just becoming visible. Set the native erase background to black so
+            // a one-frame OS fallback paint matches the terminal instead of flashing white.
+            unsafe {
+                SetClassLongPtrW(
+                    handle.hwnd.get() as HWND,
+                    GCLP_HBRBACKGROUND,
+                    brush as isize,
+                );
+            }
+        } else {
+            let _ = window;
+        }
     }
 
     fn apply_platform_acrylic(window: &Window, renderer_config: &RendererConfig) {
@@ -261,8 +300,7 @@ impl WindowSurface {
 
 pub trait WindowRenderer {
     fn resize(&mut self, size: PhysicalSize<u32>, snapshot: ScreenSnapshot);
-    fn render(&mut self) -> Result<(), Box<dyn Error>>;
-    fn redraw(&mut self) -> Result<(), Box<dyn Error>>;
+    fn draw_frame(&mut self) -> Result<(), Box<dyn Error>>;
     fn scroll(&mut self, x: f32, y: f32);
 }
 
@@ -352,35 +390,39 @@ impl State {
     }
 
     fn initialize_frame(&mut self) -> Result<Option<SurfaceTexture>, Box<dyn Error>> {
-        let frame: SurfaceTexture = match self.window_surface.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(frame) => frame,
-            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
-                // Try again later
-                self.window_surface.window.request_redraw();
-                return Ok(None);
+        for _ in 0..2 {
+            match self.window_surface.surface.get_current_texture() {
+                wgpu::CurrentSurfaceTexture::Success(frame) => return Ok(Some(frame)),
+                wgpu::CurrentSurfaceTexture::Suboptimal(frame) => {
+                    self.window_surface
+                        .surface
+                        .configure(&self.gpu.device, &self.window_surface.config);
+                    return Ok(Some(frame));
+                }
+                wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+                    self.window_surface.window.request_redraw();
+                    return Ok(None);
+                }
+                wgpu::CurrentSurfaceTexture::Outdated => {
+                    self.window_surface
+                        .surface
+                        .configure(&self.gpu.device, &self.window_surface.config);
+                }
+                wgpu::CurrentSurfaceTexture::Lost => {
+                    self.window_surface.surface = self
+                        .gpu
+                        .instance
+                        .create_surface(self.window_surface.window.clone())?;
+                    self.window_surface
+                        .surface
+                        .configure(&self.gpu.device, &self.window_surface.config);
+                }
+                wgpu::CurrentSurfaceTexture::Validation => panic!("validation error"),
             }
-            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Suboptimal(_) => {
-                self.window_surface
-                    .surface
-                    .configure(&self.gpu.device, &self.window_surface.config);
-                self.window_surface.window.request_redraw();
-                return Ok(None);
-            }
-            wgpu::CurrentSurfaceTexture::Lost => {
-                self.window_surface.surface = self
-                    .gpu
-                    .instance
-                    .create_surface(self.window_surface.window.clone())?;
-                self.window_surface
-                    .surface
-                    .configure(&self.gpu.device, &self.window_surface.config);
-                self.window_surface.window.request_redraw();
-                return Ok(None);
-            }
-            wgpu::CurrentSurfaceTexture::Validation => panic!("validation error"),
-        };
+        }
 
-        Ok(Some(frame))
+        self.window_surface.window.request_redraw();
+        Ok(None)
     }
 
     fn create_encoder(&self, label: Option<&str>) -> CommandEncoder {
@@ -406,53 +448,7 @@ impl WindowRenderer for State {
         }
     }
 
-    fn render(&mut self) -> Result<(), Box<dyn Error>> {
-        self.window_surface.window.request_redraw();
-
-        // We can't render unless the surface is configured
-        if !self.window_surface.is_configured {
-            return Ok(());
-        }
-
-        let output: SurfaceTexture = match self.window_surface.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
-            wgpu::CurrentSurfaceTexture::Suboptimal(surface_texture) => {
-                self.window_surface
-                    .surface
-                    .configure(&self.gpu.device, &self.window_surface.config);
-                surface_texture
-            }
-            wgpu::CurrentSurfaceTexture::Timeout
-            | wgpu::CurrentSurfaceTexture::Occluded
-            | wgpu::CurrentSurfaceTexture::Validation => {
-                // Skip this frame
-                return Ok(());
-            }
-            wgpu::CurrentSurfaceTexture::Outdated => {
-                self.window_surface
-                    .surface
-                    .configure(&self.gpu.device, &self.window_surface.config);
-                return Ok(());
-            }
-            wgpu::CurrentSurfaceTexture::Lost => {
-                // You could recreate the devices and all resources
-                // created with it here, but we'll just bail
-                todo!("Lost device");
-            }
-        };
-
-        let encoder: CommandEncoder = self.create_encoder(Some("Render Encoder"));
-
-        self.gpu.queue.submit(std::iter::once(encoder.finish()));
-
-        // The last lines of the code tell wgpu to finish the command buffer
-        // and submit it to the GPU's render queue.
-        output.present();
-
-        Ok(())
-    }
-
-    fn redraw(&mut self) -> Result<(), Box<dyn Error>> {
+    fn draw_frame(&mut self) -> Result<(), Box<dyn Error>> {
         self.terminal_view.glyphs.viewport.update(
             &self.gpu.queue,
             Resolution {

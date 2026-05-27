@@ -1,4 +1,4 @@
-use ::glyphon::{Attrs, Color, Family, Shaping};
+use ::glyphon::{Attrs, Color, Family, FontSystem, Shaping};
 use solito_terminal::{ScreenCell, ScreenSnapshot};
 
 use crate::pipeline::rect::RectSpec;
@@ -66,6 +66,24 @@ impl TerminalView {
             tab_bar: TabBarSnapshot::default(),
             copy_mode: CopyModeSnapshot::default(),
         }
+    }
+
+    pub(crate) fn estimate_terminal_size(
+        width: u32,
+        height: u32,
+        config: &RendererConfig,
+    ) -> (usize, usize) {
+        let config: RendererConfig = config.clone().sanitized();
+        let mut font_system = FontSystem::new();
+        let cell_width: f32 =
+            GlyphonResources::measure_font_width(&mut font_system, &config).max(1.0);
+        let content_width: u32 = Self::terminal_content_width(width);
+        let content_height: u32 = Self::terminal_content_height(height, config.line_height);
+
+        (
+            ((content_width as f32 / cell_width).floor() as usize).max(1),
+            ((content_height as f32 / config.line_height).floor() as usize).max(1),
+        )
     }
 
     pub(crate) fn resize(&mut self, width: u32, height: u32, snapshot: ScreenSnapshot) {

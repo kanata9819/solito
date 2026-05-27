@@ -57,12 +57,11 @@ pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
             Ok(AppCommand::None)
         }
         WindowEvent::RedrawRequested => {
-            if let Err(e) = state.render() {
+            if let Err(e) = state.draw_frame() {
                 error!("{e}");
                 event_loop.exit();
             }
 
-            state.redraw()?;
             Ok(AppCommand::None)
         }
         WindowEvent::KeyboardInput {
