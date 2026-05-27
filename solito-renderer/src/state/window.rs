@@ -12,6 +12,7 @@ use crate::{
     RendererConfig, WindowBackdrop, pass,
     pipeline::rect::{self, RectRenderer},
     terminal_view::TerminalView,
+    util::color::ThemeColor,
 };
 
 pub(super) struct WindowSurface {
@@ -267,6 +268,8 @@ pub trait WindowRenderer {
 
 impl State {
     fn prepare_render(&mut self) -> Result<(), Box<dyn Error>> {
+        let [default_r, default_g, default_b, _] = ThemeColor::WHITE;
+
         self.terminal_view.glyphs.text_renderer.prepare(
             &self.gpu.device,
             &self.gpu.queue,
@@ -283,7 +286,7 @@ impl State {
                     top: 0,
                     ..Default::default()
                 },
-                default_color: Color::rgb(255, 255, 255),
+                default_color: Color::rgb(default_r, default_g, default_b),
                 custom_glyphs: &[],
             }],
             &mut self.terminal_view.glyphs.swash_cache,

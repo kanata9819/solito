@@ -25,7 +25,7 @@ pub(crate) struct TerminalView {
 impl TerminalView {
     pub(crate) const PADDING_X: f32 = 10.0;
     pub(crate) const PADDING_Y: f32 = 10.0;
-    pub(crate) const DEFAULT_CARET_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
+    pub(crate) const DEFAULT_CARET_COLOR: [f32; 4] = ThemeColor::WHITE_ALPHA;
     const COPY_MODE_SELECTION_COLOR: [f32; 4] = ThemeColor::BLUE_500_ALPHA;
     const COPY_MODE_CURSOR_COLOR: [f32; 4] = ThemeColor::YELLOW_400_ALPHA;
 
@@ -568,9 +568,9 @@ impl TerminalView {
             + BLUE_LUMINANCE_WEIGHT * caret_color[2];
 
         if luminance > LIGHT_BACKGROUND_THRESHOLD {
-            [0, 0, 0, 255]
+            ThemeColor::BLACK
         } else {
-            [255, 255, 255, 255]
+            ThemeColor::WHITE
         }
     }
 
@@ -661,9 +661,14 @@ mod tests {
     use super::TerminalView;
     use crate::terminal_view::TabBarSnapshot;
     use crate::terminal_view::tab_bar::TabView;
+    use crate::util::color::ThemeColor;
     use crate::{RendererConfig, util};
     use glyphon::Color;
     use solito_terminal::ScreenCell;
+
+    fn color([r, g, b, a]: [u8; 4]) -> Color {
+        Color::rgba(r, g, b, a)
+    }
 
     #[test]
     fn cell_char_returns_cell_character() {
@@ -691,18 +696,18 @@ mod tests {
 
     #[test]
     fn caret_color_defaults_to_white() {
-        assert_eq!(TerminalView::DEFAULT_CARET_COLOR, [1.0, 1.0, 1.0, 1.0]);
+        assert_eq!(TerminalView::DEFAULT_CARET_COLOR, ThemeColor::WHITE_ALPHA);
     }
 
     #[test]
     fn cursor_text_color_contrasts_with_caret_color() {
         assert_eq!(
             TerminalView::cursor_text_color([1.0, 1.0, 1.0, 1.0]),
-            [0, 0, 0, 255]
+            ThemeColor::BLACK
         );
         assert_eq!(
             TerminalView::cursor_text_color([0.0, 0.0, 0.0, 1.0]),
-            [255, 255, 255, 255]
+            ThemeColor::WHITE
         );
     }
 
@@ -716,13 +721,13 @@ mod tests {
             0,
             0,
             0,
-            [0, 0, 0, 255],
+            ThemeColor::BLACK,
             RendererConfig::DEFAULT_FONT_FAMILY,
         );
 
         assert_eq!(spans.len(), 1);
         assert_eq!(spans[0].0, "A");
-        assert_eq!(spans[0].1.color_opt, Some(Color::rgba(0, 0, 0, 255)));
+        assert_eq!(spans[0].1.color_opt, Some(color(ThemeColor::BLACK)));
     }
 
     #[test]
@@ -733,10 +738,10 @@ mod tests {
             TerminalView::tab_bar_spans_for(&snapshot, RendererConfig::DEFAULT_FONT_FAMILY, 10.0);
 
         assert_eq!(spans[0].0, "  Tab 1  ");
-        assert_eq!(spans[0].1.color_opt, Some(Color::rgba(255, 255, 255, 255)));
+        assert_eq!(spans[0].1.color_opt, Some(color(ThemeColor::WHITE)));
         assert_eq!(spans[1].0, "   ");
         assert_eq!(spans[2].0, "  Tab 2  ");
-        assert_eq!(spans[2].1.color_opt, Some(Color::rgba(140, 148, 160, 255)));
+        assert_eq!(spans[2].1.color_opt, Some(color(ThemeColor::BLUE_GRAY_400)));
     }
 
     #[test]
