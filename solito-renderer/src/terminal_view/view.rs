@@ -190,8 +190,11 @@ impl TerminalView {
     }
 
     fn visible_text_spans<'a>(&mut self, font_family: &'a str) -> Vec<(String, Attrs<'a>)> {
+        let cell_width: f32 =
+            GlyphonResources::measure_font_width(&mut self.glyphs.font_system, &self.config)
+                .max(1.0);
         let mut spans: Vec<(String, Attrs<'a>)> =
-            Self::tab_bar_spans_for(&self.tab_bar, font_family);
+            Self::tab_bar_spans_for(&self.tab_bar, font_family, cell_width);
         let has_tab_bar: bool = !spans.is_empty();
 
         if self.snapshot.lines.is_empty() {
@@ -221,6 +224,7 @@ impl TerminalView {
     fn tab_bar_spans_for<'a>(
         tab_bar: &TabBarSnapshot,
         font_family: &'a str,
+        cell_width: f32,
     ) -> Vec<(String, Attrs<'a>)> {
         let mut spans: Vec<(String, Attrs<'a>)> = Vec::new();
 
@@ -231,7 +235,7 @@ impl TerminalView {
         for (index, title) in tab_bar.titles().iter().enumerate() {
             if index > 0 {
                 spans.push((
-                    " ".repeat(TabView::TAB_GAP_CHARS),
+                    " ".repeat(Self::tab_text_gap_chars(cell_width)),
                     Self::text_attrs(Some(TabView::TAB_SEPARATOR_COLOR), font_family),
                 ));
             }
@@ -266,10 +270,11 @@ impl TerminalView {
         let mut x: f32 = Self::PADDING_X;
         let tab_y: f32 = 6.0;
         let tab_height: f32 = Self::tab_bar_height_for(line_height) + 2.0;
+        let tab_text_gap_width: f32 = Self::tab_text_gap_chars(cell_width) as f32 * cell_width;
 
         for (index, title) in tab_bar.titles().iter().enumerate() {
             if index > 0 {
-                x += cell_width * TabView::TAB_GAP_CHARS as f32 + TabView::TAB_SLANT;
+                x += (tab_text_gap_width - TabView::TAB_SLANT).max(0.0);
             }
 
             let tab_width: f32 = Self::tab_title_width(title, cell_width);
@@ -462,6 +467,12 @@ impl TerminalView {
 
     fn tab_title_width(title: &str, cell_width: f32) -> f32 {
         Self::padded_tab_title(title).chars().count() as f32 * cell_width
+    }
+
+    fn tab_text_gap_chars(cell_width: f32) -> usize {
+        let gap_width: f32 = cell_width * TabView::TAB_GAP_CHARS as f32 + TabView::TAB_SLANT * 2.0;
+
+        (gap_width / cell_width).ceil() as usize
     }
 
     fn text_spans_for_lines<'a>(
@@ -718,11 +729,12 @@ mod tests {
     fn tab_bar_spans_mark_active_tab() {
         let snapshot: TabBarSnapshot =
             TabBarSnapshot::new(vec!["Tab 1".to_string(), "Tab 2".to_string()], 0);
-        let spans = TerminalView::tab_bar_spans_for(&snapshot, RendererConfig::DEFAULT_FONT_FAMILY);
+        let spans =
+            TerminalView::tab_bar_spans_for(&snapshot, RendererConfig::DEFAULT_FONT_FAMILY, 10.0);
 
         assert_eq!(spans[0].0, "  Tab 1  ");
         assert_eq!(spans[0].1.color_opt, Some(Color::rgba(255, 255, 255, 255)));
-        assert_eq!(spans[1].0, " ");
+        assert_eq!(spans[1].0, "   ");
         assert_eq!(spans[2].0, "  Tab 2  ");
         assert_eq!(spans[2].1.color_opt, Some(Color::rgba(140, 148, 160, 255)));
     }
@@ -755,6 +767,25 @@ mod tests {
         );
         assert_eq!(rects[3].x, 130.0);
         assert_eq!(rects[3].color, TabView::TAB_INACTIVE_BACKGROUND);
+    }
+
+    #[test]
+    fn tab_bar_text_gap_matches_next_tab_rect() {
+        let snapshot: TabBarSnapshot =
+            TabBarSnapshot::new(vec!["Tab 1".to_string(), "Tab 2".to_string()], 0);
+        let cell_width = 10.0;
+        let spans =
+            TerminalView::tab_bar_spans_for(&snapshot, RendererConfig::DEFAULT_FONT_FAMILY, 10.0);
+        let rects = TerminalView::tab_bar_rects_for(
+            &snapshot,
+            220,
+            cell_width,
+            RendererConfig::DEFAULT_LINE_HEIGHT,
+        );
+        let second_tab_text_x: f32 =
+            TerminalView::PADDING_X + (spans[0].0.len() + spans[1].0.len()) as f32 * cell_width;
+
+        assert_eq!(second_tab_text_x, rects[3].x);
     }
 
     #[test]
