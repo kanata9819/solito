@@ -3,8 +3,9 @@ use solito_renderer::{
 };
 use std::{collections::HashMap, error::Error, sync::Arc};
 
+use crate::app::copy_mode::CopyMode;
 use crate::app::event as AppEvent;
-use crate::app::event::AppCommand;
+use crate::app::event::{AppCommand, CopyModeCommand};
 use crate::app::icon;
 use crate::app::tabs::AppTabs;
 use crate::config::AppConfig;
@@ -24,6 +25,7 @@ pub(crate) struct SolitoApplication {
     windows: HashMap<WindowId, Arc<Window>>,
     state: Option<State>,
     tabs: AppTabs,
+    copy_mode: CopyMode,
     modifiers: ModifiersState,
 }
 
@@ -37,6 +39,7 @@ impl SolitoApplication {
             windows: HashMap::new(),
             state: None,
             tabs: AppTabs::new(),
+            copy_mode: CopyMode::default(),
             modifiers: ModifiersState::default(),
         }
     }
@@ -99,7 +102,18 @@ impl SolitoApplication {
     ) -> Result<(), Box<dyn Error>> {
         match command {
             AppCommand::None => {}
+            AppCommand::EnterCopyMode => {
+                if let Some(snapshot) = self.tabs.active_snapshot() {
+                    self.copy_mode.enter(&snapshot);
+                    self.sync_copy_mode(&snapshot);
+                    self.set_window_title();
+                }
+            }
+            AppCommand::CopyMode(command) => {
+                self.handle_copy_mode_command(command)?;
+            }
             AppCommand::NewTab => {
+                self.exit_copy_mode();
                 if let Some(state) = &mut self.state {
                     let (cols, rows): (usize, usize) = state.terminal_size();
                     self.tabs
@@ -109,6 +123,7 @@ impl SolitoApplication {
                 }
             }
             AppCommand::CloseTab => {
+                self.exit_copy_mode();
                 if self.tabs.close_active() {
                     if self.tabs.is_empty() {
                         event_loop.exit();
@@ -119,12 +134,14 @@ impl SolitoApplication {
                 }
             }
             AppCommand::NextTab => {
+                self.exit_copy_mode();
                 if self.tabs.activate_next() {
                     self.set_tab_bar();
                     self.set_active_snapshot();
                 }
             }
             AppCommand::PreviousTab => {
+                self.exit_copy_mode();
                 if self.tabs.activate_previous() {
                     self.set_tab_bar();
                     self.set_active_snapshot();
@@ -136,8 +153,47 @@ impl SolitoApplication {
                 if let (Some(state), Some(snapshot)) =
                     (&mut self.state, self.tabs.active_snapshot())
                 {
+                    let copy_mode_snapshot = self.copy_mode.renderer_snapshot(&snapshot);
                     state.resize(size, snapshot);
+                    state.set_copy_mode(copy_mode_snapshot);
                 }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn handle_copy_mode_command(&mut self, command: CopyModeCommand) -> Result<(), Box<dyn Error>> {
+        let Some(snapshot) = self.tabs.active_snapshot() else {
+            return Ok(());
+        };
+
+        match command {
+            CopyModeCommand::Move(direction) => {
+                self.copy_mode.move_cursor(&snapshot, direction);
+                self.sync_copy_mode(&snapshot);
+            }
+            CopyModeCommand::ToggleCellSelection => {
+                self.copy_mode.toggle_cell_selection();
+                self.sync_copy_mode(&snapshot);
+            }
+            CopyModeCommand::ToggleLineSelection => {
+                self.copy_mode.toggle_line_selection();
+                self.sync_copy_mode(&snapshot);
+            }
+            CopyModeCommand::CopyAndExit => {
+                let copy_result: Result<(), Box<dyn Error>> =
+                    if let Some(text) = self.copy_mode.selected_text(&snapshot) {
+                        Self::copy_to_clipboard(text)
+                    } else {
+                        Ok(())
+                    };
+
+                self.exit_copy_mode();
+                copy_result?;
+            }
+            CopyModeCommand::Exit => {
+                self.exit_copy_mode();
             }
         }
 
@@ -146,7 +202,9 @@ impl SolitoApplication {
 
     fn set_active_snapshot(&mut self) {
         if let (Some(state), Some(snapshot)) = (&mut self.state, self.tabs.active_snapshot()) {
+            let copy_mode_snapshot = self.copy_mode.renderer_snapshot(&snapshot);
             state.set_terminal_snapshot(snapshot);
+            state.set_copy_mode(copy_mode_snapshot);
         }
     }
 
@@ -160,6 +218,45 @@ impl SolitoApplication {
 
     fn tab_bar_snapshot(&self) -> TabBarSnapshot {
         TabBarSnapshot::new(self.tabs.titles(), self.tabs.active_index())
+    }
+
+    fn sync_copy_mode(&mut self, snapshot: &solito_terminal::ScreenSnapshot) {
+        if let Some(state) = &mut self.state {
+            state.set_copy_mode(self.copy_mode.renderer_snapshot(snapshot));
+        }
+    }
+
+    fn exit_copy_mode(&mut self) {
+        if !self.copy_mode.is_active() {
+            return;
+        }
+
+        self.copy_mode.exit();
+
+        if let Some(state) = &mut self.state {
+            state.set_copy_mode(Default::default());
+        }
+
+        self.set_window_title();
+    }
+
+    fn set_window_title(&self) {
+        let title: &str = if self.copy_mode.is_active() {
+            "Solito - Copy Mode"
+        } else {
+            "Solito"
+        };
+
+        for window in self.windows.values() {
+            window.set_title(title);
+        }
+    }
+
+    fn copy_to_clipboard(text: String) -> Result<(), Box<dyn Error>> {
+        let mut clipboard = arboard::Clipboard::new()?;
+        clipboard.set_text(text)?;
+
+        Ok(())
     }
 }
 
@@ -195,6 +292,7 @@ impl ApplicationHandler for SolitoApplication {
                 &mut self.modifiers,
                 input_tx,
                 self.renderer_config.line_height,
+                self.copy_mode.is_active(),
             ) {
                 Ok(command) => command,
                 Err(err) => {

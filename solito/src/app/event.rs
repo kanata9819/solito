@@ -13,10 +13,13 @@ use winit::{
     window::{Window, WindowId},
 };
 
+use crate::app::copy_mode::CopyModeMove;
 use crate::session::runtime::SessionInput;
 
 pub(super) enum AppCommand {
     None,
+    EnterCopyMode,
+    CopyMode(CopyModeCommand),
     NewTab,
     CloseTab,
     NextTab,
@@ -28,6 +31,14 @@ pub(super) enum AppCommand {
     },
 }
 
+pub(super) enum CopyModeCommand {
+    Move(CopyModeMove),
+    ToggleCellSelection,
+    ToggleLineSelection,
+    CopyAndExit,
+    Exit,
+}
+
 pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
     windows: &mut HashMap<WindowId, Arc<Window>>,
     window_id: WindowId,
@@ -37,6 +48,7 @@ pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
     modifiers_state: &mut ModifiersState,
     input_tx: &Sender<SessionInput>,
     line_height: f32,
+    copy_mode_active: bool,
 ) -> Result<AppCommand, Box<dyn Error>> {
     match event {
         WindowEvent::CloseRequested => {
@@ -62,7 +74,14 @@ pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
                     ..
                 },
             ..
-        } => handle_key(text, logical_key, key_state, *modifiers_state, input_tx),
+        } => handle_key(
+            text,
+            logical_key,
+            key_state,
+            *modifiers_state,
+            input_tx,
+            copy_mode_active,
+        ),
         WindowEvent::ModifiersChanged(modifiers) => {
             *modifiers_state = modifiers.state();
             Ok(AppCommand::None)
@@ -110,6 +129,7 @@ fn handle_key(
     key_state: ElementState,
     modifiers: ModifiersState,
     input_tx: &Sender<SessionInput>,
+    copy_mode_active: bool,
 ) -> Result<AppCommand, Box<dyn Error>> {
     const ENTER: &[u8; 1] = b"\r";
     const BACKSPACE: &[u8; 1] = b"\x7f";
@@ -121,7 +141,13 @@ fn handle_key(
     const ARROWLEFT: &[u8; 3] = b"\x1b[D";
 
     if key_state == ElementState::Pressed {
-        if let Some(command) = tab_shortcut_command(&logical_key, modifiers) {
+        if copy_mode_active {
+            return Ok(copy_mode_command(&logical_key, modifiers)
+                .map(AppCommand::CopyMode)
+                .unwrap_or(AppCommand::None));
+        }
+
+        if let Some(command) = shortcut_command(&logical_key, modifiers) {
             return Ok(command);
         }
 
@@ -178,12 +204,12 @@ fn handle_ctrl_c(
     Ok(AppCommand::None)
 }
 
-fn tab_shortcut_command(
-    logical_key: &Key<SmolStr>,
-    modifiers: ModifiersState,
-) -> Option<AppCommand> {
+fn shortcut_command(logical_key: &Key<SmolStr>, modifiers: ModifiersState) -> Option<AppCommand> {
     if modifiers.control_key() && modifiers.shift_key() {
         match logical_key {
+            Key::Character(character) if character.eq_ignore_ascii_case("q") => {
+                Some(AppCommand::EnterCopyMode)
+            }
             Key::Character(character) if character.eq_ignore_ascii_case("t") => {
                 Some(AppCommand::NewTab)
             }
@@ -204,14 +230,56 @@ fn tab_shortcut_command(
     }
 }
 
+fn copy_mode_command(
+    logical_key: &Key<SmolStr>,
+    modifiers: ModifiersState,
+) -> Option<CopyModeCommand> {
+    match logical_key {
+        Key::Named(NamedKey::Escape) => Some(CopyModeCommand::Exit),
+        Key::Named(NamedKey::ArrowLeft) => Some(CopyModeCommand::Move(CopyModeMove::Left)),
+        Key::Named(NamedKey::ArrowDown) => Some(CopyModeCommand::Move(CopyModeMove::Down)),
+        Key::Named(NamedKey::ArrowUp) => Some(CopyModeCommand::Move(CopyModeMove::Up)),
+        Key::Named(NamedKey::ArrowRight) => Some(CopyModeCommand::Move(CopyModeMove::Right)),
+        Key::Character(character)
+            if modifiers.control_key() && character.eq_ignore_ascii_case("c") =>
+        {
+            Some(CopyModeCommand::Exit)
+        }
+        Key::Character(character) if character == "h" => {
+            Some(CopyModeCommand::Move(CopyModeMove::Left))
+        }
+        Key::Character(character) if character == "j" => {
+            Some(CopyModeCommand::Move(CopyModeMove::Down))
+        }
+        Key::Character(character) if character == "k" => {
+            Some(CopyModeCommand::Move(CopyModeMove::Up))
+        }
+        Key::Character(character) if character == "l" => {
+            Some(CopyModeCommand::Move(CopyModeMove::Right))
+        }
+        Key::Character(character) if character.eq_ignore_ascii_case("q") => {
+            Some(CopyModeCommand::Exit)
+        }
+        Key::Character(character) if character == "y" => Some(CopyModeCommand::CopyAndExit),
+        Key::Character(character)
+            if modifiers.shift_key() && character.eq_ignore_ascii_case("v") =>
+        {
+            Some(CopyModeCommand::ToggleLineSelection)
+        }
+        Key::Character(character) if character == "v" => Some(CopyModeCommand::ToggleCellSelection),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{AppCommand, tab_shortcut_command};
+    use super::{AppCommand, CopyModeCommand, copy_mode_command, shortcut_command};
+    use crate::app::copy_mode::CopyModeMove;
     use winit::keyboard::{Key, ModifiersState, SmolStr};
 
     #[test]
     fn ctrl_shift_t_opens_new_tab() {
-        let command = tab_shortcut_command(
+        let command = shortcut_command(
             &Key::Character(SmolStr::new("T")),
             ModifiersState::CONTROL | ModifiersState::SHIFT,
         );
@@ -221,7 +289,7 @@ mod tests {
 
     #[test]
     fn ctrl_shift_w_closes_active_tab() {
-        let command = tab_shortcut_command(
+        let command = shortcut_command(
             &Key::Character(SmolStr::new("W")),
             ModifiersState::CONTROL | ModifiersState::SHIFT,
         );
@@ -231,7 +299,7 @@ mod tests {
 
     #[test]
     fn ctrl_tab_switch_next_tab() {
-        let command: Option<AppCommand> = tab_shortcut_command(
+        let command: Option<AppCommand> = shortcut_command(
             &Key::Named(winit::keyboard::NamedKey::Tab),
             ModifiersState::CONTROL,
         );
@@ -241,11 +309,61 @@ mod tests {
 
     #[test]
     fn ctrl_tab_switch_previous_tab() {
-        let command: Option<AppCommand> = tab_shortcut_command(
+        let command: Option<AppCommand> = shortcut_command(
             &Key::Named(winit::keyboard::NamedKey::Tab),
             ModifiersState::SHIFT | ModifiersState::CONTROL,
         );
 
         assert!(matches!(command, Some(AppCommand::PreviousTab)));
+    }
+
+    #[test]
+    fn ctrl_shift_q_enters_copy_mode() {
+        let command = shortcut_command(
+            &Key::Character(SmolStr::new("Q")),
+            ModifiersState::CONTROL | ModifiersState::SHIFT,
+        );
+
+        assert!(matches!(command, Some(AppCommand::EnterCopyMode)));
+    }
+
+    #[test]
+    fn copy_mode_y_copies_and_exits() {
+        let command =
+            copy_mode_command(&Key::Character(SmolStr::new("y")), ModifiersState::empty());
+
+        assert!(matches!(command, Some(CopyModeCommand::CopyAndExit)));
+    }
+
+    #[test]
+    fn copy_mode_v_toggles_cell_selection() {
+        let command =
+            copy_mode_command(&Key::Character(SmolStr::new("v")), ModifiersState::empty());
+
+        assert!(matches!(
+            command,
+            Some(CopyModeCommand::ToggleCellSelection)
+        ));
+    }
+
+    #[test]
+    fn copy_mode_shift_v_toggles_line_selection() {
+        let command = copy_mode_command(&Key::Character(SmolStr::new("V")), ModifiersState::SHIFT);
+
+        assert!(matches!(
+            command,
+            Some(CopyModeCommand::ToggleLineSelection)
+        ));
+    }
+
+    #[test]
+    fn copy_mode_h_moves_left() {
+        let command =
+            copy_mode_command(&Key::Character(SmolStr::new("h")), ModifiersState::empty());
+
+        assert!(matches!(
+            command,
+            Some(CopyModeCommand::Move(CopyModeMove::Left))
+        ));
     }
 }

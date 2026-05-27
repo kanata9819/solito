@@ -8,4 +8,6 @@ mod pipeline;
 
 pub use config::{RendererConfig, WindowBackdrop};
 pub use state::context::{State, TerminalViewRenderer, WindowRenderer};
-pub use terminal_view::TabBarSnapshot;
+pub use terminal_view::{
+    CopyModePosition, CopyModeSelection, CopyModeSelectionKind, CopyModeSnapshot, TabBarSnapshot,
+};

@@ -302,16 +302,22 @@ impl State {
         let mut rects: Vec<rect::RectSpec> = self
             .terminal_view
             .tab_bar_rects(self.window_surface.config.width);
-        let (caret_x, caret_y, caret_w, caret_h) = self.terminal_view.caret_rect();
+        rects.extend(self.terminal_view.copy_mode_rects());
 
-        if caret_w > 0.0 && caret_h > 0.0 {
-            rects.push(rect::RectSpec::new(
-                caret_x,
-                caret_y,
-                caret_w,
-                caret_h,
-                self.terminal_view.caret_color(),
-            ));
+        // Copy mode draws its own cursor over the scrollback; hide the shell cursor
+        // so the user does not see two active cursor positions at once.
+        if !self.terminal_view.copy_mode_active() {
+            let (caret_x, caret_y, caret_w, caret_h) = self.terminal_view.caret_rect();
+
+            if caret_w > 0.0 && caret_h > 0.0 {
+                rects.push(rect::RectSpec::new(
+                    caret_x,
+                    caret_y,
+                    caret_w,
+                    caret_h,
+                    self.terminal_view.caret_color(),
+                ));
+            }
         }
 
         let rect_instance_buffer: Option<wgpu::Buffer> =

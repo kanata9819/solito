@@ -1,9 +1,10 @@
 use super::context::State;
-use crate::terminal_view::TabBarSnapshot;
+use crate::terminal_view::{CopyModeSnapshot, TabBarSnapshot};
 use solito_terminal::ScreenSnapshot;
 use winit::dpi::PhysicalSize;
 
 pub trait TerminalViewRenderer {
+    fn set_copy_mode(&mut self, snapshot: CopyModeSnapshot);
     fn set_tab_bar(&mut self, snapshot: TabBarSnapshot);
     fn set_terminal_snapshot(&mut self, snapshot: ScreenSnapshot);
     fn terminal_size(&mut self) -> (usize, usize);
@@ -11,6 +12,10 @@ pub trait TerminalViewRenderer {
 }
 
 impl TerminalViewRenderer for State {
+    fn set_copy_mode(&mut self, snapshot: CopyModeSnapshot) {
+        self.terminal_view.set_copy_mode(snapshot);
+    }
+
     fn set_tab_bar(&mut self, snapshot: TabBarSnapshot) {
         self.terminal_view.set_tab_bar(snapshot);
     }

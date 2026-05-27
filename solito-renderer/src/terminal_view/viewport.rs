@@ -51,6 +51,21 @@ impl ViewportState {
         self.clamp(row_count);
     }
 
+    pub(super) fn scroll_to_include(&mut self, row: usize, row_count: usize) {
+        self.clamp(row_count);
+        let (start, end): (usize, usize) = self.visible_range(row_count);
+
+        if row < start {
+            let desired_end: usize = row.saturating_add(self.visible_rows).min(row_count);
+            self.scroll_offset = row_count.saturating_sub(desired_end);
+        } else if row >= end {
+            self.scroll_offset = row_count.saturating_sub(row.saturating_add(1));
+        }
+
+        self.scroll_accumulator = 0.0;
+        self.clamp(row_count);
+    }
+
     fn visible_rows(height: u32, line_height: f32) -> usize {
         ((height as f32 / line_height).floor() as usize).max(1)
     }
