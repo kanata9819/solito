@@ -2,7 +2,7 @@ use ::glyphon::{Attrs, Color, Family, Shaping};
 use solito_terminal::{ScreenCell, ScreenSnapshot};
 
 use crate::pipeline::rect::RectSpec;
-use crate::util;
+use crate::util::{self, color::ThemeColor};
 use crate::{RendererConfig, terminal_view::tab_bar::TabView};
 
 use super::{
@@ -26,8 +26,8 @@ impl TerminalView {
     pub(crate) const PADDING_X: f32 = 10.0;
     pub(crate) const PADDING_Y: f32 = 10.0;
     pub(crate) const DEFAULT_CARET_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
-    const COPY_MODE_SELECTION_COLOR: [f32; 4] = [0.2, 0.45, 0.95, 0.36];
-    const COPY_MODE_CURSOR_COLOR: [f32; 4] = [0.95, 0.84, 0.25, 0.55];
+    const COPY_MODE_SELECTION_COLOR: [f32; 4] = ThemeColor::BLUE_500_ALPHA;
+    const COPY_MODE_CURSOR_COLOR: [f32; 4] = ThemeColor::YELLOW_400_ALPHA;
 
     pub(crate) fn new(
         device: &wgpu::Device,

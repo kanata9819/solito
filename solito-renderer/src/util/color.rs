@@ -8,6 +8,8 @@ impl ThemeColor {
     // f32 color
     pub const NAVY_900_ALPHA: [f32; 4] = [0.055, 0.075, 0.118, 0.72];
     pub const NAVY_800_ALPHA: [f32; 4] = [0.118, 0.161, 0.220, 0.96];
+    pub const BLUE_500_ALPHA: [f32; 4] = [0.2, 0.45, 0.95, 0.36];
+    pub const YELLOW_400_ALPHA: [f32; 4] = [0.95, 0.84, 0.25, 0.55];
     pub const CYAN_400: [f32; 4] = [0.125, 0.827, 0.933, 1.0];
     pub const CYAN_GLOW: [f32; 4] = [0.408, 0.878, 1.0, 0.34];
 }
