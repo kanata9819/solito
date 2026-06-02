@@ -9,6 +9,15 @@ pub(super) enum CopyModeMove {
     Down,
     Up,
     Right,
+    StartOfLine,
+    EndOfLine,
+    NextWord,
+    PreviousWord,
+    WordEnd,
+    FirstLine,
+    LastLine,
+    PageUp,
+    PageDown,
 }
 
 #[derive(Default)]
@@ -172,6 +181,120 @@ impl CopyMode {
                 row = row.saturating_add(1).min(row_count - 1);
                 col = col.min(Self::last_col(screen, row));
             }
+            CopyModeMove::StartOfLine => col = 0,
+            CopyModeMove::EndOfLine => col = Self::last_col(screen, row),
+            CopyModeMove::NextWord => return Self::next_word_start(screen, position),
+            CopyModeMove::PreviousWord => return Self::previous_word_start(screen, position),
+            CopyModeMove::WordEnd => return Self::word_end(screen, position),
+            CopyModeMove::FirstLine => {
+                row = 0;
+                col = col.min(Self::last_col(screen, row));
+            }
+            CopyModeMove::LastLine => {
+                row = row_count - 1;
+                col = col.min(Self::last_col(screen, row));
+            }
+            CopyModeMove::PageUp => {
+                row = row.saturating_sub(Self::page_rows(screen));
+                col = col.min(Self::last_col(screen, row));
+            }
+            CopyModeMove::PageDown => {
+                row = row
+                    .saturating_add(Self::page_rows(screen))
+                    .min(row_count - 1);
+                col = col.min(Self::last_col(screen, row));
+            }
+        }
+
+        CopyModePosition::new(row, col)
+    }
+
+    fn next_word_start(screen: &ScreenSnapshot, position: CopyModePosition) -> CopyModePosition {
+        let row_count: usize = screen.lines.len().max(1);
+        let mut row: usize = position.row.min(row_count - 1);
+        let mut col: usize = position.col.min(Self::last_col(screen, row));
+
+        if Self::is_nonblank(screen, row, col) {
+            while col < Self::line_len(screen, row) && Self::is_nonblank(screen, row, col) {
+                col += 1;
+            }
+        }
+
+        while row < row_count {
+            while col < Self::line_len(screen, row) && !Self::is_nonblank(screen, row, col) {
+                col += 1;
+            }
+
+            if col < Self::line_len(screen, row) {
+                return CopyModePosition::new(row, col);
+            }
+
+            row += 1;
+            col = 0;
+        }
+
+        Self::last_position(screen)
+    }
+
+    fn previous_word_start(
+        screen: &ScreenSnapshot,
+        position: CopyModePosition,
+    ) -> CopyModePosition {
+        let row_count: usize = screen.lines.len().max(1);
+        let mut row: usize = position.row.min(row_count - 1);
+        let mut col: usize = position.col.min(Self::last_col(screen, row));
+
+        if col > 0 {
+            col -= 1;
+        } else if row > 0 {
+            row -= 1;
+            col = Self::last_col(screen, row);
+        } else {
+            return CopyModePosition::new(row, 0);
+        }
+
+        loop {
+            while !Self::is_nonblank(screen, row, col) {
+                if col > 0 {
+                    col -= 1;
+                } else if row > 0 {
+                    row -= 1;
+                    col = Self::last_col(screen, row);
+                } else {
+                    return CopyModePosition::new(0, 0);
+                }
+            }
+
+            while col > 0 && Self::is_nonblank(screen, row, col - 1) {
+                col -= 1;
+            }
+
+            return CopyModePosition::new(row, col);
+        }
+    }
+
+    fn word_end(screen: &ScreenSnapshot, position: CopyModePosition) -> CopyModePosition {
+        let row_count: usize = screen.lines.len().max(1);
+        let mut row: usize = position.row.min(row_count - 1);
+        let mut col: usize = position.col.min(Self::last_col(screen, row));
+
+        if Self::is_nonblank(screen, row, col)
+            && col < Self::last_col(screen, row)
+            && Self::is_nonblank(screen, row, col + 1)
+        {
+            while col < Self::last_col(screen, row) && Self::is_nonblank(screen, row, col + 1) {
+                col += 1;
+            }
+
+            return CopyModePosition::new(row, col);
+        }
+
+        let start: CopyModePosition = Self::next_word_start(screen, position);
+        row = start.row.min(row_count - 1);
+        col = start.col.min(Self::last_col(screen, row));
+
+        while col < Self::last_col(screen, row) && Self::is_nonblank(screen, row, col + 1) {
+            col += 1;
         }
 
         CopyModePosition::new(row, col)
@@ -208,8 +331,27 @@ impl CopyMode {
         Self::line_len(screen, row).saturating_sub(1)
     }
 
+    fn last_position(screen: &ScreenSnapshot) -> CopyModePosition {
+        let row_count: usize = screen.lines.len().max(1);
+        let row: usize = row_count - 1;
+
+        CopyModePosition::new(row, Self::last_col(screen, row))
+    }
+
+    fn page_rows(screen: &ScreenSnapshot) -> usize {
+        (screen.lines.len() / 2).clamp(5, 20)
+    }
+
     fn line_len(screen: &ScreenSnapshot, row: usize) -> usize {
         screen.lines.get(row).map(|line| line.len()).unwrap_or(0)
+    }
+
+    fn is_nonblank(screen: &ScreenSnapshot, row: usize, col: usize) -> bool {
+        screen
+            .lines
+            .get(row)
+            .and_then(|line| line.get(col))
+            .is_some_and(|cell| !cell.is_wide_continuation && !cell.ch.is_whitespace())
     }
 
     fn line_text(line: Option<&Vec<ScreenCell>>, start_col: usize, end_col: usize) -> String {
@@ -275,6 +417,69 @@ mod tests {
         assert_eq!(
             copy_mode.selected_text(&screen),
             Some("abc\ndef".to_string())
+        );
+    }
+
+    #[test]
+    fn word_motion_moves_between_nonblank_runs() {
+        let screen = screen(&["abc  def ghi"], 0, 0);
+        let mut copy_mode = CopyMode::default();
+
+        copy_mode.enter(&screen);
+        copy_mode.move_cursor(&screen, CopyModeMove::NextWord);
+        assert_eq!(
+            copy_mode.snapshot.cursor,
+            solito_renderer::CopyModePosition::new(0, 5)
+        );
+
+        copy_mode.move_cursor(&screen, CopyModeMove::WordEnd);
+        assert_eq!(
+            copy_mode.snapshot.cursor,
+            solito_renderer::CopyModePosition::new(0, 7)
+        );
+
+        copy_mode.move_cursor(&screen, CopyModeMove::PreviousWord);
+        assert_eq!(
+            copy_mode.snapshot.cursor,
+            solito_renderer::CopyModePosition::new(0, 5)
+        );
+    }
+
+    #[test]
+    fn line_edge_motion_moves_to_line_bounds() {
+        let screen = screen(&["abc"], 0, 1);
+        let mut copy_mode = CopyMode::default();
+
+        copy_mode.enter(&screen);
+        copy_mode.move_cursor(&screen, CopyModeMove::EndOfLine);
+        assert_eq!(
+            copy_mode.snapshot.cursor,
+            solito_renderer::CopyModePosition::new(0, 2)
+        );
+
+        copy_mode.move_cursor(&screen, CopyModeMove::StartOfLine);
+        assert_eq!(
+            copy_mode.snapshot.cursor,
+            solito_renderer::CopyModePosition::new(0, 0)
+        );
+    }
+
+    #[test]
+    fn first_and_last_line_motion_preserve_column_when_possible() {
+        let screen = screen(&["abc", "de", "efg"], 1, 1);
+        let mut copy_mode = CopyMode::default();
+
+        copy_mode.enter(&screen);
+        copy_mode.move_cursor(&screen, CopyModeMove::LastLine);
+        assert_eq!(
+            copy_mode.snapshot.cursor,
+            solito_renderer::CopyModePosition::new(2, 1)
+        );
+
+        copy_mode.move_cursor(&screen, CopyModeMove::FirstLine);
+        assert_eq!(
+            copy_mode.snapshot.cursor,
+            solito_renderer::CopyModePosition::new(0, 1)
         );
     }
 }

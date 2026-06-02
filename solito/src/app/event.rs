@@ -24,6 +24,8 @@ pub(super) enum AppCommand {
     CloseTab,
     NextTab,
     PreviousTab,
+    CopySelection,
+    PasteFromClipboard,
     Resize {
         size: PhysicalSize<u32>,
         cols: usize,
@@ -215,14 +217,22 @@ fn shortcut_command(logical_key: &Key<SmolStr>, modifiers: ModifiersState) -> Op
             Key::Character(character) if character.eq_ignore_ascii_case("w") => {
                 Some(AppCommand::CloseTab)
             }
+            Key::Character(character) if character.eq_ignore_ascii_case("c") => {
+                Some(AppCommand::CopySelection)
+            }
+            Key::Character(character) if character.eq_ignore_ascii_case("v") => {
+                Some(AppCommand::PasteFromClipboard)
+            }
             Key::Named(NamedKey::Tab) => Some(AppCommand::PreviousTab),
             _ => None,
         }
     } else if modifiers.control_key() {
-        if let Key::Named(NamedKey::Tab) = logical_key {
-            Some(AppCommand::NextTab)
-        } else {
-            None
+        match logical_key {
+            Key::Character(character) if character.eq_ignore_ascii_case("v") => {
+                Some(AppCommand::PasteFromClipboard)
+            }
+            Key::Named(NamedKey::Tab) => Some(AppCommand::NextTab),
+            _ => None,
         }
     } else {
         None
@@ -235,6 +245,10 @@ fn copy_mode_command(
 ) -> Option<CopyModeCommand> {
     match logical_key {
         Key::Named(NamedKey::Escape) => Some(CopyModeCommand::Exit),
+        Key::Named(NamedKey::Home) => Some(CopyModeCommand::Move(CopyModeMove::StartOfLine)),
+        Key::Named(NamedKey::End) => Some(CopyModeCommand::Move(CopyModeMove::EndOfLine)),
+        Key::Named(NamedKey::PageUp) => Some(CopyModeCommand::Move(CopyModeMove::PageUp)),
+        Key::Named(NamedKey::PageDown) => Some(CopyModeCommand::Move(CopyModeMove::PageDown)),
         Key::Named(NamedKey::ArrowLeft) => Some(CopyModeCommand::Move(CopyModeMove::Left)),
         Key::Named(NamedKey::ArrowDown) => Some(CopyModeCommand::Move(CopyModeMove::Down)),
         Key::Named(NamedKey::ArrowUp) => Some(CopyModeCommand::Move(CopyModeMove::Up)),
@@ -242,7 +256,7 @@ fn copy_mode_command(
         Key::Character(character)
             if modifiers.control_key() && character.eq_ignore_ascii_case("c") =>
         {
-            Some(CopyModeCommand::Exit)
+            Some(CopyModeCommand::CopyAndExit)
         }
         Key::Character(character) if character == "h" => {
             Some(CopyModeCommand::Move(CopyModeMove::Left))
@@ -255,6 +269,31 @@ fn copy_mode_command(
         }
         Key::Character(character) if character == "l" => {
             Some(CopyModeCommand::Move(CopyModeMove::Right))
+        }
+        Key::Character(character) if character == "w" => {
+            Some(CopyModeCommand::Move(CopyModeMove::NextWord))
+        }
+        Key::Character(character) if character == "b" => {
+            Some(CopyModeCommand::Move(CopyModeMove::PreviousWord))
+        }
+        Key::Character(character) if character == "e" => {
+            Some(CopyModeCommand::Move(CopyModeMove::WordEnd))
+        }
+        Key::Character(character) if character == "0" => {
+            Some(CopyModeCommand::Move(CopyModeMove::StartOfLine))
+        }
+        Key::Character(character)
+            if character == "$" || modifiers.shift_key() && character == "4" =>
+        {
+            Some(CopyModeCommand::Move(CopyModeMove::EndOfLine))
+        }
+        Key::Character(character) if character == "g" => {
+            Some(CopyModeCommand::Move(CopyModeMove::FirstLine))
+        }
+        Key::Character(character)
+            if modifiers.shift_key() && character.eq_ignore_ascii_case("g") =>
+        {
+            Some(CopyModeCommand::Move(CopyModeMove::LastLine))
         }
         Key::Character(character) if character.eq_ignore_ascii_case("q") => {
             Some(CopyModeCommand::Exit)
@@ -327,9 +366,44 @@ mod tests {
     }
 
     #[test]
+    fn ctrl_v_pastes_from_clipboard() {
+        let command = shortcut_command(&Key::Character(SmolStr::new("v")), ModifiersState::CONTROL);
+
+        assert!(matches!(command, Some(AppCommand::PasteFromClipboard)));
+    }
+
+    #[test]
+    fn ctrl_shift_v_pastes_from_clipboard() {
+        let command = shortcut_command(
+            &Key::Character(SmolStr::new("V")),
+            ModifiersState::CONTROL | ModifiersState::SHIFT,
+        );
+
+        assert!(matches!(command, Some(AppCommand::PasteFromClipboard)));
+    }
+
+    #[test]
+    fn ctrl_shift_c_copies_selection() {
+        let command = shortcut_command(
+            &Key::Character(SmolStr::new("C")),
+            ModifiersState::CONTROL | ModifiersState::SHIFT,
+        );
+
+        assert!(matches!(command, Some(AppCommand::CopySelection)));
+    }
+
+    #[test]
     fn copy_mode_y_copies_and_exits() {
         let command =
             copy_mode_command(&Key::Character(SmolStr::new("y")), ModifiersState::empty());
+
+        assert!(matches!(command, Some(CopyModeCommand::CopyAndExit)));
+    }
+
+    #[test]
+    fn copy_mode_ctrl_c_copies_and_exits() {
+        let command =
+            copy_mode_command(&Key::Character(SmolStr::new("c")), ModifiersState::CONTROL);
 
         assert!(matches!(command, Some(CopyModeCommand::CopyAndExit)));
     }
@@ -363,6 +437,34 @@ mod tests {
         assert!(matches!(
             command,
             Some(CopyModeCommand::Move(CopyModeMove::Left))
+        ));
+    }
+
+    #[test]
+    fn copy_mode_word_keys_move_by_words() {
+        assert!(matches!(
+            copy_mode_command(&Key::Character(SmolStr::new("w")), ModifiersState::empty()),
+            Some(CopyModeCommand::Move(CopyModeMove::NextWord))
+        ));
+        assert!(matches!(
+            copy_mode_command(&Key::Character(SmolStr::new("b")), ModifiersState::empty()),
+            Some(CopyModeCommand::Move(CopyModeMove::PreviousWord))
+        ));
+        assert!(matches!(
+            copy_mode_command(&Key::Character(SmolStr::new("e")), ModifiersState::empty()),
+            Some(CopyModeCommand::Move(CopyModeMove::WordEnd))
+        ));
+    }
+
+    #[test]
+    fn copy_mode_line_edge_keys_move_to_line_edges() {
+        assert!(matches!(
+            copy_mode_command(&Key::Character(SmolStr::new("0")), ModifiersState::empty()),
+            Some(CopyModeCommand::Move(CopyModeMove::StartOfLine))
+        ));
+        assert!(matches!(
+            copy_mode_command(&Key::Character(SmolStr::new("$")), ModifiersState::SHIFT),
+            Some(CopyModeCommand::Move(CopyModeMove::EndOfLine))
         ));
     }
 }

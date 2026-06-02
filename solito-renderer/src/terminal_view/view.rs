@@ -114,8 +114,26 @@ impl TerminalView {
     }
 
     pub(crate) fn set_snapshot(&mut self, snapshot: ScreenSnapshot) {
-        self.viewport.reset();
+        let keep_start: Option<usize> = if self.viewport.is_at_bottom() {
+            None
+        } else {
+            Some(self.viewport.visible_range(self.row_count()).0)
+        };
+
         self.snapshot = snapshot;
+
+        if let Some(start) = keep_start {
+            self.viewport.scroll_to_start(start, self.row_count());
+        } else {
+            self.viewport.clamp(self.row_count());
+        }
+
+        self.set_text_to_buffer();
+    }
+
+    pub(crate) fn set_snapshot_at_bottom(&mut self, snapshot: ScreenSnapshot) {
+        self.snapshot = snapshot;
+        self.viewport.reset();
         self.set_text_to_buffer();
     }
 

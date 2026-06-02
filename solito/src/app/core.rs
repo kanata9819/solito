@@ -10,6 +10,7 @@ use crate::app::event::{AppCommand, CopyModeCommand};
 use crate::app::icon;
 use crate::app::tabs::AppTabs;
 use crate::config::AppConfig;
+use crate::session::runtime::SessionInput;
 use tracing::error;
 use winit::{
     application::ApplicationHandler,
@@ -138,7 +139,7 @@ impl SolitoApplication {
                     self.tabs
                         .open(cols, rows, self.config.shell.program.clone());
                     self.set_tab_bar();
-                    self.set_active_snapshot();
+                    self.set_active_snapshot_at_bottom();
                 }
             }
             AppCommand::CloseTab => {
@@ -148,7 +149,7 @@ impl SolitoApplication {
                         event_loop.exit();
                     } else {
                         self.set_tab_bar();
-                        self.set_active_snapshot();
+                        self.set_active_snapshot_at_bottom();
                     }
                 }
             }
@@ -156,15 +157,25 @@ impl SolitoApplication {
                 self.exit_copy_mode();
                 if self.tabs.activate_next() {
                     self.set_tab_bar();
-                    self.set_active_snapshot();
+                    self.set_active_snapshot_at_bottom();
                 }
             }
             AppCommand::PreviousTab => {
                 self.exit_copy_mode();
                 if self.tabs.activate_previous() {
                     self.set_tab_bar();
-                    self.set_active_snapshot();
+                    self.set_active_snapshot_at_bottom();
                 }
+            }
+            AppCommand::CopySelection => {
+                if let Some(snapshot) = self.tabs.active_snapshot()
+                    && let Some(text) = self.copy_mode.selected_text(&snapshot)
+                {
+                    Self::copy_to_clipboard(text)?;
+                }
+            }
+            AppCommand::PasteFromClipboard => {
+                self.paste_from_clipboard()?;
             }
             AppCommand::Resize { size, cols, rows } => {
                 self.tabs.resize_all(cols, rows)?;
@@ -227,6 +238,14 @@ impl SolitoApplication {
         }
     }
 
+    fn set_active_snapshot_at_bottom(&mut self) {
+        if let (Some(state), Some(snapshot)) = (&mut self.state, self.tabs.active_snapshot()) {
+            let copy_mode_snapshot = self.copy_mode.renderer_snapshot(&snapshot);
+            state.set_terminal_snapshot_at_bottom(snapshot);
+            state.set_copy_mode(copy_mode_snapshot);
+        }
+    }
+
     fn set_tab_bar(&mut self) {
         let snapshot: TabBarSnapshot = self.tab_bar_snapshot();
 
@@ -274,6 +293,25 @@ impl SolitoApplication {
     fn copy_to_clipboard(text: String) -> Result<(), Box<dyn Error>> {
         let mut clipboard = arboard::Clipboard::new()?;
         clipboard.set_text(text)?;
+
+        Ok(())
+    }
+
+    fn paste_from_clipboard(&self) -> Result<(), Box<dyn Error>> {
+        let Some(input_tx) = self.tabs.active_input_tx() else {
+            return Ok(());
+        };
+
+        let Ok(mut clipboard) = arboard::Clipboard::new() else {
+            return Ok(());
+        };
+        let Ok(text) = clipboard.get_text() else {
+            return Ok(());
+        };
+
+        if !text.is_empty() {
+            input_tx.send(SessionInput::write(text.into_bytes()))?;
+        }
 
         Ok(())
     }

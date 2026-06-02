@@ -35,6 +35,18 @@ impl ViewportState {
         self.scroll_accumulator = 0.0;
     }
 
+    pub(super) fn is_at_bottom(&self) -> bool {
+        self.scroll_offset == 0
+    }
+
+    pub(super) fn scroll_to_start(&mut self, start: usize, row_count: usize) {
+        let start: usize = start.min(row_count.saturating_sub(self.visible_rows));
+        let end: usize = start.saturating_add(self.visible_rows).min(row_count);
+        self.scroll_offset = row_count.saturating_sub(end);
+        self.scroll_accumulator = 0.0;
+        self.clamp(row_count);
+    }
+
     pub(super) fn scroll(&mut self, y: f32, row_count: usize) {
         self.scroll_accumulator += y;
 
@@ -72,5 +84,33 @@ impl ViewportState {
 
     fn max_scroll_offset(&self, row_count: usize) -> usize {
         row_count.saturating_sub(self.visible_rows)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ViewportState;
+
+    #[test]
+    fn scroll_to_start_preserves_visible_top_when_rows_grow() {
+        let mut viewport = ViewportState::new(30, 10.0);
+
+        viewport.scroll(4.0, 10);
+        let (start, _) = viewport.visible_range(10);
+
+        viewport.scroll_to_start(start, 12);
+
+        assert_eq!(viewport.visible_range(12), (3, 6));
+    }
+
+    #[test]
+    fn reset_returns_to_bottom() {
+        let mut viewport = ViewportState::new(30, 10.0);
+
+        viewport.scroll(4.0, 10);
+        viewport.reset();
+
+        assert!(viewport.is_at_bottom());
+        assert_eq!(viewport.visible_range(10), (7, 10));
     }
 }

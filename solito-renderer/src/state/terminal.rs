@@ -7,6 +7,7 @@ pub trait TerminalViewRenderer {
     fn set_copy_mode(&mut self, snapshot: CopyModeSnapshot);
     fn set_tab_bar(&mut self, snapshot: TabBarSnapshot);
     fn set_terminal_snapshot(&mut self, snapshot: ScreenSnapshot);
+    fn set_terminal_snapshot_at_bottom(&mut self, snapshot: ScreenSnapshot);
     fn terminal_size(&mut self) -> (usize, usize);
     fn terminal_size_for(&mut self, size: PhysicalSize<u32>) -> (usize, usize);
 }
@@ -22,6 +23,10 @@ impl TerminalViewRenderer for State {
 
     fn set_terminal_snapshot(&mut self, snapshot: ScreenSnapshot) {
         self.terminal_view.set_snapshot(snapshot);
+    }
+
+    fn set_terminal_snapshot_at_bottom(&mut self, snapshot: ScreenSnapshot) {
+        self.terminal_view.set_snapshot_at_bottom(snapshot);
     }
 
     fn terminal_size(&mut self) -> (usize, usize) {
