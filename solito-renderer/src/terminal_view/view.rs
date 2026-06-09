@@ -2,7 +2,7 @@ use ::glyphon::{Attrs, Color, Family, FontSystem, Shaping};
 use solito_terminal::{ScreenCell, ScreenSnapshot};
 
 use crate::pipeline::rect::RectSpec;
-use crate::util::{self, color::ThemeColor};
+use crate::util::color::ThemeColor;
 use crate::{RendererConfig, terminal_view::tab_bar::TabView};
 
 use super::{
@@ -15,11 +15,11 @@ use super::{
 
 pub(crate) struct TerminalView {
     pub(crate) glyphs: GlyphResources,
-    config: RendererConfig,
-    snapshot: ScreenSnapshot,
-    tab_bar: TabBarSnapshot,
+    pub(super) config: RendererConfig,
+    pub(super) snapshot: ScreenSnapshot,
+    pub(super) tab_bar: TabBarSnapshot,
+    pub(super) viewport: ViewportState,
     copy_mode: CopyModeSnapshot,
-    viewport: ViewportState,
 }
 
 impl TerminalView {
@@ -142,40 +142,8 @@ impl TerminalView {
         self.set_text_to_buffer();
     }
 
-    pub(crate) fn caret_rect(&mut self) -> (f32, f32, f32, f32) {
-        let row_count: usize = self.row_count();
-        self.viewport.clamp(row_count);
-        let (start, end): (usize, usize) = self.viewport.visible_range(row_count);
-
-        if self.snapshot.cursor_row < start || self.snapshot.cursor_row >= end {
-            return (Self::PADDING_X, self.terminal_origin_y(), 0.0, 0.0);
-        }
-
-        let cell_width: f32 =
-            GlyphonResources::measure_font_width(&mut self.glyphs.font_system, &self.config)
-                .max(1.0);
-
-        let visible_row: usize = self.snapshot.cursor_row - start;
-
-        let caret_x: f32 = Self::PADDING_X + self.snapshot.cursor_col as f32 * cell_width;
-        let caret_y: f32 = if self.tab_bar.titles().len() <= 1 {
-            Self::PADDING_Y + visible_row as f32 * self.config.line_height
-        } else {
-            Self::PADDING_Y + self.config.line_height + visible_row as f32 * self.config.line_height
-        };
-
-        (caret_x, caret_y, cell_width, self.config.line_height)
-    }
-
     pub(crate) fn copy_mode_active(&self) -> bool {
         self.copy_mode.active
-    }
-
-    pub(crate) fn caret_color(&self) -> [f32; 4] {
-        self.snapshot
-            .cursor_color
-            .map(util::color::rgba_to_f32)
-            .unwrap_or(Self::DEFAULT_CARET_COLOR)
     }
 
     pub(crate) fn tab_bar_rects(&mut self, width: u32) -> Vec<RectSpec> {
@@ -619,7 +587,7 @@ impl TerminalView {
         }
     }
 
-    fn row_count(&self) -> usize {
+    pub(super) fn row_count(&self) -> usize {
         self.snapshot.lines.len().max(1)
     }
 
@@ -645,7 +613,7 @@ impl TerminalView {
         ((content_height as f32 / self.config.line_height).floor() as usize).max(1)
     }
 
-    fn terminal_origin_y(&self) -> f32 {
+    pub(super) fn terminal_origin_y(&self) -> f32 {
         Self::terminal_origin_y_for(self.config.line_height)
     }
 
