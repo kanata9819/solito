@@ -22,6 +22,7 @@ impl RectSpec {
         Self::slanted(x, y, width, height, color, 0.0)
     }
 
+    // used for tab bar design
     pub(crate) fn slanted(
         x: f32,
         y: f32,
