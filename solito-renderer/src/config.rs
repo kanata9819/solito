@@ -31,7 +31,6 @@ impl RendererConfig {
         if self.font_family.trim().is_empty() {
             self.font_family = Self::DEFAULT_FONT_FAMILY.to_string();
         }
-
         self.font_size = sanitize_positive_f32(self.font_size, Self::DEFAULT_FONT_SIZE);
         self.line_height = sanitize_positive_f32(self.line_height, Self::DEFAULT_LINE_HEIGHT);
 

@@ -17,7 +17,6 @@ impl TerminalView {
                 .max(1.0);
 
         let visible_row: usize = self.snapshot.cursor_row - start;
-
         let caret_x: f32 = Self::PADDING_X + self.snapshot.cursor_col as f32 * cell_width;
         let caret_y: f32 = if self.tab_bar.titles().len() <= 1 {
             Self::PADDING_Y + visible_row as f32 * self.config.line_height
