@@ -215,12 +215,19 @@ impl TerminalView {
 
 #[cfg(test)]
 mod tests {
+    use glyphon::Color;
+
     use crate::{
         RendererConfig,
         terminal_view::{TerminalView, tab_bar::TabView},
+        util::color::ThemeColor,
     };
 
     use super::TabBarSnapshot;
+
+    fn color([r, g, b, a]: [u8; 4]) -> Color {
+        Color::rgba(r, g, b, a)
+    }
 
     #[test]
     fn clamps_active_index_to_existing_tabs() {
@@ -291,5 +298,19 @@ mod tests {
         );
         assert_eq!(rects[3].x, 130.0);
         assert_eq!(rects[3].color, TabView::TAB_INACTIVE_BACKGROUND);
+    }
+
+    #[test]
+    fn tab_bar_spans_mark_active_tab() {
+        let snapshot: TabBarSnapshot =
+            TabBarSnapshot::new(vec!["Tab 1".to_string(), "Tab 2".to_string()], 0);
+        let spans =
+            TerminalView::tab_bar_spans_for(&snapshot, RendererConfig::DEFAULT_FONT_FAMILY, 10.0);
+
+        assert_eq!(spans[0].0, "  Tab 1  ");
+        assert_eq!(spans[0].1.color_opt, Some(color(ThemeColor::WHITE)));
+        assert_eq!(spans[1].0, "   ");
+        assert_eq!(spans[2].0, "  Tab 2  ");
+        assert_eq!(spans[2].1.color_opt, Some(color(ThemeColor::BLUE_GRAY_400)));
     }
 }

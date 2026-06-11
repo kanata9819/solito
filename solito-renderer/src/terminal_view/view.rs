@@ -2,7 +2,6 @@ use ::glyphon::{Attrs, Color, Family, FontSystem, Shaping};
 use solito_terminal::{ScreenCell, ScreenSnapshot};
 
 use crate::RendererConfig;
-use crate::pipeline::rect::RectSpec;
 use crate::util::color::ThemeColor;
 
 use super::{
@@ -19,15 +18,13 @@ pub(crate) struct TerminalView {
     pub(super) snapshot: ScreenSnapshot,
     pub(super) tab_bar: TabBarSnapshot,
     pub(super) viewport: ViewportState,
-    copy_mode: CopyModeSnapshot,
+    pub(super) copy_mode: CopyModeSnapshot,
 }
 
 impl TerminalView {
     pub(crate) const PADDING_X: f32 = 10.0;
     pub(crate) const PADDING_Y: f32 = 10.0;
-    pub(crate) const DEFAULT_CARET_COLOR: [f32; 4] = ThemeColor::WHITE_ALPHA;
-    const COPY_MODE_SELECTION_COLOR: [f32; 4] = ThemeColor::BLUE_500_ALPHA;
-    const COPY_MODE_CURSOR_COLOR: [f32; 4] = ThemeColor::YELLOW_400_ALPHA;
+    pub(super) const DEFAULT_CARET_COLOR: [f32; 4] = ThemeColor::WHITE_ALPHA;
 
     pub(crate) fn new(
         device: &wgpu::Device,
@@ -96,18 +93,6 @@ impl TerminalView {
         self.set_text_to_buffer();
     }
 
-    pub(crate) fn set_copy_mode(&mut self, copy_mode: CopyModeSnapshot) {
-        self.copy_mode = copy_mode;
-
-        if self.copy_mode.active {
-            let row_count: usize = self.row_count();
-            self.viewport
-                .scroll_to_include(self.copy_mode.cursor.row, row_count);
-        }
-
-        self.set_text_to_buffer();
-    }
-
     pub(crate) fn set_snapshot(&mut self, snapshot: ScreenSnapshot) {
         let keep_start: Option<usize> = if self.viewport.is_at_bottom() {
             None
@@ -135,33 +120,6 @@ impl TerminalView {
     pub(crate) fn scroll(&mut self, _x: f32, y: f32) {
         self.viewport.scroll(y, self.row_count());
         self.set_text_to_buffer();
-    }
-
-    pub(crate) fn copy_mode_active(&self) -> bool {
-        self.copy_mode.active
-    }
-
-    pub(crate) fn copy_mode_rects(&mut self) -> Vec<RectSpec> {
-        if !self.copy_mode.active {
-            return Vec::new();
-        }
-
-        let row_count: usize = self.row_count();
-        self.viewport.clamp(row_count);
-        let (visible_start, visible_end): (usize, usize) = self.viewport.visible_range(row_count);
-        let cell_width: f32 =
-            GlyphonResources::measure_font_width(&mut self.glyphs.font_system, &self.config)
-                .max(1.0);
-
-        Self::copy_mode_rects_for(
-            &self.copy_mode,
-            &self.snapshot.lines,
-            visible_start,
-            visible_end,
-            cell_width,
-            self.config.line_height,
-            self.has_tab_bar(),
-        )
     }
 
     pub(super) fn set_text_to_buffer(&mut self) {
@@ -212,55 +170,7 @@ impl TerminalView {
         spans
     }
 
-    fn copy_mode_rects_for(
-        copy_mode: &CopyModeSnapshot,
-        lines: &[Vec<ScreenCell>],
-        visible_start: usize,
-        visible_end: usize,
-        cell_width: f32,
-        line_height: f32,
-        has_tab_bar: bool,
-    ) -> Vec<RectSpec> {
-        let mut rects: Vec<RectSpec> = Vec::new();
-
-        if let Some(selection) = copy_mode.selection {
-            for row in visible_start..visible_end {
-                if let Some((start_col, end_col)) =
-                    Self::selected_cols_for_row(selection, row, lines)
-                    && start_col < end_col
-                {
-                    let visible_row: usize = row.saturating_sub(visible_start);
-                    rects.push(RectSpec::new(
-                        Self::PADDING_X + start_col as f32 * cell_width,
-                        Self::terminal_row_y(visible_row, line_height, has_tab_bar),
-                        (end_col - start_col) as f32 * cell_width,
-                        line_height,
-                        Self::COPY_MODE_SELECTION_COLOR,
-                    ));
-                }
-            }
-        }
-
-        if copy_mode.cursor.row >= visible_start && copy_mode.cursor.row < visible_end {
-            let visible_row: usize = copy_mode.cursor.row - visible_start;
-            let cursor_col: usize = copy_mode
-                .cursor
-                .col
-                .min(Self::display_col_count(lines, copy_mode.cursor.row) - 1);
-
-            rects.push(RectSpec::new(
-                Self::PADDING_X + cursor_col as f32 * cell_width,
-                Self::terminal_row_y(visible_row, line_height, has_tab_bar),
-                cell_width,
-                line_height,
-                Self::COPY_MODE_CURSOR_COLOR,
-            ));
-        }
-
-        rects
-    }
-
-    fn selected_cols_for_row(
+    pub(super) fn selected_cols_for_row(
         selection: CopyModeSelection,
         row: usize,
         lines: &[Vec<ScreenCell>],
@@ -320,7 +230,7 @@ impl TerminalView {
         }
     }
 
-    fn display_col_count(lines: &[Vec<ScreenCell>], row: usize) -> usize {
+    pub(super) fn display_col_count(lines: &[Vec<ScreenCell>], row: usize) -> usize {
         lines.get(row).map(|line| line.len()).unwrap_or(0).max(1)
     }
 
@@ -462,7 +372,7 @@ impl TerminalView {
         Self::PADDING_Y + Self::tab_bar_height_for(line_height)
     }
 
-    fn terminal_row_y(visible_row: usize, line_height: f32, has_tab_bar: bool) -> f32 {
+    pub(super) fn terminal_row_y(visible_row: usize, line_height: f32, has_tab_bar: bool) -> f32 {
         if has_tab_bar {
             Self::PADDING_Y + line_height + visible_row as f32 * line_height
         } else {
@@ -500,7 +410,6 @@ impl TerminalView {
 #[cfg(test)]
 mod tests {
     use super::TerminalView;
-    use crate::terminal_view::TabBarSnapshot;
     use crate::util::color::ThemeColor;
     use crate::{RendererConfig, util};
     use glyphon::Color;
@@ -568,20 +477,6 @@ mod tests {
         assert_eq!(spans.len(), 1);
         assert_eq!(spans[0].0, "A");
         assert_eq!(spans[0].1.color_opt, Some(color(ThemeColor::BLACK)));
-    }
-
-    #[test]
-    fn tab_bar_spans_mark_active_tab() {
-        let snapshot: TabBarSnapshot =
-            TabBarSnapshot::new(vec!["Tab 1".to_string(), "Tab 2".to_string()], 0);
-        let spans =
-            TerminalView::tab_bar_spans_for(&snapshot, RendererConfig::DEFAULT_FONT_FAMILY, 10.0);
-
-        assert_eq!(spans[0].0, "  Tab 1  ");
-        assert_eq!(spans[0].1.color_opt, Some(color(ThemeColor::WHITE)));
-        assert_eq!(spans[1].0, "   ");
-        assert_eq!(spans[2].0, "  Tab 2  ");
-        assert_eq!(spans[2].1.color_opt, Some(color(ThemeColor::BLUE_GRAY_400)));
     }
 
     #[test]
