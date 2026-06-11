@@ -5,11 +5,8 @@ use crate::RendererConfig;
 use crate::util::color::ThemeColor;
 
 use super::{
-    copy_mode::{CopyModePosition, CopyModeSelection, CopyModeSelectionKind, CopyModeSnapshot},
-    glyph::GlyphonResources,
-    resources::GlyphResources,
-    tab_bar::TabBarSnapshot,
-    viewport::ViewportState,
+    copy_mode::CopyModeSnapshot, glyph::GlyphonResources, resources::GlyphResources,
+    tab_bar::TabBarSnapshot, viewport::ViewportState,
 };
 
 pub(crate) struct TerminalView {
@@ -168,66 +165,6 @@ impl TerminalView {
         ));
 
         spans
-    }
-
-    pub(super) fn selected_cols_for_row(
-        selection: CopyModeSelection,
-        row: usize,
-        lines: &[Vec<ScreenCell>],
-    ) -> Option<(usize, usize)> {
-        match selection.kind {
-            CopyModeSelectionKind::Line => {
-                let (start_row, end_row): (usize, usize) =
-                    Self::ordered_rows(selection.anchor, selection.cursor);
-
-                if row < start_row || row > end_row {
-                    return None;
-                }
-
-                Some((0, Self::display_col_count(lines, row)))
-            }
-            CopyModeSelectionKind::Cell => {
-                let (start, end): (CopyModePosition, CopyModePosition) =
-                    Self::ordered_positions(selection.anchor, selection.cursor);
-
-                if row < start.row || row > end.row {
-                    return None;
-                }
-
-                let col_count: usize = Self::display_col_count(lines, row);
-                let start_col: usize = if row == start.row {
-                    start.col.min(col_count - 1)
-                } else {
-                    0
-                };
-                let end_col: usize = if row == end.row {
-                    end.col.min(col_count - 1) + 1
-                } else {
-                    col_count
-                };
-
-                Some((start_col, end_col))
-            }
-        }
-    }
-
-    fn ordered_rows(anchor: CopyModePosition, cursor: CopyModePosition) -> (usize, usize) {
-        if anchor.row <= cursor.row {
-            (anchor.row, cursor.row)
-        } else {
-            (cursor.row, anchor.row)
-        }
-    }
-
-    fn ordered_positions(
-        anchor: CopyModePosition,
-        cursor: CopyModePosition,
-    ) -> (CopyModePosition, CopyModePosition) {
-        if (anchor.row, anchor.col) <= (cursor.row, cursor.col) {
-            (anchor, cursor)
-        } else {
-            (cursor, anchor)
-        }
     }
 
     pub(super) fn display_col_count(lines: &[Vec<ScreenCell>], row: usize) -> usize {
