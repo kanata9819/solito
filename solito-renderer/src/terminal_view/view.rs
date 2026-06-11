@@ -1,4 +1,4 @@
-use ::glyphon::{Attrs, Color, Family, FontSystem, Shaping};
+use glyphon::{Attrs, Color, Family, FontSystem, Shaping};
 use solito_terminal::{ScreenCell, ScreenSnapshot};
 
 use crate::RendererConfig;
