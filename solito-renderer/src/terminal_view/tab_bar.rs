@@ -49,6 +49,11 @@ impl TabBarSnapshot {
 }
 
 impl TerminalView {
+    pub(crate) fn set_tab_bar(&mut self, tab_bar: TabBarSnapshot) {
+        self.tab_bar = tab_bar;
+        self.set_text_to_buffer();
+    }
+
     pub(crate) fn tab_bar_rects(&mut self, width: u32) -> Vec<RectSpec> {
         let cell_width: f32 =
             GlyphonResources::measure_font_width(&mut self.glyphs.font_system, &self.config)
@@ -93,6 +98,10 @@ impl TerminalView {
         }
 
         spans
+    }
+
+    pub(super) fn has_tab_bar(&self) -> bool {
+        self.tab_bar.titles().len() > 1
     }
 
     fn tab_strip_rect(

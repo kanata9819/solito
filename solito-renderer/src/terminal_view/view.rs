@@ -96,11 +96,6 @@ impl TerminalView {
         self.set_text_to_buffer();
     }
 
-    pub(crate) fn set_tab_bar(&mut self, tab_bar: TabBarSnapshot) {
-        self.tab_bar = tab_bar;
-        self.set_text_to_buffer();
-    }
-
     pub(crate) fn set_copy_mode(&mut self, copy_mode: CopyModeSnapshot) {
         self.copy_mode = copy_mode;
 
@@ -169,7 +164,7 @@ impl TerminalView {
         )
     }
 
-    fn set_text_to_buffer(&mut self) {
+    pub(super) fn set_text_to_buffer(&mut self) {
         let font_family: String = self.config.font_family.clone();
         let spans: Vec<(String, Attrs<'_>)> = self.visible_text_spans(font_family.as_str());
         let attrs: Attrs<'_> = Self::text_attrs(None, font_family.as_str());
@@ -439,10 +434,6 @@ impl TerminalView {
 
     pub(super) fn row_count(&self) -> usize {
         self.snapshot.lines.len().max(1)
-    }
-
-    fn has_tab_bar(&self) -> bool {
-        self.tab_bar.titles().len() > 1
     }
 
     fn cell_char(cell: &ScreenCell) -> char {
