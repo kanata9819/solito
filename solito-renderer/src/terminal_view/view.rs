@@ -21,7 +21,6 @@ pub(crate) struct TerminalView {
 impl TerminalView {
     pub(crate) const PADDING_X: f32 = 10.0;
     pub(crate) const PADDING_Y: f32 = 10.0;
-    pub(super) const DEFAULT_CARET_COLOR: [f32; 4] = ThemeColor::WHITE_ALPHA;
 
     pub(crate) fn new(
         device: &wgpu::Device,

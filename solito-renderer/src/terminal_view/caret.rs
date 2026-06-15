@@ -1,8 +1,13 @@
-use crate::{terminal_view::glyph::GlyphonResources, util};
+use crate::{
+    terminal_view::glyph::GlyphonResources,
+    util::{self, color::ThemeColor},
+};
 
 use super::TerminalView;
 
 impl TerminalView {
+    pub(super) const DEFAULT_CARET_COLOR: [f32; 4] = ThemeColor::WHITE_ALPHA;
+
     pub(crate) fn caret_rect(&mut self) -> (f32, f32, f32, f32) {
         let row_count: usize = self.row_count();
         self.viewport.clamp(row_count);
