@@ -1,4 +1,4 @@
-mod copy_mode;
+mod copy;
 pub(crate) mod core;
 mod event;
 mod icon;

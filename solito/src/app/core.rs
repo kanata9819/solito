@@ -4,7 +4,7 @@ use solito_renderer::{
 };
 use std::{collections::HashMap, error::Error, sync::Arc};
 
-use crate::app::copy_mode::CopyMode;
+use crate::app::copy::CopyMode;
 use crate::app::event as AppEvent;
 use crate::app::event::{AppCommand, CopyModeCommand};
 use crate::app::icon;

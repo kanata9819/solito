@@ -13,7 +13,7 @@ use winit::{
     window::{Window, WindowId},
 };
 
-use crate::app::copy_mode::CopyModeMove;
+use crate::app::copy::CopyModeMove;
 use crate::session::runtime::SessionInput;
 
 pub(super) enum AppCommand {
@@ -312,7 +312,7 @@ fn copy_mode_command(
 #[cfg(test)]
 mod tests {
     use super::{AppCommand, CopyModeCommand, copy_mode_command, shortcut_command};
-    use crate::app::copy_mode::CopyModeMove;
+    use crate::app::copy::CopyModeMove;
     use winit::keyboard::{Key, ModifiersState, SmolStr};
 
     #[test]
