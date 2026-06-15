@@ -92,11 +92,6 @@ impl<T> Tabs<T> {
         }
     }
 
-    fn push(&mut self, tab: T) {
-        self.tabs.push(tab);
-        self.active = self.tabs.len().saturating_sub(1);
-    }
-
     pub(super) fn close_active(&mut self) -> bool {
         if self.tabs.is_empty() {
             return false;
@@ -109,6 +104,11 @@ impl<T> Tabs<T> {
 
     pub(super) fn is_empty(&self) -> bool {
         self.tabs.is_empty()
+    }
+
+    fn push(&mut self, tab: T) {
+        self.tabs.push(tab);
+        self.active = self.tabs.len().saturating_sub(1);
     }
 }
 
