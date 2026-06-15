@@ -4,23 +4,23 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use super::renderer::{RendererConfig, WindowBackdrop};
 use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
-use solito_renderer::{RendererConfig, WindowBackdrop};
 
 const APP_DIR_NAME: &str = "Solito";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
-pub(crate) struct AppConfig {
-    pub(crate) shell: ShellConfig,
-    pub(crate) window: WindowConfig,
+pub struct AppConfig {
+    pub tracing: TracingConfig,
+    pub shell: ShellConfig,
+    pub window: WindowConfig,
     pub(crate) font: FontConfig,
-    pub(crate) tracing: TracingConfig,
 }
 
 impl AppConfig {
-    pub(crate) fn load_or_create() -> Result<Self, Box<dyn Error>> {
+    pub fn load_or_create() -> Result<Self, Box<dyn Error>> {
         let paths: AppPaths = AppPaths::resolve()?;
         paths.ensure_dirs()?;
 
@@ -35,7 +35,7 @@ impl AppConfig {
         Ok(config)
     }
 
-    pub(crate) fn renderer_config(&self) -> RendererConfig {
+    pub fn renderer_config(&self) -> RendererConfig {
         RendererConfig {
             font_family: self.font.family.clone(),
             font_size: self.font.size,
@@ -69,8 +69,8 @@ impl Default for AppConfig {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
-pub(crate) struct ShellConfig {
-    pub(crate) program: String,
+pub struct ShellConfig {
+    pub program: String,
 }
 
 impl ShellConfig {
@@ -93,9 +93,9 @@ impl Default for ShellConfig {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
-pub(crate) struct WindowConfig {
-    pub(crate) width: f32,
-    pub(crate) height: f32,
+pub struct WindowConfig {
+    pub width: f32,
+    pub height: f32,
     pub(crate) backdrop: BackdropConfig,
     pub(crate) acrylic_tint: [u8; 4],
 }
@@ -191,8 +191,8 @@ impl Default for FontConfig {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
-pub(crate) struct TracingConfig {
-    pub(crate) filter: String,
+pub struct TracingConfig {
+    pub filter: String,
 }
 
 impl TracingConfig {
@@ -259,7 +259,7 @@ fn sanitize_positive_f32(value: f32, fallback: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::{AppConfig, BackdropConfig};
-    use solito_renderer::{RendererConfig, WindowBackdrop};
+    use crate::renderer::{RendererConfig, WindowBackdrop};
 
     #[test]
     fn partial_config_uses_defaults() {

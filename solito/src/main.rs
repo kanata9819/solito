@@ -1,16 +1,15 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
-mod config;
 mod session;
 
 use std::error::Error;
 
+use solito_config::app::AppConfig;
 use tracing_subscriber::EnvFilter;
 use winit::event_loop::EventLoop;
 
 use crate::app::core::SolitoApplication;
-use crate::config::AppConfig;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let config: AppConfig = AppConfig::load_or_create()?;

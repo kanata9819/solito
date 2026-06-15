@@ -9,8 +9,8 @@ use crate::app::event as AppEvent;
 use crate::app::event::{AppCommand, CopyModeCommand};
 use crate::app::icon;
 use crate::app::tabs::AppTabs;
-use crate::config::AppConfig;
 use crate::session::runtime::SessionInput;
+use solito_config::app::AppConfig;
 use tracing::error;
 use winit::{
     application::ApplicationHandler,

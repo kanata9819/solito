@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "decodesc",
-    "solito",
+    "solito", "solito-config",
     "solito-renderer",
     "solito-terminal",
 ]
