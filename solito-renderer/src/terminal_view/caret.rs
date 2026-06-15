@@ -38,4 +38,12 @@ impl TerminalView {
             .map(util::color::rgba_to_f32)
             .unwrap_or(Self::DEFAULT_CARET_COLOR)
     }
+
+    fn terminal_origin_y(&self) -> f32 {
+        Self::terminal_origin_y_for(self.config.line_height)
+    }
+
+    fn terminal_origin_y_for(line_height: f32) -> f32 {
+        Self::PADDING_Y + Self::tab_bar_height_for(line_height)
+    }
 }
