@@ -6,3 +6,6 @@ members = [
     "solito-terminal",
 ]
 resolver = "3"
+
+[workspace.package]
+license = "MIT"

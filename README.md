@@ -25,3 +25,7 @@ A terminal emulator built under a no-code-generation-by-coding-agents concept.
 4. Google Search is allowed.
 
 since 2026/04/15
+
+## License
+
+MIT licensed. See `LICENSE`.

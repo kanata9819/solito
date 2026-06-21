@@ -2,6 +2,7 @@
 name = "decodesc"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 
 [dependencies]
 vte = "0.15.0"
