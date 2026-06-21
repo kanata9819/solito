@@ -66,7 +66,7 @@ impl TerminalView {
         config: &RendererConfig,
     ) -> (usize, usize) {
         let config: RendererConfig = config.clone().sanitized();
-        let mut font_system = FontSystem::new();
+        let mut font_system: FontSystem = FontSystem::new();
         let cell_width: f32 =
             GlyphonResources::measure_font_width(&mut font_system, &config).max(1.0);
         let content_width: u32 = Self::terminal_content_width(width);
