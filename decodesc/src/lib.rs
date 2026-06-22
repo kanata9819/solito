@@ -41,36 +41,27 @@ pub fn decode(event: VteEvent) -> Option<DecodedEvent> {
             intermediates,
             ignore,
             action,
-        } => match decode_csi(params, intermediates, ignore, action) {
-            Some(csi) => Some(DecodedEvent {
+        } => decode_csi(params, intermediates, ignore, action).map(|csi| DecodedEvent {
                 csi: Some(csi),
                 osc: None,
                 esc: None,
             }),
-            None => None,
-        },
         VteEvent::Osc {
             params,
             bell_terminated,
-        } => match decode_osc(params, bell_terminated) {
-            Some(osc) => Some(DecodedEvent {
+        } => decode_osc(params, bell_terminated).map(|osc| DecodedEvent {
                 csi: None,
                 osc: Some(osc),
                 esc: None,
             }),
-            None => None,
-        },
         VteEvent::Esc {
             intermediates,
             ignore,
             byte,
-        } => match decode_esc(intermediates, ignore, byte) {
-            Some(esc) => Some(DecodedEvent {
+        } => decode_esc(intermediates, ignore, byte).map(|esc| DecodedEvent {
                 csi: None,
                 osc: None,
                 esc: Some(esc),
             }),
-            None => None,
-        },
     }
 }
