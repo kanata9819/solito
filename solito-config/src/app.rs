@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 const APP_DIR_NAME: &str = "Solito";
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
 #[serde(default)]
 pub struct AppConfig {
     pub tracing: TracingConfig,
@@ -53,17 +53,6 @@ impl AppConfig {
         self.tracing = self.tracing.sanitized();
 
         self
-    }
-}
-
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            shell: ShellConfig::default(),
-            window: WindowConfig::default(),
-            font: FontConfig::default(),
-            tracing: TracingConfig::default(),
-        }
     }
 }
 
@@ -132,18 +121,13 @@ impl Default for WindowConfig {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum BackdropConfig {
     None,
     Transparent,
+    #[default]
     Acrylic,
-}
-
-impl Default for BackdropConfig {
-    fn default() -> Self {
-        Self::Acrylic
-    }
 }
 
 impl From<BackdropConfig> for WindowBackdrop {

@@ -253,24 +253,22 @@ impl CopyMode {
             return CopyModePosition::new(row, 0);
         }
 
-        loop {
-            while !Self::is_nonblank(screen, row, col) {
-                if col > 0 {
-                    col -= 1;
-                } else if row > 0 {
-                    row -= 1;
-                    col = Self::last_col(screen, row);
-                } else {
-                    return CopyModePosition::new(0, 0);
-                }
-            }
-
-            while col > 0 && Self::is_nonblank(screen, row, col - 1) {
+        while !Self::is_nonblank(screen, row, col) {
+            if col > 0 {
                 col -= 1;
+            } else if row > 0 {
+                row -= 1;
+                col = Self::last_col(screen, row);
+            } else {
+                return CopyModePosition::new(0, 0);
             }
-
-            return CopyModePosition::new(row, col);
         }
+
+        while col > 0 && Self::is_nonblank(screen, row, col - 1) {
+            col -= 1;
+        }
+
+        return CopyModePosition::new(row, col);
     }
 
     fn word_end(screen: &ScreenSnapshot, position: CopyModePosition) -> CopyModePosition {

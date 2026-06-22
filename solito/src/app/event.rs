@@ -195,11 +195,10 @@ fn handle_ctrl_c(
     // Ctrl + c
     if let Key::Character(char) = &logical_key
         && modifiers.control_key()
+        && char.eq_ignore_ascii_case("c")
     {
-        if char.eq_ignore_ascii_case("c") {
-            input_tx.send(SessionInput::Write(EXT.to_vec()))?;
-            return Ok(AppCommand::None);
-        }
+        input_tx.send(SessionInput::Write(EXT.to_vec()))?;
+        return Ok(AppCommand::None);
     }
 
     Ok(AppCommand::None)
