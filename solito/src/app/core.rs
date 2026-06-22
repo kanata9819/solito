@@ -105,13 +105,15 @@ impl SolitoApplication {
         Ok(())
     }
 
+    #[cfg(target_os = "windows")]
     fn with_platform_window_attributes(window_attributes: WindowAttributes) -> WindowAttributes {
-        if cfg!(target_os = "windows") {
-            use winit::platform::windows::WindowAttributesExtWindows;
+        use winit::platform::windows::WindowAttributesExtWindows;
 
-            return window_attributes.with_taskbar_icon(icon::taskbar_icon());
-        }
+        window_attributes.with_taskbar_icon(icon::taskbar_icon())
+    }
 
+    #[cfg(not(target_os = "windows"))]
+    fn with_platform_window_attributes(window_attributes: WindowAttributes) -> WindowAttributes {
         window_attributes
     }
 
