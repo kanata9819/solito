@@ -1,16 +1,11 @@
-use solito_renderer::{TerminalViewRenderer, WindowRenderer};
 use std::{
-    collections::HashMap,
     error::Error,
-    sync::{Arc, mpsc::Sender},
+    sync::mpsc::Sender,
 };
-use tracing::error;
 use winit::{
     dpi::PhysicalSize,
-    event::{ElementState, KeyEvent, WindowEvent},
-    event_loop::ActiveEventLoop,
+    event::ElementState,
     keyboard::{Key, ModifiersState, NamedKey, SmolStr},
-    window::{Window, WindowId},
 };
 
 use crate::app::copy::CopyModeMove;
@@ -41,90 +36,7 @@ pub(super) enum CopyModeCommand {
     Exit,
 }
 
-pub(super) fn event_handler<T: TerminalViewRenderer + WindowRenderer>(
-    windows: &mut HashMap<WindowId, Arc<Window>>,
-    window_id: WindowId,
-    state: &mut T,
-    event_loop: &ActiveEventLoop,
-    event: WindowEvent,
-    modifiers_state: &mut ModifiersState,
-    input_tx: &Sender<SessionInput>,
-    line_height: f32,
-    copy_mode_active: bool,
-) -> Result<AppCommand, Box<dyn Error>> {
-    match event {
-        WindowEvent::CloseRequested => {
-            windows.remove(&window_id);
-            event_loop.exit();
-            Ok(AppCommand::None)
-        }
-        WindowEvent::RedrawRequested => {
-            if let Err(e) = state.draw_frame() {
-                error!("{e}");
-                event_loop.exit();
-            }
-
-            Ok(AppCommand::None)
-        }
-        WindowEvent::KeyboardInput {
-            event:
-                KeyEvent {
-                    logical_key,
-                    state: key_state,
-                    text,
-                    ..
-                },
-            ..
-        } => handle_key(
-            text,
-            logical_key,
-            key_state,
-            *modifiers_state,
-            input_tx,
-            copy_mode_active,
-        ),
-        WindowEvent::ModifiersChanged(modifiers) => {
-            *modifiers_state = modifiers.state();
-            Ok(AppCommand::None)
-        }
-        WindowEvent::Resized(size) => {
-            let (cols, rows): (usize, usize) = state.terminal_size_for(size);
-            Ok(AppCommand::Resize { size, cols, rows })
-        }
-        WindowEvent::MouseWheel {
-            device_id: _,
-            delta,
-            phase: _,
-        } => {
-            match delta {
-                winit::event::MouseScrollDelta::LineDelta(x, y) => {
-                    tracing::debug!("MouseScrollDelta.LineDelta: x({:?}), y({:?})", x, y);
-                    state.scroll(x, y);
-                }
-                winit::event::MouseScrollDelta::PixelDelta(pos) => {
-                    tracing::debug!("MouseScrollDelta.PixelDelta: pos({:?})", pos);
-                    state.scroll(pos.x as f32 / line_height, pos.y as f32 / line_height);
-                }
-            }
-            Ok(AppCommand::None)
-        }
-        #[allow(unused)]
-        WindowEvent::CursorMoved {
-            device_id,
-            position,
-        } => Ok(AppCommand::None),
-        #[allow(unused)]
-        WindowEvent::CursorLeft { device_id } => Ok(AppCommand::None),
-        #[allow(unused)]
-        WindowEvent::CursorEntered { device_id } => Ok(AppCommand::None),
-        _ => {
-            tracing::debug!("unhandled event: {event:?}");
-            Ok(AppCommand::None)
-        }
-    }
-}
-
-fn handle_key(
+pub(super) fn handle_key(
     text: Option<SmolStr>,
     logical_key: Key<SmolStr>,
     key_state: ElementState,

@@ -268,7 +268,7 @@ impl CopyMode {
             col -= 1;
         }
 
-        return CopyModePosition::new(row, col);
+        CopyModePosition::new(row, col)
     }
 
     fn word_end(screen: &ScreenSnapshot, position: CopyModePosition) -> CopyModePosition {

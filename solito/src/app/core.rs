@@ -15,7 +15,7 @@ use tracing::error;
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
-    event::WindowEvent,
+    event::{KeyEvent, WindowEvent},
     event_loop::ActiveEventLoop,
     keyboard::ModifiersState,
     window::{Window, WindowAttributes, WindowId},
@@ -195,6 +195,102 @@ impl SolitoApplication {
         Ok(())
     }
 
+    fn handle_window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        window_id: WindowId,
+        event: WindowEvent,
+    ) -> Result<AppCommand, Box<dyn Error>> {
+        match event {
+            WindowEvent::CloseRequested => {
+                self.windows.remove(&window_id);
+                event_loop.exit();
+                Ok(AppCommand::None)
+            }
+            WindowEvent::RedrawRequested => {
+                if let Some(state) = &mut self.state
+                    && let Err(err) = state.draw_frame()
+                {
+                    error!("{err}");
+                    event_loop.exit();
+                }
+
+                Ok(AppCommand::None)
+            }
+            WindowEvent::KeyboardInput {
+                event:
+                    KeyEvent {
+                        logical_key,
+                        state: key_state,
+                        text,
+                        ..
+                    },
+                ..
+            } => {
+                let Some(input_tx) = self.tabs.active_input_tx() else {
+                    return Ok(AppCommand::None);
+                };
+
+                AppEvent::handle_key(
+                    text,
+                    logical_key,
+                    key_state,
+                    self.modifiers,
+                    input_tx,
+                    self.copy_mode.is_active(),
+                )
+            }
+            WindowEvent::ModifiersChanged(modifiers) => {
+                self.modifiers = modifiers.state();
+                Ok(AppCommand::None)
+            }
+            WindowEvent::Resized(size) => {
+                let Some(state) = &mut self.state else {
+                    return Ok(AppCommand::None);
+                };
+                let (cols, rows): (usize, usize) = state.terminal_size_for(size);
+                Ok(AppCommand::Resize { size, cols, rows })
+            }
+            WindowEvent::MouseWheel {
+                device_id: _,
+                delta,
+                phase: _,
+            } => {
+                let Some(state) = &mut self.state else {
+                    return Ok(AppCommand::None);
+                };
+
+                match delta {
+                    winit::event::MouseScrollDelta::LineDelta(x, y) => {
+                        tracing::debug!("MouseScrollDelta.LineDelta: x({:?}), y({:?})", x, y);
+                        state.scroll(x, y);
+                    }
+                    winit::event::MouseScrollDelta::PixelDelta(pos) => {
+                        tracing::debug!("MouseScrollDelta.PixelDelta: pos({:?})", pos);
+                        state.scroll(
+                            pos.x as f32 / self.renderer_config.line_height,
+                            pos.y as f32 / self.renderer_config.line_height,
+                        );
+                    }
+                }
+                Ok(AppCommand::None)
+            }
+            #[allow(unused)]
+            WindowEvent::CursorMoved {
+                device_id,
+                position,
+            } => Ok(AppCommand::None),
+            #[allow(unused)]
+            WindowEvent::CursorLeft { device_id } => Ok(AppCommand::None),
+            #[allow(unused)]
+            WindowEvent::CursorEntered { device_id } => Ok(AppCommand::None),
+            _ => {
+                tracing::debug!("unhandled event: {event:?}");
+                Ok(AppCommand::None)
+            }
+        }
+    }
+
     fn handle_copy_mode_command(&mut self, command: CopyModeCommand) -> Result<(), Box<dyn Error>> {
         let Some(snapshot) = self.tabs.active_snapshot() else {
             return Ok(());
@@ -332,32 +428,11 @@ impl ApplicationHandler for SolitoApplication {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        let command: AppCommand = {
-            let state: &mut State = match &mut self.state {
-                Some(canvas) => canvas,
-                None => return,
-            };
-            let input_tx = match self.tabs.active_input_tx() {
-                Some(input_tx) => input_tx,
-                None => return,
-            };
-
-            match AppEvent::event_handler(
-                &mut self.windows,
-                window_id,
-                state,
-                event_loop,
-                event,
-                &mut self.modifiers,
-                input_tx,
-                self.renderer_config.line_height,
-                self.copy_mode.is_active(),
-            ) {
-                Ok(command) => command,
-                Err(err) => {
-                    error!("event handle error: {}", err);
-                    return;
-                }
+        let command: AppCommand = match self.handle_window_event(event_loop, window_id, event) {
+            Ok(command) => command,
+            Err(err) => {
+                error!("event handle error: {}", err);
+                return;
             }
         };
 
