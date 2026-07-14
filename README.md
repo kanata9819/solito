@@ -1,9 +1,10 @@
 # Solito Terminal Emulator
 
-Solito is a small terminal emulator built with Rust.
+Solito is a small, native terminal emulator for Windows, built with Rust. It combines a GPU-rendered interface with PTY-backed shell sessions and uses Nushell by default.
 
-It uses `winit` for the native window, `wgpu` for rendering, `glyphon` for text,
-and `portable-pty` for shell sessions. The default shell is `nu`.
+![Solito running Nushell](docs/images/solito-terminal.jpg)
+
+Solito uses `winit` for its native window, `wgpu` for rendering, `glyphon` for text, and `portable-pty` for shell sessions.
 
 ## Features
 
