@@ -78,7 +78,6 @@ impl SolitoApplication {
         }
 
         self.tabs.drain_outputs();
-
         state.set_tab_bar(self.tab_bar_snapshot());
 
         if let Some(snapshot) = self.tabs.active_snapshot() {
@@ -130,6 +129,20 @@ impl SolitoApplication {
         window_attributes
     }
 
+    fn set_next_tab(&mut self) {
+        if self.tabs.activate_next() {
+            self.set_tab_bar();
+            self.set_active_snapshot_at_bottom();
+        }
+    }
+
+    fn set_previous_tab(&mut self) {
+        if self.tabs.activate_previous() {
+            self.set_tab_bar();
+            self.set_active_snapshot_at_bottom();
+        }
+    }
+
     fn handle_command(
         &mut self,
         command: AppCommand,
@@ -170,17 +183,11 @@ impl SolitoApplication {
             }
             AppCommand::NextTab => {
                 self.exit_copy_mode();
-                if self.tabs.activate_next() {
-                    self.set_tab_bar();
-                    self.set_active_snapshot_at_bottom();
-                }
+                self.set_next_tab();
             }
             AppCommand::PreviousTab => {
                 self.exit_copy_mode();
-                if self.tabs.activate_previous() {
-                    self.set_tab_bar();
-                    self.set_active_snapshot_at_bottom();
-                }
+                self.set_previous_tab();
             }
             AppCommand::CopySelection => {
                 if let Some(snapshot) = self.tabs.active_snapshot()
