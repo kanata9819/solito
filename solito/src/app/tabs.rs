@@ -1,3 +1,5 @@
+use crate::session::runtime::{SessionInput, SessionRuntime};
+
 use solito_terminal::{ScreenSnapshot, TerminalState};
 use std::{
     error::Error,
@@ -5,8 +7,6 @@ use std::{
     sync::mpsc::{Receiver, Sender, channel},
 };
 use tracing::error;
-
-use crate::session::runtime::{SessionInput, SessionRuntime};
 
 pub(super) trait TerminalTab {
     fn input_tx(&self) -> &Sender<SessionInput>;
