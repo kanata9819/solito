@@ -131,6 +131,7 @@ impl ScreenEditor {
 
         if char_width == 2 {
             let current_col: usize = self.screen_buffer.cursor.get_current_col();
+            // If char width is over the buffer edge, start at next line.
             if current_col + 1 >= self.screen_buffer.cols() {
                 self.wrap_line();
             }
