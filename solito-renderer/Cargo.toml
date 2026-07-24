@@ -5,11 +5,11 @@ edition = "2024"
 license.workspace = true
 
 [dependencies]
-glyphon = "0.11.0"
+glyphon = "0.12.0"
 solito-terminal = { path = "../solito-terminal" }
 solito-config = { path = "../solito-config" }
 tracing = "0.1.44"
-wgpu = "29.0.1"
+wgpu = "30.0.0"
 windows-sys = { version = "0.61.2", features = [
     "Win32_Foundation",
     "Win32_Graphics_Dwm",

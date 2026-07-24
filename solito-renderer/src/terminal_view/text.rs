@@ -17,7 +17,6 @@ impl TerminalView {
         config: &RendererConfig,
     ) {
         glyphs.text_buffer.set_size(
-            &mut glyphs.font_system,
             Some(Self::terminal_content_width(width) as f32),
             Some(Self::terminal_content_height(height, config.line_height) as f32),
         );
@@ -42,7 +41,6 @@ impl TerminalView {
         let attrs: Attrs<'_> = Self::text_attrs(None, font_family.as_str());
 
         self.glyphs.text_buffer.set_rich_text(
-            &mut self.glyphs.font_system,
             spans
                 .iter()
                 .map(|(text, attrs)| (text.as_str(), attrs.clone())),

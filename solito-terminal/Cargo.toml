@@ -6,5 +6,5 @@ license.workspace = true
 
 [dependencies]
 vte = "0.15.0"
-unicode-width = "0.2.0"
+unicode-width = "0.2.2"
 decodesc = { path = "../decodesc" }

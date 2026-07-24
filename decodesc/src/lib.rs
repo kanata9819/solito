@@ -42,26 +42,26 @@ pub fn decode(event: VteEvent) -> Option<DecodedEvent> {
             ignore,
             action,
         } => decode_csi(params, intermediates, ignore, action).map(|csi| DecodedEvent {
-                csi: Some(csi),
-                osc: None,
-                esc: None,
-            }),
+            csi: Some(csi),
+            osc: None,
+            esc: None,
+        }),
         VteEvent::Osc {
             params,
             bell_terminated,
         } => decode_osc(params, bell_terminated).map(|osc| DecodedEvent {
-                csi: None,
-                osc: Some(osc),
-                esc: None,
-            }),
+            csi: None,
+            osc: Some(osc),
+            esc: None,
+        }),
         VteEvent::Esc {
             intermediates,
             ignore,
             byte,
         } => decode_esc(intermediates, ignore, byte).map(|esc| DecodedEvent {
-                csi: None,
-                osc: None,
-                esc: Some(esc),
-            }),
+            csi: None,
+            osc: None,
+            esc: Some(esc),
+        }),
     }
 }

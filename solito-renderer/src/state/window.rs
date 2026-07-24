@@ -49,6 +49,7 @@ impl WindowSurface {
         let config: SurfaceConfiguration = SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
+            color_space: wgpu::SurfaceColorSpace::Auto,
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::AutoVsync,
@@ -473,7 +474,7 @@ impl WindowRenderer for State {
             let mut encoder: CommandEncoder = self.create_encoder(None);
             self.render_pass(&mut encoder, view)?;
             self.gpu.queue.submit(Some(encoder.finish()));
-            frame.present();
+            self.gpu.queue.present(frame);
         }
 
         self.terminal_view.glyphs.atlas.trim();

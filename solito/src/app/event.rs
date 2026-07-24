@@ -1,7 +1,4 @@
-use std::{
-    error::Error,
-    sync::mpsc::Sender,
-};
+use std::{error::Error, sync::mpsc::Sender};
 use winit::{
     dpi::PhysicalSize,
     event::ElementState,

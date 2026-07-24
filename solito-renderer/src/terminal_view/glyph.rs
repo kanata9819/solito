@@ -39,11 +39,7 @@ impl GlyphonResources {
         let physical_width: f32 = (f64::from(physical_size.width) * scale_factor) as f32;
         let physical_height: f32 = (f64::from(physical_size.height) * scale_factor) as f32;
 
-        text_buffer.set_size(
-            &mut font_system,
-            Some(physical_width),
-            Some(physical_height),
-        );
+        text_buffer.set_size(Some(physical_width), Some(physical_height));
 
         text_buffer.shape_until_scroll(&mut font_system, false);
 
@@ -66,10 +62,9 @@ impl GlyphonResources {
             Metrics::new(config.font_size, config.line_height),
         );
 
-        buffer.set_wrap(font_system, Wrap::None);
+        buffer.set_wrap(Wrap::None);
 
         buffer.set_text(
-            font_system,
             "M",
             &Attrs::new().family(Family::Name(config.font_family.as_str())),
             Shaping::Advanced,
