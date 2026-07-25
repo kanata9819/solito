@@ -84,6 +84,7 @@ impl SolitoApplication {
             state.resize(initial_size, snapshot);
         }
 
+        // Draw once while hidden, then again after showing to avoid a blank startup frame.
         state.draw_frame()?;
         window.set_visible(true);
         state.draw_frame()?;
