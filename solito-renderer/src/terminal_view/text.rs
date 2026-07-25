@@ -48,6 +48,11 @@ impl TerminalView {
             Shaping::Advanced,
             None,
         );
+        // cosmic-text 0.19 no longer shapes implicitly when text is replaced.
+        // Glyphon can only prepare glyphs after the buffer has layout runs.
+        self.glyphs
+            .text_buffer
+            .shape_until_scroll(&mut self.glyphs.font_system, false);
     }
 
     pub(super) fn text_attrs<'a>(color: Option<[u8; 4]>, font_family: &'a str) -> Attrs<'a> {

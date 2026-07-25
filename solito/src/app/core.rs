@@ -100,10 +100,7 @@ impl SolitoApplication {
     }
 
     fn init_state(&self, window: &Arc<Window>) -> Result<State, Box<dyn Error>> {
-        Ok(pollster::block_on(State::new(
-            Arc::clone(window),
-            self.renderer_config.clone(),
-        ))?)
+        pollster::block_on(State::new(Arc::clone(window), self.renderer_config.clone()))
     }
 
     fn init_window_attribute(&self) -> WindowAttributes {

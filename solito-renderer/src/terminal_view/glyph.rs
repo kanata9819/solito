@@ -70,6 +70,7 @@ impl GlyphonResources {
             Shaping::Advanced,
             None,
         );
+        buffer.shape_until_scroll(font_system, false);
 
         buffer
             .layout_runs()
