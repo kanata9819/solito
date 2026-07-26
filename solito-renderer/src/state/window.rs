@@ -9,9 +9,7 @@ use winit::{dpi::PhysicalSize, window::Window};
 
 use super::{context::State, gpu::GpuContext};
 use crate::{
-    RendererConfig, WindowBackdrop, pass,
-    pipeline::rect::{self, RectRenderer},
-    terminal_view::TerminalView,
+    RendererConfig, WindowBackdrop, pass, pipeline::rect, terminal_view::TerminalView,
     util::color::ThemeColor,
 };
 
@@ -299,12 +297,6 @@ impl WindowSurface {
     }
 }
 
-pub trait WindowRenderer {
-    fn resize(&mut self, size: PhysicalSize<u32>, snapshot: ScreenSnapshot);
-    fn draw_frame(&mut self) -> Result<(), Box<dyn Error>>;
-    fn scroll(&mut self, x: f32, y: f32);
-}
-
 impl State {
     fn prepare_render(&mut self) -> Result<(), Box<dyn Error>> {
         let [default_r, default_g, default_b, _] = ThemeColor::WHITE;
@@ -433,9 +425,8 @@ impl State {
     }
 }
 
-impl WindowRenderer for State {
-    fn resize(&mut self, size: PhysicalSize<u32>, snapshot: ScreenSnapshot) {
-        let size: PhysicalSize<u32> = size;
+impl State {
+    pub fn resize(&mut self, size: PhysicalSize<u32>, snapshot: ScreenSnapshot) {
         if size.width > 0 && size.height > 0 {
             self.window_surface.config.width = size.width;
             self.window_surface.config.height = size.height;
@@ -449,7 +440,7 @@ impl WindowRenderer for State {
         }
     }
 
-    fn draw_frame(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn draw_frame(&mut self) -> Result<(), Box<dyn Error>> {
         self.terminal_view.glyphs.viewport.update(
             &self.gpu.queue,
             Resolution {
@@ -482,7 +473,7 @@ impl WindowRenderer for State {
         Ok(())
     }
 
-    fn scroll(&mut self, x: f32, y: f32) {
+    pub fn scroll(&mut self, x: f32, y: f32) {
         self.terminal_view.scroll(x, y);
     }
 }

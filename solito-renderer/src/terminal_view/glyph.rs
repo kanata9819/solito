@@ -2,17 +2,20 @@ use ::glyphon::{
     Attrs, Buffer, Cache, Family, FontSystem, Metrics, Shaping, SwashCache, TextAtlas,
     TextRenderer, Viewport, Wrap,
 };
+use std::collections::HashMap;
 use wgpu::MultisampleState;
 
 use crate::RendererConfig;
 
-pub(super) struct GlyphonResources {
-    pub(super) text_buffer: Buffer,
-    pub(super) text_renderer: TextRenderer,
-    pub(super) font_system: FontSystem,
-    pub(super) viewport: Viewport,
-    pub(super) swash_cache: SwashCache,
-    pub(super) atlas: TextAtlas,
+pub(crate) struct GlyphonResources {
+    pub(crate) text_buffer: Buffer,
+    pub(crate) text_renderer: TextRenderer,
+    pub(crate) font_system: FontSystem,
+    pub(crate) viewport: Viewport,
+    pub(crate) swash_cache: SwashCache,
+    pub(crate) atlas: TextAtlas,
+    pub(super) cell_width: f32,
+    pub(super) glyph_widths: HashMap<char, f32>,
 }
 
 impl GlyphonResources {
@@ -23,7 +26,7 @@ impl GlyphonResources {
         physical_size: winit::dpi::PhysicalSize<u32>,
         scale_factor: f64,
         config: &RendererConfig,
-    ) -> GlyphonResources {
+    ) -> Self {
         let mut font_system: FontSystem = FontSystem::new();
         let swash_cache: SwashCache = SwashCache::new();
         let cache: Cache = Cache::new(device);
@@ -43,14 +46,17 @@ impl GlyphonResources {
         text_buffer.set_size(Some(physical_width), Some(physical_height));
 
         text_buffer.shape_until_scroll(&mut font_system, false);
+        let cell_width: f32 = Self::measure_font_width(&mut font_system, config).max(1.0);
 
-        GlyphonResources {
+        Self {
             text_buffer,
             text_renderer,
             font_system,
             viewport,
             swash_cache,
             atlas,
+            cell_width,
+            glyph_widths: HashMap::new(),
         }
     }
 

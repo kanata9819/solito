@@ -4,13 +4,10 @@ use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
     RendererConfig,
-    pipeline::rect::{self, RectRenderer},
+    pipeline::rect,
     state::{gpu::GpuContext, render::RenderResources, window::WindowSurface},
     terminal_view::TerminalView,
 };
-
-pub use super::terminal::TerminalViewRenderer;
-pub use super::window::WindowRenderer;
 
 pub struct State {
     pub(super) gpu: GpuContext,
@@ -29,7 +26,7 @@ impl State {
         let surface: Surface<'_> = instance.create_surface(window.clone())?;
         let gpu = GpuContext::new(instance, &surface).await?;
         let window_surface = WindowSurface::new(window, surface, &gpu, size, &renderer_config);
-        let render_resources = RenderResources::new(&gpu, &window_surface, size.width, size.height);
+        let render_resources = RenderResources::new(&gpu, &window_surface);
         let swapchain_format = TextureFormat::Bgra8UnormSrgb;
         let terminal_view = TerminalView::new(
             &gpu.device,

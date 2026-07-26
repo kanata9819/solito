@@ -32,9 +32,8 @@ impl ScreenCell {
 
     pub(super) fn wide_continuation(style: CellStyle) -> Self {
         Self {
-            ch: ' ',
-            style,
             is_wide_continuation: true,
+            ..Self::blank(style)
         }
     }
 
@@ -67,18 +66,15 @@ impl ScreenBuffer {
             cols: cols.max(1),
             rows: rows.max(1),
             lines: vec![Vec::new()],
-            cursor: Cursor::new(),
+            cursor: Cursor::default(),
             pending_wrap: false,
             style: CellStyle::default(),
             cursor_color: None,
         }
     }
 
-    pub(super) fn set_cols(&mut self, cols: usize) {
+    pub(super) fn resize(&mut self, cols: usize, rows: usize) {
         self.cols = cols.max(1);
-    }
-
-    pub(super) fn set_rows(&mut self, rows: usize) {
         self.rows = rows.max(1);
     }
 

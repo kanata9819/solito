@@ -1,10 +1,6 @@
 use solito_terminal::ScreenCell;
 
-use crate::{
-    pipeline::rect::RectSpec,
-    terminal_view::{TerminalView, glyph::GlyphonResources},
-    util::color::ThemeColor,
-};
+use crate::{pipeline::rect::RectSpec, terminal_view::TerminalView, util::color::ThemeColor};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CopyModePosition {
@@ -66,16 +62,12 @@ impl TerminalView {
         let row_count: usize = self.row_count();
         self.viewport.clamp(row_count);
         let (visible_start, visible_end): (usize, usize) = self.viewport.visible_range(row_count);
-        let cell_width: f32 =
-            GlyphonResources::measure_font_width(&mut self.glyphs.font_system, &self.config)
-                .max(1.0);
-
         Self::copy_mode_rects_for(
             &self.copy_mode,
             &self.snapshot.lines,
             visible_start,
             visible_end,
-            cell_width,
+            self.glyphs.cell_width,
             self.config.line_height,
             self.has_tab_bar(),
         )

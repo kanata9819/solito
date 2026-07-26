@@ -3,22 +3,18 @@ use super::cursor::CursorPosition;
 use decodesc::{CsiMessage, EraseMode, OscMessage};
 use unicode_width::UnicodeWidthChar;
 
-pub(super) struct ScreenEditor {
+pub(crate) struct Screen {
     screen_buffer: ScreenBuffer,
 }
 
-impl ScreenEditor {
-    pub(super) fn new(cols: usize, rows: usize) -> Self {
+impl Screen {
+    pub(crate) fn new(cols: usize, rows: usize) -> Self {
         let screen_buffer: ScreenBuffer = ScreenBuffer::new(cols, rows);
         Self { screen_buffer }
     }
 
-    pub(super) fn set_cols(&mut self, cols: usize) {
-        self.screen_buffer.set_cols(cols);
-    }
-
-    pub(super) fn set_rows(&mut self, rows: usize) {
-        self.screen_buffer.set_rows(rows);
+    pub(crate) fn resize(&mut self, cols: usize, rows: usize) {
+        self.screen_buffer.resize(cols, rows);
     }
 
     pub(super) fn clear_screen(&mut self) {
@@ -209,7 +205,7 @@ impl ScreenEditor {
         self.move_cursor_to_col(next_tab.min(self.screen_buffer.cols().saturating_sub(1)));
     }
 
-    pub(super) fn snapshot(&self) -> ScreenSnapshot {
+    pub(crate) fn snapshot(&self) -> ScreenSnapshot {
         self.screen_buffer.snapshot()
     }
 
@@ -325,10 +321,7 @@ impl ScreenEditor {
 
     fn restore_cursor_position(&mut self) {
         if let Some(pos) = self.screen_buffer.cursor.get_saved_cursor_position() {
-            self.move_cursor_to(CursorPosition {
-                row: pos.row,
-                col: pos.col,
-            });
+            self.move_cursor_to(pos);
         }
     }
 

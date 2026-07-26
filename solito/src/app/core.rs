@@ -1,7 +1,4 @@
-use solito_renderer::{
-    RendererConfig, State, TabBarSnapshot, TerminalViewRenderer, WindowRenderer,
-    estimate_terminal_size,
-};
+use solito_renderer::{RendererConfig, State, TabBarSnapshot, estimate_terminal_size};
 use std::{collections::HashMap, error::Error, sync::Arc};
 
 use crate::app::copy::CopyMode;

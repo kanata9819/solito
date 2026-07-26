@@ -1,5 +1,5 @@
+use crate::screen::Screen;
 use crate::screen::buffer::ScreenSnapshot;
-use crate::screen::core::Screen;
 use vte::Parser;
 
 pub struct TerminalState {
@@ -19,12 +19,8 @@ impl TerminalState {
         self.parser.advance(&mut self.screen, bytes);
     }
 
-    pub fn set_width(&mut self, cols: usize) {
-        self.screen.set_cols(cols.max(1));
-    }
-
-    pub fn set_height(&mut self, rows: usize) {
-        self.screen.set_rows(rows.max(1));
+    pub fn resize(&mut self, cols: usize, rows: usize) {
+        self.screen.resize(cols, rows);
     }
 
     pub fn snapshot(&self) -> ScreenSnapshot {

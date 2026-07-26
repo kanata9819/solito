@@ -2,27 +2,14 @@ use glyphon::{Attrs, Color, Family, Shaping};
 use solito_terminal::ScreenCell;
 use std::collections::HashMap;
 
-use crate::{
-    RendererConfig,
-    terminal_view::{glyph::GlyphonResources, resources::GlyphResources},
-    util::color::ThemeColor,
-};
+use crate::{RendererConfig, terminal_view::glyph::GlyphonResources, util::color::ThemeColor};
 
 use super::TerminalView;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 struct GridTextStyle {
     color: Option<[u8; 4]>,
     letter_spacing: f32,
-}
-
-impl Default for GridTextStyle {
-    fn default() -> Self {
-        Self {
-            color: None,
-            letter_spacing: 0.0,
-        }
-    }
 }
 
 struct GridMetrics<'a> {
@@ -33,7 +20,7 @@ struct GridMetrics<'a> {
 
 impl TerminalView {
     pub(super) fn set_text_buffer_size(
-        glyphs: &mut GlyphResources,
+        glyphs: &mut GlyphonResources,
         width: u32,
         height: u32,
         config: &RendererConfig,
@@ -87,9 +74,7 @@ impl TerminalView {
     }
 
     fn visible_text_spans<'a>(&mut self, font_family: &'a str) -> Vec<(String, Attrs<'a>)> {
-        let cell_width: f32 =
-            GlyphonResources::measure_font_width(&mut self.glyphs.font_system, &self.config)
-                .max(1.0);
+        let cell_width: f32 = self.glyphs.cell_width;
         let mut spans: Vec<(String, Attrs<'a>)> =
             Self::tab_bar_spans_for(&self.tab_bar, font_family, cell_width);
         let has_tab_bar: bool = !spans.is_empty();

@@ -2,10 +2,9 @@ use glyphon::Attrs;
 
 use crate::pipeline::rect::RectSpec;
 use crate::terminal_view::TerminalView;
-use crate::terminal_view::glyph::GlyphonResources;
 use crate::util::color::ThemeColor;
 
-pub struct TabView {}
+pub struct TabView;
 impl TabView {
     pub const TAB_ACTIVE_TEXT_COLOR: [u8; 4] = ThemeColor::WHITE;
     pub const TAB_INACTIVE_TEXT_COLOR: [u8; 4] = ThemeColor::BLUE_GRAY_400;
@@ -54,12 +53,13 @@ impl TerminalView {
         self.set_text_to_buffer();
     }
 
-    pub(crate) fn tab_bar_rects(&mut self, width: u32) -> Vec<RectSpec> {
-        let cell_width: f32 =
-            GlyphonResources::measure_font_width(&mut self.glyphs.font_system, &self.config)
-                .max(1.0);
-
-        Self::tab_bar_rects_for(&self.tab_bar, width, cell_width, self.config.line_height)
+    pub(crate) fn tab_bar_rects(&self, width: u32) -> Vec<RectSpec> {
+        Self::tab_bar_rects_for(
+            &self.tab_bar,
+            width,
+            self.glyphs.cell_width,
+            self.config.line_height,
+        )
     }
 
     pub(super) fn tab_bar_height_for(line_height: f32) -> f32 {

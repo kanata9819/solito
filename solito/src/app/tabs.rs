@@ -69,8 +69,7 @@ impl TerminalTab for Tab {
     }
 
     fn resize(&mut self, cols: usize, rows: usize) -> Result<(), Box<dyn Error>> {
-        self.terminal.set_width(cols);
-        self.terminal.set_height(rows);
+        self.terminal.resize(cols, rows);
         self.input_tx.send(SessionInput::resize(cols, rows))?;
 
         Ok(())

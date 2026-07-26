@@ -1,14 +1,14 @@
-use super::core::Screen;
+use super::Screen;
 use decodesc::{DecodedEvent, VteEvent, decode};
 use vte::{Params, Perform};
 
 impl Perform for Screen {
     fn print(&mut self, c: char) {
-        self.buffer_editor.apply_print(c);
+        self.apply_print(c);
     }
 
     fn execute(&mut self, byte: u8) {
-        self.buffer_editor.apply_execute(byte);
+        self.apply_execute(byte);
     }
 
     fn hook(&mut self, _params: &Params, _intermediates: &[u8], _ignore: bool, _action: char) {}
@@ -22,7 +22,7 @@ impl Perform for Screen {
             params,
             bell_terminated,
         }) {
-            self.buffer_editor.apply_osc(osc);
+            self.apply_osc(osc);
         }
     }
 
@@ -33,7 +33,7 @@ impl Perform for Screen {
             ignore,
             action,
         }) {
-            self.buffer_editor.apply_csi(csi);
+            self.apply_csi(csi);
         }
     }
 
