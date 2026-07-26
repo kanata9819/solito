@@ -9,7 +9,7 @@ use solito_config::app::AppConfig;
 use tracing_subscriber::EnvFilter;
 use winit::event_loop::EventLoop;
 
-use crate::app::core::SolitoApplication;
+use crate::app::application::SolitoApplication;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let config: AppConfig = AppConfig::load_or_create()?;

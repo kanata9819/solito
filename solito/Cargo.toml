@@ -7,8 +7,8 @@ license.workspace = true
 [dependencies]
 arboard = { version = "3", default-features = false }
 portable-pty = "0.9.0"
-winit = "0.30.13"
-tracing = "0.1.44"
+winit.workspace = true
+tracing.workspace = true
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 pollster = "1.0.1"
 solito-renderer = { path = "../solito-renderer" }

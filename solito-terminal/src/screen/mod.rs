@@ -1,5 +1,7 @@
 pub(super) mod buffer;
-pub(super) mod core;
 mod cursor;
 mod editor;
 mod performer;
+mod sgr;
+
+pub(crate) use editor::Screen;

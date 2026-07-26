@@ -1,3 +1,4 @@
+#[derive(Default)]
 pub(super) struct Cursor {
     cursor_col: usize,
     cursor_row: usize,
@@ -11,14 +12,6 @@ pub(super) struct CursorPosition {
 }
 
 impl Cursor {
-    pub(super) fn new() -> Self {
-        Self {
-            cursor_col: 0,
-            cursor_row: 0,
-            saved_cursor: None,
-        }
-    }
-
     pub(super) fn get_current_row(&self) -> usize {
         self.cursor_row
     }
@@ -57,10 +50,7 @@ impl Cursor {
     }
 
     pub(super) fn save_cursor_position(&mut self, position: CursorPosition) {
-        self.saved_cursor = Some(CursorPosition {
-            row: position.row,
-            col: position.col,
-        })
+        self.saved_cursor = Some(position);
     }
 
     pub(super) fn get_saved_cursor_position(&self) -> Option<CursorPosition> {

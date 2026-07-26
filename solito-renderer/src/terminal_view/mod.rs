@@ -1,7 +1,6 @@
 mod caret;
 mod copy_mode;
 mod glyph;
-mod resources;
 mod tab_bar;
 mod text;
 mod view;

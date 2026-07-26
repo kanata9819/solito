@@ -1,15 +1,15 @@
 use glyphon::FontSystem;
-use solito_terminal::{ScreenCell, ScreenSnapshot};
+use solito_terminal::{ScreenCell, ScreenSnapshot, TerminalSize};
 
 use crate::RendererConfig;
 
 use super::{
-    copy_mode::CopyModeSnapshot, glyph::GlyphonResources, resources::GlyphResources,
-    tab_bar::TabBarSnapshot, viewport::ViewportState,
+    copy_mode::CopyModeSnapshot, glyph::GlyphonResources, tab_bar::TabBarSnapshot,
+    viewport::ViewportState,
 };
 
 pub(crate) struct TerminalView {
-    pub(crate) glyphs: GlyphResources,
+    pub(crate) glyphs: GlyphonResources,
     pub(super) config: RendererConfig,
     pub(super) snapshot: ScreenSnapshot,
     pub(super) tab_bar: TabBarSnapshot,
@@ -30,7 +30,7 @@ impl TerminalView {
         config: RendererConfig,
     ) -> Self {
         let config: RendererConfig = config.sanitized();
-        let glyphon: GlyphonResources = GlyphonResources::new(
+        let mut glyphs: GlyphonResources = GlyphonResources::new(
             device,
             queue,
             swapchain,
@@ -38,7 +38,6 @@ impl TerminalView {
             scale_factor,
             &config,
         );
-        let mut glyphs: GlyphResources = GlyphResources::new(glyphon);
 
         Self::set_text_buffer_size(
             &mut glyphs,
@@ -64,7 +63,7 @@ impl TerminalView {
         width: u32,
         height: u32,
         config: &RendererConfig,
-    ) -> (usize, usize) {
+    ) -> TerminalSize {
         let config: RendererConfig = config.clone().sanitized();
         let mut font_system: FontSystem = FontSystem::new();
         let cell_width: f32 =
@@ -72,7 +71,7 @@ impl TerminalView {
         let content_width: u32 = Self::terminal_content_width(width);
         let content_height: u32 = Self::terminal_content_height(height, config.line_height);
 
-        (
+        TerminalSize::new(
             ((content_width as f32 / cell_width).floor() as usize).max(1),
             ((content_height as f32 / config.line_height).floor() as usize).max(1),
         )
@@ -117,13 +116,10 @@ impl TerminalView {
         self.set_text_to_buffer();
     }
 
-    pub(crate) fn visible_cols(&mut self, width: u32) -> usize {
-        let cell_width: f32 =
-            GlyphonResources::measure_font_width(&mut self.glyphs.font_system, &self.config)
-                .max(1.0);
+    pub(crate) fn visible_cols(&self, width: u32) -> usize {
         let content_width: u32 = Self::terminal_content_width(width);
 
-        ((content_width as f32 / cell_width).floor() as usize).max(1)
+        ((content_width as f32 / self.glyphs.cell_width).floor() as usize).max(1)
     }
 
     pub(crate) fn visible_rows(&self, height: u32) -> usize {

@@ -1,4 +1,5 @@
 use super::cursor::Cursor;
+use crate::TerminalSize;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) struct CellStyle {
@@ -32,9 +33,8 @@ impl ScreenCell {
 
     pub(super) fn wide_continuation(style: CellStyle) -> Self {
         Self {
-            ch: ' ',
-            style,
             is_wide_continuation: true,
+            ..Self::blank(style)
         }
     }
 
@@ -62,24 +62,21 @@ pub(super) struct ScreenBuffer {
 }
 
 impl ScreenBuffer {
-    pub(super) fn new(cols: usize, rows: usize) -> Self {
+    pub(super) fn new(size: TerminalSize) -> Self {
         Self {
-            cols: cols.max(1),
-            rows: rows.max(1),
+            cols: size.cols,
+            rows: size.rows,
             lines: vec![Vec::new()],
-            cursor: Cursor::new(),
+            cursor: Cursor::default(),
             pending_wrap: false,
             style: CellStyle::default(),
             cursor_color: None,
         }
     }
 
-    pub(super) fn set_cols(&mut self, cols: usize) {
-        self.cols = cols.max(1);
-    }
-
-    pub(super) fn set_rows(&mut self, rows: usize) {
-        self.rows = rows.max(1);
+    pub(super) fn resize(&mut self, size: TerminalSize) {
+        self.cols = size.cols;
+        self.rows = size.rows;
     }
 
     pub(super) fn snapshot(&self) -> ScreenSnapshot {

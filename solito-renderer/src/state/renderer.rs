@@ -4,22 +4,20 @@ use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
     RendererConfig,
-    pipeline::rect::{self, RectRenderer},
-    state::{gpu::GpuContext, render::RenderResources, window::WindowSurface},
+    pipeline::rect,
+    state::{gpu::GpuContext, resources::RenderResources, surface::WindowSurface},
     terminal_view::TerminalView,
 };
 
-pub use super::terminal::TerminalViewRenderer;
-pub use super::window::WindowRenderer;
-
-pub struct State {
+/// Owns the GPU, window surface, and terminal view used to draw one window.
+pub struct Renderer {
     pub(super) gpu: GpuContext,
     pub(super) window_surface: WindowSurface,
     pub(super) render_resources: RenderResources,
     pub(super) terminal_view: TerminalView,
 }
 
-impl State {
+impl Renderer {
     pub async fn new(
         window: Arc<Window>,
         renderer_config: RendererConfig,
@@ -29,7 +27,7 @@ impl State {
         let surface: Surface<'_> = instance.create_surface(window.clone())?;
         let gpu = GpuContext::new(instance, &surface).await?;
         let window_surface = WindowSurface::new(window, surface, &gpu, size, &renderer_config);
-        let render_resources = RenderResources::new(&gpu, &window_surface, size.width, size.height);
+        let render_resources = RenderResources::new(&gpu, &window_surface);
         let swapchain_format = TextureFormat::Bgra8UnormSrgb;
         let terminal_view = TerminalView::new(
             &gpu.device,

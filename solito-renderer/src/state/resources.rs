@@ -1,5 +1,5 @@
-use super::{gpu::GpuContext, window::WindowSurface};
-use crate::pipeline::rect::{self, Rect, RectRenderer};
+use super::{gpu::GpuContext, surface::WindowSurface};
+use crate::pipeline::rect;
 
 pub(super) struct RenderResources {
     pub(super) rect_pipeline: rect::RectPipeline,
@@ -7,20 +7,15 @@ pub(super) struct RenderResources {
 }
 
 impl RenderResources {
-    pub(super) fn new(
-        gpu: &GpuContext,
-        window_surface: &WindowSurface,
-        width: u32,
-        height: u32,
-    ) -> Self {
+    pub(super) fn new(gpu: &GpuContext, window_surface: &WindowSurface) -> Self {
         let uniform_buffer = rect::RectPipeline::create_screen_uniform_buffer(&gpu.device);
         let rect_pipeline = rect::RectPipeline::new(
             &gpu.device,
-            window_surface.config.clone(),
+            &window_surface.config,
             &gpu.queue,
             &uniform_buffer,
-            width,
-            height,
+            window_surface.config.width,
+            window_surface.config.height,
         );
 
         Self {

@@ -1,6 +1,6 @@
 use crate::session::runtime::{SessionInput, SessionRuntime};
 
-use solito_terminal::{ScreenSnapshot, TerminalState};
+use solito_terminal::{ScreenSnapshot, TerminalSize, TerminalState};
 use std::{
     error::Error,
     path::Path,
@@ -13,7 +13,7 @@ pub(super) trait TerminalTab {
     fn snapshot(&self) -> ScreenSnapshot;
     fn title(&self) -> &str;
     fn drain_output(&mut self) -> bool;
-    fn resize(&mut self, cols: usize, rows: usize) -> Result<(), Box<dyn Error>>;
+    fn resize(&mut self, size: TerminalSize) -> Result<(), Box<dyn Error>>;
 }
 
 pub(super) struct Tab {
@@ -24,20 +24,21 @@ pub(super) struct Tab {
 }
 
 impl Tab {
-    fn spawn(cols: usize, rows: usize, shell_program: String) -> Self {
+    fn spawn(size: TerminalSize, shell_program: String) -> Self {
         let (input_tx, input_rx) = channel::<SessionInput>();
         let (output_tx, output_rx) = channel::<Vec<u8>>();
         let title: String = tab_title_for_program(&shell_program);
 
         std::thread::spawn(move || {
-            let runtime = SessionRuntime::new(input_rx, output_tx, cols, rows, shell_program);
-            if let Err(err) = runtime.run_session() {
-                error!("run session failed: {}", err);
-            };
+            let result = SessionRuntime::new(input_rx, output_tx, size, &shell_program)
+                .and_then(SessionRuntime::run_session);
+            if let Err(err) = result {
+                error!("terminal session failed: {err}");
+            }
         });
 
         Self {
-            terminal: TerminalState::new(cols, rows),
+            terminal: TerminalState::new(size),
             input_tx,
             output_rx,
             title,
@@ -68,10 +69,9 @@ impl TerminalTab for Tab {
         updated
     }
 
-    fn resize(&mut self, cols: usize, rows: usize) -> Result<(), Box<dyn Error>> {
-        self.terminal.set_width(cols);
-        self.terminal.set_height(rows);
-        self.input_tx.send(SessionInput::resize(cols, rows))?;
+    fn resize(&mut self, size: TerminalSize) -> Result<(), Box<dyn Error>> {
+        self.terminal.resize(size);
+        self.input_tx.send(SessionInput::resize(size))?;
 
         Ok(())
     }
@@ -113,8 +113,8 @@ impl<T> Tabs<T> {
 }
 
 impl Tabs<Tab> {
-    pub(super) fn open(&mut self, cols: usize, rows: usize, shell_program: String) {
-        self.push(Tab::spawn(cols, rows, shell_program));
+    pub(super) fn open(&mut self, size: TerminalSize, shell_program: String) {
+        self.push(Tab::spawn(size, shell_program));
     }
 }
 
@@ -150,9 +150,9 @@ impl<T: TerminalTab> Tabs<T> {
         active_updated
     }
 
-    pub(super) fn resize_all(&mut self, cols: usize, rows: usize) -> Result<(), Box<dyn Error>> {
+    pub(super) fn resize_all(&mut self, size: TerminalSize) -> Result<(), Box<dyn Error>> {
         for tab in &mut self.tabs {
-            tab.resize(cols, rows)?;
+            tab.resize(size)?;
         }
 
         Ok(())
@@ -206,7 +206,7 @@ fn tab_title_for_program(program: &str) -> String {
 mod tests {
     use super::{Tabs, TerminalTab, tab_title_for_program};
     use crate::session::runtime::SessionInput;
-    use solito_terminal::ScreenSnapshot;
+    use solito_terminal::{ScreenSnapshot, TerminalSize};
     use std::{
         error::Error,
         sync::mpsc::{Receiver, Sender, channel},
@@ -245,7 +245,7 @@ mod tests {
             false
         }
 
-        fn resize(&mut self, _cols: usize, _rows: usize) -> Result<(), Box<dyn Error>> {
+        fn resize(&mut self, _size: TerminalSize) -> Result<(), Box<dyn Error>> {
             Ok(())
         }
     }

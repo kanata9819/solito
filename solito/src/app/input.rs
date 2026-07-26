@@ -1,4 +1,6 @@
-use std::{error::Error, sync::mpsc::Sender};
+//! Translate keyboard input into side-effect-free application commands.
+
+use solito_terminal::TerminalSize;
 use winit::{
     dpi::PhysicalSize,
     event::ElementState,
@@ -6,10 +8,11 @@ use winit::{
 };
 
 use crate::app::copy::CopyModeMove;
-use crate::session::runtime::SessionInput;
 
+#[derive(Debug, PartialEq)]
 pub(super) enum AppCommand {
-    None,
+    Noop,
+    SendTerminalInput(Vec<u8>),
     EnterCopyMode,
     CopyMode(CopyModeCommand),
     NewTab,
@@ -19,12 +22,12 @@ pub(super) enum AppCommand {
     CopySelection,
     PasteFromClipboard,
     Resize {
-        size: PhysicalSize<u32>,
-        cols: usize,
-        rows: usize,
+        window_size: PhysicalSize<u32>,
+        terminal_size: TerminalSize,
     },
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum CopyModeCommand {
     Move(CopyModeMove),
     ToggleCellSelection,
@@ -35,12 +38,11 @@ pub(super) enum CopyModeCommand {
 
 pub(super) fn handle_key(
     text: Option<SmolStr>,
-    logical_key: Key<SmolStr>,
+    logical_key: &Key<SmolStr>,
     key_state: ElementState,
     modifiers: ModifiersState,
-    input_tx: &Sender<SessionInput>,
     copy_mode_active: bool,
-) -> Result<AppCommand, Box<dyn Error>> {
+) -> AppCommand {
     const ENTER: &[u8; 1] = b"\r";
     const BACKSPACE: &[u8; 1] = b"\x7f";
     const TAB: &[u8; 1] = b"\t";
@@ -50,67 +52,37 @@ pub(super) fn handle_key(
     const ARROWRIGHT: &[u8; 3] = b"\x1b[C";
     const ARROWLEFT: &[u8; 3] = b"\x1b[D";
 
-    if key_state == ElementState::Pressed {
-        if copy_mode_active {
-            return Ok(copy_mode_command(&logical_key, modifiers)
-                .map(AppCommand::CopyMode)
-                .unwrap_or(AppCommand::None));
-        }
-
-        if let Some(command) = shortcut_command(&logical_key, modifiers) {
-            return Ok(command);
-        }
-
-        match &logical_key {
-            Key::Named(NamedKey::Enter) => input_tx.send(SessionInput::write(ENTER.to_vec()))?,
-            Key::Named(NamedKey::Backspace) => {
-                input_tx.send(SessionInput::write(BACKSPACE.to_vec()))?
-            }
-            Key::Named(NamedKey::Tab) => input_tx.send(SessionInput::write(TAB.to_vec()))?,
-            Key::Named(NamedKey::Escape) => input_tx.send(SessionInput::write(ESCAPE.to_vec()))?,
-            Key::Named(NamedKey::ArrowUp) => {
-                input_tx.send(SessionInput::write(ARROWUP.to_vec()))?
-            }
-            Key::Named(NamedKey::ArrowDown) => {
-                input_tx.send(SessionInput::write(ARROWDOWN.to_vec()))?
-            }
-            Key::Named(NamedKey::ArrowRight) => {
-                input_tx.send(SessionInput::write(ARROWRIGHT.to_vec()))?
-            }
-            Key::Named(NamedKey::ArrowLeft) => {
-                input_tx.send(SessionInput::write(ARROWLEFT.to_vec()))?
-            }
-            _ => {
-                handle_ctrl_c(&logical_key, modifiers, input_tx)?;
-
-                if let Some(text) = text {
-                    input_tx.send(SessionInput::Write(text.as_bytes().to_vec()))?;
-                    return Ok(AppCommand::None);
-                }
-            }
-        }
+    if key_state != ElementState::Pressed {
+        return AppCommand::Noop;
     }
 
-    Ok(AppCommand::None)
-}
-
-fn handle_ctrl_c(
-    logical_key: &Key<SmolStr>,
-    modifiers: ModifiersState,
-    input_tx: &Sender<SessionInput>,
-) -> Result<AppCommand, Box<dyn Error>> {
-    const EXT: &[u8; 1] = b"\x03";
-
-    // Ctrl + c
-    if let Key::Character(char) = &logical_key
-        && modifiers.control_key()
-        && char.eq_ignore_ascii_case("c")
-    {
-        input_tx.send(SessionInput::Write(EXT.to_vec()))?;
-        return Ok(AppCommand::None);
+    if copy_mode_active {
+        return copy_mode_command(logical_key, modifiers)
+            .map_or(AppCommand::Noop, AppCommand::CopyMode);
     }
 
-    Ok(AppCommand::None)
+    if let Some(command) = shortcut_command(logical_key, modifiers) {
+        return command;
+    }
+
+    let bytes: Option<Vec<u8>> = match logical_key {
+        Key::Named(NamedKey::Enter) => Some(ENTER.to_vec()),
+        Key::Named(NamedKey::Backspace) => Some(BACKSPACE.to_vec()),
+        Key::Named(NamedKey::Tab) => Some(TAB.to_vec()),
+        Key::Named(NamedKey::Escape) => Some(ESCAPE.to_vec()),
+        Key::Named(NamedKey::ArrowUp) => Some(ARROWUP.to_vec()),
+        Key::Named(NamedKey::ArrowDown) => Some(ARROWDOWN.to_vec()),
+        Key::Named(NamedKey::ArrowRight) => Some(ARROWRIGHT.to_vec()),
+        Key::Named(NamedKey::ArrowLeft) => Some(ARROWLEFT.to_vec()),
+        Key::Character(character)
+            if modifiers.control_key() && character.eq_ignore_ascii_case("c") =>
+        {
+            Some(b"\x03".to_vec())
+        }
+        _ => text.map(|text| text.as_bytes().to_vec()),
+    };
+
+    bytes.map_or(AppCommand::Noop, AppCommand::SendTerminalInput)
 }
 
 fn shortcut_command(logical_key: &Key<SmolStr>, modifiers: ModifiersState) -> Option<AppCommand> {
@@ -219,9 +191,67 @@ fn copy_mode_command(
 
 #[cfg(test)]
 mod tests {
-    use super::{AppCommand, CopyModeCommand, copy_mode_command, shortcut_command};
+    use super::{AppCommand, CopyModeCommand, copy_mode_command, handle_key, shortcut_command};
     use crate::app::copy::CopyModeMove;
-    use winit::keyboard::{Key, ModifiersState, SmolStr};
+    use winit::{
+        event::ElementState,
+        keyboard::{Key, ModifiersState, NamedKey, SmolStr},
+    };
+
+    #[test]
+    fn enter_becomes_terminal_input() {
+        let command = handle_key(
+            None,
+            &Key::Named(NamedKey::Enter),
+            ElementState::Pressed,
+            ModifiersState::empty(),
+            false,
+        );
+
+        assert_eq!(command, AppCommand::SendTerminalInput(b"\r".to_vec()));
+    }
+
+    #[test]
+    fn text_becomes_utf8_terminal_input() {
+        let command = handle_key(
+            Some(SmolStr::new("あ")),
+            &Key::Character(SmolStr::new("あ")),
+            ElementState::Pressed,
+            ModifiersState::empty(),
+            false,
+        );
+
+        assert_eq!(
+            command,
+            AppCommand::SendTerminalInput("あ".as_bytes().to_vec())
+        );
+    }
+
+    #[test]
+    fn ctrl_c_becomes_interrupt_byte() {
+        let command = handle_key(
+            None,
+            &Key::Character(SmolStr::new("c")),
+            ElementState::Pressed,
+            ModifiersState::CONTROL,
+            false,
+        );
+
+        assert_eq!(command, AppCommand::SendTerminalInput(b"\x03".to_vec()));
+    }
+
+    #[test]
+    fn released_key_is_ignored() {
+        let command = handle_key(
+            Some(SmolStr::new("a")),
+            &Key::Character(SmolStr::new("a")),
+            ElementState::Released,
+            ModifiersState::empty(),
+            false,
+        );
+
+        assert_eq!(command, AppCommand::Noop);
+    }
 
     #[test]
     fn ctrl_shift_t_opens_new_tab() {

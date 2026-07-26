@@ -1,5 +1,6 @@
-pub(crate) mod context;
+mod frame;
 mod gpu;
-mod render;
+pub(crate) mod renderer;
+mod resources;
+mod surface;
 mod terminal;
-mod window;

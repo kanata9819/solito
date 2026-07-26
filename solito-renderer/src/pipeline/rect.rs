@@ -1,3 +1,4 @@
+use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 use wgpu::wgt::SurfaceConfiguration;
 use wgpu::{Buffer, ShaderModule};
@@ -43,7 +44,7 @@ impl RectSpec {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Pod, Zeroable)]
 struct RectInstance {
     pos: [f32; 2],
     size: [f32; 2],
@@ -64,24 +65,13 @@ impl From<RectSpec> for RectInstance {
     }
 }
 
-pub(crate) trait Rect {
-    fn new(
-        device: &wgpu::Device,
-        config: SurfaceConfiguration<Vec<wgpu::TextureFormat>>,
-        queue: &wgpu::Queue,
-        uniform_buffer: &Buffer,
-        window_width: u32,
-        window_height: u32,
-    ) -> Self;
-}
-
 const RECT_INSTANCE_ATTRIBUTES: [wgpu::VertexAttribute; 4] =
     wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32x4, 3 => Float32];
 
-impl Rect for RectPipeline {
-    fn new(
+impl RectPipeline {
+    pub(crate) fn new(
         device: &wgpu::Device,
-        config: SurfaceConfiguration<Vec<wgpu::TextureFormat>>,
+        config: &SurfaceConfiguration<Vec<wgpu::TextureFormat>>,
         queue: &wgpu::Queue,
         uniform_buffer: &Buffer,
         window_width: u32,
@@ -155,6 +145,7 @@ impl Rect for RectPipeline {
     }
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct ScreenUniform<'a> {
     pub uniform_buffer: &'a Buffer,
     pub queue: &'a wgpu::Queue,
@@ -162,23 +153,12 @@ pub(crate) struct ScreenUniform<'a> {
     pub height: u32,
 }
 
-pub(crate) trait RectRenderer {
-    fn rect_bind_group(&self, device: &wgpu::Device, uniform_buffer: &Buffer) -> wgpu::BindGroup;
-    fn update_screen_uniform(screen_uniform: ScreenUniform);
-    fn rect_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout;
-    fn create_screen_uniform_buffer(device: &wgpu::Device) -> wgpu::Buffer;
-    fn create_instance_buffer(device: &wgpu::Device, rects: &[RectSpec]) -> Option<wgpu::Buffer>;
-    fn draw_rects(
+impl RectPipeline {
+    pub(crate) fn rect_bind_group(
         &self,
-        pass: &mut wgpu::RenderPass,
-        bind_group: wgpu::BindGroup,
-        instance_buffer: &wgpu::Buffer,
-        rect_count: usize,
-    );
-}
-
-impl RectRenderer for RectPipeline {
-    fn rect_bind_group(&self, device: &wgpu::Device, uniform_buffer: &Buffer) -> wgpu::BindGroup {
+        device: &wgpu::Device,
+        uniform_buffer: &Buffer,
+    ) -> wgpu::BindGroup {
         let bind_group: wgpu::BindGroup = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Rect Bind Group"),
             layout: &self.layout,
@@ -191,16 +171,18 @@ impl RectRenderer for RectPipeline {
         bind_group
     }
 
-    fn update_screen_uniform(uniform: ScreenUniform) {
+    pub(crate) fn update_screen_uniform(uniform: ScreenUniform) {
         let (screen_w, screen_h): (f32, f32) = (uniform.width as f32, uniform.height as f32);
         let screen_uniform: [f32; 4] = [
             screen_w, screen_h, // window size
             0.0, 0.0, // padding
         ];
 
-        uniform
-            .queue
-            .write_buffer(uniform.uniform_buffer, 0, as_bytes(&screen_uniform));
+        uniform.queue.write_buffer(
+            uniform.uniform_buffer,
+            0,
+            bytemuck::bytes_of(&screen_uniform),
+        );
     }
 
     fn rect_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
@@ -222,7 +204,7 @@ impl RectRenderer for RectPipeline {
         bind_group_layout
     }
 
-    fn create_screen_uniform_buffer(device: &wgpu::Device) -> wgpu::Buffer {
+    pub(crate) fn create_screen_uniform_buffer(device: &wgpu::Device) -> wgpu::Buffer {
         let screen_uniform_buffer: wgpu::Buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Rect Screen Uniform Buffer"),
             size: std::mem::size_of::<[f32; 4]>() as u64,
@@ -233,7 +215,10 @@ impl RectRenderer for RectPipeline {
         screen_uniform_buffer
     }
 
-    fn create_instance_buffer(device: &wgpu::Device, rects: &[RectSpec]) -> Option<wgpu::Buffer> {
+    pub(crate) fn create_instance_buffer(
+        device: &wgpu::Device,
+        rects: &[RectSpec],
+    ) -> Option<wgpu::Buffer> {
         if rects.is_empty() {
             return None;
         }
@@ -243,16 +228,16 @@ impl RectRenderer for RectPipeline {
         Some(
             device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Rect Instance Buffer"),
-                contents: slice_as_bytes(&instances),
+                contents: bytemuck::cast_slice(&instances),
                 usage: wgpu::BufferUsages::VERTEX,
             }),
         )
     }
 
-    fn draw_rects(
+    pub(crate) fn draw_rects(
         &self,
         pass: &mut wgpu::RenderPass,
-        bind_group: wgpu::BindGroup,
+        bind_group: &wgpu::BindGroup,
         instance_buffer: &wgpu::Buffer,
         rect_count: usize,
     ) {
@@ -260,18 +245,8 @@ impl RectRenderer for RectPipeline {
         const VERTICES_COUNT: Range<u32> = 0..6;
 
         pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &bind_group, &[]);
+        pass.set_bind_group(0, bind_group, &[]);
         pass.set_vertex_buffer(0, instance_buffer.slice(..));
         pass.draw(VERTICES_COUNT, 0..rect_count as u32);
-    }
-}
-
-fn as_bytes<T>(value: &T) -> &[u8] {
-    unsafe { std::slice::from_raw_parts(value as *const T as *const u8, std::mem::size_of::<T>()) }
-}
-
-fn slice_as_bytes<T>(values: &[T]) -> &[u8] {
-    unsafe {
-        std::slice::from_raw_parts(values.as_ptr() as *const u8, std::mem::size_of_val(values))
     }
 }

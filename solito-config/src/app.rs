@@ -1,8 +1,4 @@
-use std::{
-    error::Error,
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{error::Error, fs, path::PathBuf};
 
 use super::renderer::{RendererConfig, WindowBackdrop};
 use directories::BaseDirs;
@@ -22,7 +18,7 @@ pub struct AppConfig {
 impl AppConfig {
     pub fn load_or_create() -> Result<Self, Box<dyn Error>> {
         let paths: AppPaths = AppPaths::resolve()?;
-        paths.ensure_dirs()?;
+        paths.ensure_config_dir()?;
 
         if !paths.config_file.exists() {
             let default_config: String = toml::to_string_pretty(&Self::default())?;
@@ -201,7 +197,6 @@ impl Default for TracingConfig {
 struct AppPaths {
     config_dir: PathBuf,
     config_file: PathBuf,
-    state_dir: PathBuf,
 }
 
 impl AppPaths {
@@ -210,26 +205,17 @@ impl AppPaths {
             BaseDirs::new().ok_or("failed to resolve user directories for config")?;
         let config_dir: PathBuf = base_dirs.data_local_dir().join(APP_DIR_NAME);
         let config_file: PathBuf = config_dir.join("config.toml");
-        let state_dir: PathBuf = config_dir.clone();
 
         Ok(Self {
             config_dir,
             config_file,
-            state_dir,
         })
     }
 
-    fn ensure_dirs(&self) -> Result<(), Box<dyn Error>> {
-        create_dir_all(&self.config_dir)?;
-        create_dir_all(&self.state_dir)?;
-
+    fn ensure_config_dir(&self) -> Result<(), Box<dyn Error>> {
+        fs::create_dir_all(&self.config_dir)?;
         Ok(())
     }
-}
-
-fn create_dir_all(path: &Path) -> Result<(), Box<dyn Error>> {
-    fs::create_dir_all(path)?;
-    Ok(())
 }
 
 fn sanitize_positive_f32(value: f32, fallback: f32) -> f32 {
