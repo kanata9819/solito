@@ -5,18 +5,19 @@ use winit::{dpi::PhysicalSize, window::Window};
 use crate::{
     RendererConfig,
     pipeline::rect,
-    state::{gpu::GpuContext, render::RenderResources, window::WindowSurface},
+    state::{gpu::GpuContext, resources::RenderResources, surface::WindowSurface},
     terminal_view::TerminalView,
 };
 
-pub struct State {
+/// Owns the GPU, window surface, and terminal view used to draw one window.
+pub struct Renderer {
     pub(super) gpu: GpuContext,
     pub(super) window_surface: WindowSurface,
     pub(super) render_resources: RenderResources,
     pub(super) terminal_view: TerminalView,
 }
 
-impl State {
+impl Renderer {
     pub async fn new(
         window: Arc<Window>,
         renderer_config: RendererConfig,

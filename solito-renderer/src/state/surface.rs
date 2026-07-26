@@ -1,24 +1,17 @@
-use glyphon::{Color, Resolution, TextArea, TextBounds};
-use solito_terminal::ScreenSnapshot;
-use std::{error::Error, sync::Arc};
-use wgpu::{
-    CommandEncoder, CommandEncoderDescriptor, Surface, SurfaceConfiguration, SurfaceTexture,
-    TextureView, TextureViewDescriptor,
-};
+//! Window surface creation and platform-specific backdrop setup.
+
+use std::sync::Arc;
+use wgpu::{Surface, SurfaceConfiguration};
 use winit::{dpi::PhysicalSize, window::Window};
 
-use super::{context::State, gpu::GpuContext};
-use crate::{
-    RendererConfig, WindowBackdrop, pass, pipeline::rect, terminal_view::TerminalView,
-    util::color::ThemeColor,
-};
+use super::gpu::GpuContext;
+use crate::{RendererConfig, WindowBackdrop};
 
 pub(super) struct WindowSurface {
     pub(super) surface: Surface<'static>,
     pub(super) config: SurfaceConfiguration,
-    pub(super) is_configured: bool,
     pub(super) window: Arc<Window>,
-    clear_color: wgpu::Color,
+    pub(super) clear_color: wgpu::Color,
 }
 
 impl WindowSurface {
@@ -59,7 +52,6 @@ impl WindowSurface {
         Self {
             surface,
             config,
-            is_configured: false,
             window,
             clear_color,
         }
@@ -294,186 +286,5 @@ impl WindowSurface {
         } else {
             let _ = (window, acrylic_tint);
         }
-    }
-}
-
-impl State {
-    fn prepare_render(&mut self) -> Result<(), Box<dyn Error>> {
-        let [default_r, default_g, default_b, _] = ThemeColor::WHITE;
-
-        self.terminal_view.glyphs.text_renderer.prepare(
-            &self.gpu.device,
-            &self.gpu.queue,
-            &mut self.terminal_view.glyphs.font_system,
-            &mut self.terminal_view.glyphs.atlas,
-            &self.terminal_view.glyphs.viewport,
-            [TextArea {
-                buffer: &self.terminal_view.glyphs.text_buffer,
-                left: TerminalView::PADDING_X,
-                top: TerminalView::PADDING_Y,
-                scale: 1.0,
-                bounds: TextBounds {
-                    left: 0,
-                    top: 0,
-                    ..Default::default()
-                },
-                default_color: Color::rgb(default_r, default_g, default_b),
-                custom_glyphs: &[],
-            }],
-            &mut self.terminal_view.glyphs.swash_cache,
-        )?;
-
-        Ok(())
-    }
-
-    fn render_pass(
-        &mut self,
-        encoder: &mut CommandEncoder,
-        view: TextureView,
-    ) -> Result<(), Box<dyn Error>> {
-        self.update_rect_screen_uniform();
-
-        let mut rects: Vec<rect::RectSpec> = self
-            .terminal_view
-            .tab_bar_rects(self.window_surface.config.width);
-        rects.extend(self.terminal_view.copy_mode_rects());
-
-        // Copy mode draws its own cursor over the scrollback; hide the shell cursor
-        // so the user does not see two active cursor positions at once.
-        if !self.terminal_view.copy_mode_active() {
-            let (caret_x, caret_y, caret_w, caret_h) = self.terminal_view.caret_rect();
-
-            if caret_w > 0.0 && caret_h > 0.0 {
-                rects.push(rect::RectSpec::new(
-                    caret_x,
-                    caret_y,
-                    caret_w,
-                    caret_h,
-                    self.terminal_view.caret_color(),
-                ));
-            }
-        }
-
-        let rect_instance_buffer: Option<wgpu::Buffer> =
-            rect::RectPipeline::create_instance_buffer(&self.gpu.device, &rects);
-        let rect_bind_group: wgpu::BindGroup = self
-            .render_resources
-            .rect_pipeline
-            .rect_bind_group(&self.gpu.device, &self.render_resources.uniform_buffer);
-
-        let mut pass: wgpu::RenderPass<'_> =
-            pass::begin_render_pass(encoder, &view, self.window_surface.clear_color);
-
-        if let Some(rect_instance_buffer) = rect_instance_buffer.as_ref() {
-            self.render_resources.rect_pipeline.draw_rects(
-                &mut pass,
-                rect_bind_group,
-                rect_instance_buffer,
-                rects.len(),
-            );
-        }
-
-        self.terminal_view.glyphs.text_renderer.render(
-            &self.terminal_view.glyphs.atlas,
-            &self.terminal_view.glyphs.viewport,
-            &mut pass,
-        )?;
-
-        Ok(())
-    }
-
-    fn initialize_frame(&mut self) -> Result<Option<SurfaceTexture>, Box<dyn Error>> {
-        for _ in 0..2 {
-            match self.window_surface.surface.get_current_texture() {
-                wgpu::CurrentSurfaceTexture::Success(frame) => return Ok(Some(frame)),
-                wgpu::CurrentSurfaceTexture::Suboptimal(frame) => {
-                    self.window_surface
-                        .surface
-                        .configure(&self.gpu.device, &self.window_surface.config);
-                    return Ok(Some(frame));
-                }
-                wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
-                    self.window_surface.window.request_redraw();
-                    return Ok(None);
-                }
-                wgpu::CurrentSurfaceTexture::Outdated => {
-                    self.window_surface
-                        .surface
-                        .configure(&self.gpu.device, &self.window_surface.config);
-                }
-                wgpu::CurrentSurfaceTexture::Lost => {
-                    self.window_surface.surface = self
-                        .gpu
-                        .instance
-                        .create_surface(self.window_surface.window.clone())?;
-                    self.window_surface
-                        .surface
-                        .configure(&self.gpu.device, &self.window_surface.config);
-                }
-                wgpu::CurrentSurfaceTexture::Validation => panic!("validation error"),
-            }
-        }
-
-        self.window_surface.window.request_redraw();
-        Ok(None)
-    }
-
-    fn create_encoder(&self, label: Option<&str>) -> CommandEncoder {
-        self.gpu
-            .device
-            .create_command_encoder(&CommandEncoderDescriptor { label })
-    }
-}
-
-impl State {
-    pub fn resize(&mut self, size: PhysicalSize<u32>, snapshot: ScreenSnapshot) {
-        if size.width > 0 && size.height > 0 {
-            self.window_surface.config.width = size.width;
-            self.window_surface.config.height = size.height;
-            self.window_surface
-                .surface
-                .configure(&self.gpu.device, &self.window_surface.config);
-            self.window_surface.is_configured = true;
-
-            self.terminal_view.resize(size.width, size.height, snapshot);
-            self.update_rect_screen_uniform();
-        }
-    }
-
-    pub fn draw_frame(&mut self) -> Result<(), Box<dyn Error>> {
-        self.terminal_view.glyphs.viewport.update(
-            &self.gpu.queue,
-            Resolution {
-                width: self.window_surface.config.width,
-                height: self.window_surface.config.height,
-            },
-        );
-
-        self.prepare_render()?;
-
-        let frame: Option<SurfaceTexture> = match self.initialize_frame() {
-            Ok(Some(frame)) => Some(frame),
-            Ok(None) => None,
-            Err(err) => {
-                tracing::error!("initialize frame failed: {}", err);
-                None
-            }
-        };
-
-        if let Some(frame) = frame {
-            let view: TextureView = frame.texture.create_view(&TextureViewDescriptor::default());
-            let mut encoder: CommandEncoder = self.create_encoder(None);
-            self.render_pass(&mut encoder, view)?;
-            self.gpu.queue.submit(Some(encoder.finish()));
-            self.gpu.queue.present(frame);
-        }
-
-        self.terminal_view.glyphs.atlas.trim();
-
-        Ok(())
-    }
-
-    pub fn scroll(&mut self, x: f32, y: f32) {
-        self.terminal_view.scroll(x, y);
     }
 }

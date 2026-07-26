@@ -1,5 +1,7 @@
 use super::buffer::{CellStyle, ScreenBuffer, ScreenCell, ScreenSnapshot};
 use super::cursor::CursorPosition;
+use super::sgr;
+use crate::TerminalSize;
 use decodesc::{CsiMessage, EraseMode, OscMessage};
 use unicode_width::UnicodeWidthChar;
 
@@ -8,13 +10,13 @@ pub(crate) struct Screen {
 }
 
 impl Screen {
-    pub(crate) fn new(cols: usize, rows: usize) -> Self {
-        let screen_buffer: ScreenBuffer = ScreenBuffer::new(cols, rows);
+    pub(crate) fn new(size: TerminalSize) -> Self {
+        let screen_buffer: ScreenBuffer = ScreenBuffer::new(size);
         Self { screen_buffer }
     }
 
-    pub(crate) fn resize(&mut self, cols: usize, rows: usize) {
-        self.screen_buffer.resize(cols, rows);
+    pub(crate) fn resize(&mut self, size: TerminalSize) {
+        self.screen_buffer.resize(size);
     }
 
     pub(super) fn clear_screen(&mut self) {
@@ -75,7 +77,9 @@ impl Screen {
             CsiMessage::DeleteCharacters(amount) => self.delete_characters(usize::from(amount)),
             CsiMessage::SaveCursor => self.save_cursor_position(),
             CsiMessage::RestoreCursor => self.restore_cursor_position(),
-            CsiMessage::SelectGraphicRendition(params) => self.apply_graphics_rendition(&params),
+            CsiMessage::SelectGraphicRendition(params) => {
+                sgr::apply(&mut self.screen_buffer.style, &params)
+            }
             CsiMessage::Unknown { .. }
             | CsiMessage::CursorNextLine(_)
             | CsiMessage::CursorPreviousLine(_)
@@ -333,54 +337,6 @@ impl Screen {
         self.screen_buffer.ensure_cursor_line();
     }
 
-    fn apply_graphics_rendition(&mut self, params: &[u16]) {
-        const SGR_RESET: u16 = 0;
-        const SGR_FAINT_ON: u16 = 2;
-        const SGR_FAINT_OFF: u16 = 22;
-        const SGR_FG_DEFAULT: u16 = 39;
-        const SGR_FG_EXTENDED: u16 = 38;
-        const SGR_BG_EXTENDED: u16 = 48;
-        const SGR_UNDERLINE_COLOR_EXTENDED: u16 = 58;
-        const SGR_FG_LOW_START: u16 = 30;
-        const SGR_FG_LOW_END: u16 = 37;
-        const SGR_FG_HIGH_START: u16 = 90;
-        const SGR_FG_HIGH_END: u16 = 97;
-        const SGR_FG_BRIGHT_OFFSET: u16 = 8;
-
-        let mut index: usize = 0;
-        while index < params.len() {
-            let code: u16 = params[index];
-            match code {
-                SGR_RESET => self.screen_buffer.style = CellStyle::default(),
-                SGR_FAINT_ON => self.screen_buffer.style.faint = true,
-                SGR_FAINT_OFF => self.screen_buffer.style.faint = false,
-                SGR_FG_LOW_START..=SGR_FG_LOW_END => {
-                    self.screen_buffer.style.fg_rgba =
-                        Some(ansi_16_color(usize::from(code - SGR_FG_LOW_START)));
-                }
-                SGR_FG_HIGH_START..=SGR_FG_HIGH_END => {
-                    self.screen_buffer.style.fg_rgba = Some(ansi_16_color(usize::from(
-                        (code - SGR_FG_HIGH_START) + SGR_FG_BRIGHT_OFFSET,
-                    )));
-                }
-                SGR_FG_DEFAULT => self.screen_buffer.style.fg_rgba = None,
-                SGR_FG_EXTENDED => {
-                    let consumed: usize =
-                        apply_sgr_foreground(&mut self.screen_buffer.style, &params[index..]);
-                    index += consumed;
-                    continue;
-                }
-                SGR_BG_EXTENDED | SGR_UNDERLINE_COLOR_EXTENDED => {
-                    index += sgr_skip_count(&params[index..]);
-                    continue;
-                }
-                _ => {}
-            }
-
-            index += 1;
-        }
-    }
-
     #[cfg(test)]
     #[allow(dead_code)]
     fn cursor_position(&self) -> CursorPosition {
@@ -388,93 +344,5 @@ impl Screen {
             row: self.screen_buffer.cursor.get_current_row(),
             col: self.screen_buffer.cursor.get_current_col(),
         }
-    }
-}
-
-fn sgr_skip_count(params: &[u16]) -> usize {
-    match params.get(1).copied() {
-        Some(5) => 3,
-        Some(2) => 5,
-        _ => 1,
-    }
-}
-
-fn apply_sgr_foreground(style: &mut CellStyle, params: &[u16]) -> usize {
-    match params.get(1).copied() {
-        Some(5) => {
-            if let Some(index) = params.get(2).copied() {
-                style.fg_rgba = Some(ansi_256_color(usize::from(index)));
-            }
-            3
-        }
-        Some(2) => {
-            let r: u8 = params.get(2).copied().unwrap_or(0).min(255) as u8;
-            let g: u8 = params.get(3).copied().unwrap_or(0).min(255) as u8;
-            let b: u8 = params.get(4).copied().unwrap_or(0).min(255) as u8;
-            style.fg_rgba = Some([r, g, b, 255]);
-            5
-        }
-        _ => 1,
-    }
-}
-
-fn ansi_16_color(index: usize) -> [u8; 4] {
-    const ANSI_16: [[u8; 4]; 16] = [
-        [12, 12, 12, 255],
-        [197, 15, 31, 255],
-        [19, 161, 14, 255],
-        [193, 156, 0, 255],
-        [0, 55, 218, 255],
-        [136, 23, 152, 255],
-        [58, 150, 221, 255],
-        [204, 204, 204, 255],
-        [118, 118, 118, 255],
-        [231, 72, 86, 255],
-        [22, 198, 12, 255],
-        [249, 241, 165, 255],
-        [59, 120, 255, 255],
-        [180, 0, 158, 255],
-        [97, 214, 214, 255],
-        [242, 242, 242, 255],
-    ];
-
-    ANSI_16[index.min(15)]
-}
-
-fn ansi_256_color(index: usize) -> [u8; 4] {
-    match index {
-        0..=15 => ansi_16_color(index),
-        16..=231 => {
-            let n: usize = index - 16;
-            let r: usize = n / 36;
-            let g: usize = (n % 36) / 6;
-            let b: usize = n % 6;
-            [cube_component(r), cube_component(g), cube_component(b), 255]
-        }
-        232..=255 => {
-            let gray: u8 = (8 + (index - 232) * 10).min(255) as u8;
-            [gray, gray, gray, 255]
-        }
-        _ => ansi_16_color(7),
-    }
-}
-
-fn cube_component(level: usize) -> u8 {
-    if level == 0 {
-        0
-    } else {
-        (55 + level * 40).min(255) as u8
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn cube() {
-        let level = 0;
-        let cube = cube_component(level);
-        assert_eq!(cube, 0);
     }
 }

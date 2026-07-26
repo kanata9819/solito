@@ -1,4 +1,4 @@
-use super::{gpu::GpuContext, window::WindowSurface};
+use super::{gpu::GpuContext, surface::WindowSurface};
 use crate::pipeline::rect;
 
 pub(super) struct RenderResources {

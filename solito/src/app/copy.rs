@@ -1,7 +1,12 @@
+//! Copy-mode state. Movement and text extraction are pure helper modules.
+
+mod movement;
+mod selection;
+
 use solito_renderer::{
     CopyModePosition, CopyModeSelection, CopyModeSelectionKind, CopyModeSnapshot,
 };
-use solito_terminal::{ScreenCell, ScreenSnapshot};
+use solito_terminal::ScreenSnapshot;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum CopyModeMove {
@@ -33,7 +38,7 @@ impl CopyMode {
     pub(super) fn enter(&mut self, screen: &ScreenSnapshot) {
         self.snapshot = CopyModeSnapshot {
             active: true,
-            cursor: Self::clamp_position(
+            cursor: movement::clamp_position(
                 screen,
                 CopyModePosition::new(screen.cursor_row, screen.cursor_col),
             ),
@@ -50,7 +55,7 @@ impl CopyMode {
             return;
         }
 
-        let cursor: CopyModePosition = Self::move_position(screen, self.snapshot.cursor, direction);
+        let cursor = movement::move_position(screen, self.snapshot.cursor, direction);
         self.snapshot.cursor = cursor;
 
         if let Some(selection) = self.snapshot.selection.as_mut() {
@@ -105,43 +110,7 @@ impl CopyMode {
     }
 
     pub(super) fn selected_text(&self, screen: &ScreenSnapshot) -> Option<String> {
-        let selection: CopyModeSelection = self.snapshot.selection?;
-        let mut rows: Vec<String> = Vec::new();
-
-        match selection.kind {
-            CopyModeSelectionKind::Line => {
-                let (start_row, end_row): (usize, usize) =
-                    Self::ordered_rows(selection.anchor, selection.cursor);
-
-                for row in start_row..=end_row {
-                    rows.push(Self::line_text(screen.lines.get(row), 0, usize::MAX));
-                }
-            }
-            CopyModeSelectionKind::Cell => {
-                let (start, end): (CopyModePosition, CopyModePosition) =
-                    Self::ordered_positions(selection.anchor, selection.cursor);
-
-                for row in start.row..=end.row {
-                    let line_len: usize = Self::line_len(screen, row);
-                    let start_col: usize = if row == start.row { start.col } else { 0 };
-                    let end_col: usize = if row == end.row {
-                        end.col.saturating_add(1).min(line_len)
-                    } else {
-                        line_len
-                    };
-
-                    rows.push(Self::line_text(
-                        screen.lines.get(row),
-                        start_col.min(line_len),
-                        end_col,
-                    ));
-                }
-            }
-        }
-
-        let text: String = rows.join("\n");
-
-        if text.is_empty() { None } else { Some(text) }
+        selection::selected_text(self.snapshot.selection?, screen)
     }
 
     pub(super) fn renderer_snapshot(&mut self, screen: &ScreenSnapshot) -> CopyModeSnapshot {
@@ -149,219 +118,14 @@ impl CopyMode {
             return CopyModeSnapshot::default();
         }
 
-        self.snapshot.cursor = Self::clamp_position(screen, self.snapshot.cursor);
+        self.snapshot.cursor = movement::clamp_position(screen, self.snapshot.cursor);
 
         if let Some(selection) = self.snapshot.selection.as_mut() {
-            selection.anchor = Self::clamp_position(screen, selection.anchor);
+            selection.anchor = movement::clamp_position(screen, selection.anchor);
             selection.cursor = self.snapshot.cursor;
         }
 
         self.snapshot
-    }
-
-    fn move_position(
-        screen: &ScreenSnapshot,
-        position: CopyModePosition,
-        direction: CopyModeMove,
-    ) -> CopyModePosition {
-        let row_count: usize = screen.lines.len().max(1);
-        let mut row: usize = position.row.min(row_count - 1);
-        let mut col: usize = position.col.min(Self::last_col(screen, row));
-
-        match direction {
-            CopyModeMove::Left => col = col.saturating_sub(1),
-            CopyModeMove::Right => {
-                col = col.saturating_add(1).min(Self::last_col(screen, row));
-            }
-            CopyModeMove::Up => {
-                row = row.saturating_sub(1);
-                col = col.min(Self::last_col(screen, row));
-            }
-            CopyModeMove::Down => {
-                row = row.saturating_add(1).min(row_count - 1);
-                col = col.min(Self::last_col(screen, row));
-            }
-            CopyModeMove::StartOfLine => col = 0,
-            CopyModeMove::EndOfLine => col = Self::last_col(screen, row),
-            CopyModeMove::NextWord => return Self::next_word_start(screen, position),
-            CopyModeMove::PreviousWord => return Self::previous_word_start(screen, position),
-            CopyModeMove::WordEnd => return Self::word_end(screen, position),
-            CopyModeMove::FirstLine => {
-                row = 0;
-                col = col.min(Self::last_col(screen, row));
-            }
-            CopyModeMove::LastLine => {
-                row = row_count - 1;
-                col = col.min(Self::last_col(screen, row));
-            }
-            CopyModeMove::PageUp => {
-                row = row.saturating_sub(Self::page_rows(screen));
-                col = col.min(Self::last_col(screen, row));
-            }
-            CopyModeMove::PageDown => {
-                row = row
-                    .saturating_add(Self::page_rows(screen))
-                    .min(row_count - 1);
-                col = col.min(Self::last_col(screen, row));
-            }
-        }
-
-        CopyModePosition::new(row, col)
-    }
-
-    fn next_word_start(screen: &ScreenSnapshot, position: CopyModePosition) -> CopyModePosition {
-        let row_count: usize = screen.lines.len().max(1);
-        let mut row: usize = position.row.min(row_count - 1);
-        let mut col: usize = position.col.min(Self::last_col(screen, row));
-
-        if Self::is_nonblank(screen, row, col) {
-            while col < Self::line_len(screen, row) && Self::is_nonblank(screen, row, col) {
-                col += 1;
-            }
-        }
-
-        while row < row_count {
-            while col < Self::line_len(screen, row) && !Self::is_nonblank(screen, row, col) {
-                col += 1;
-            }
-
-            if col < Self::line_len(screen, row) {
-                return CopyModePosition::new(row, col);
-            }
-
-            row += 1;
-            col = 0;
-        }
-
-        Self::last_position(screen)
-    }
-
-    fn previous_word_start(
-        screen: &ScreenSnapshot,
-        position: CopyModePosition,
-    ) -> CopyModePosition {
-        let row_count: usize = screen.lines.len().max(1);
-        let mut row: usize = position.row.min(row_count - 1);
-        let mut col: usize = position.col.min(Self::last_col(screen, row));
-
-        if col > 0 {
-            col -= 1;
-        } else if row > 0 {
-            row -= 1;
-            col = Self::last_col(screen, row);
-        } else {
-            return CopyModePosition::new(row, 0);
-        }
-
-        while !Self::is_nonblank(screen, row, col) {
-            if col > 0 {
-                col -= 1;
-            } else if row > 0 {
-                row -= 1;
-                col = Self::last_col(screen, row);
-            } else {
-                return CopyModePosition::new(0, 0);
-            }
-        }
-
-        while col > 0 && Self::is_nonblank(screen, row, col - 1) {
-            col -= 1;
-        }
-
-        CopyModePosition::new(row, col)
-    }
-
-    fn word_end(screen: &ScreenSnapshot, position: CopyModePosition) -> CopyModePosition {
-        let row_count: usize = screen.lines.len().max(1);
-        let mut row: usize = position.row.min(row_count - 1);
-        let mut col: usize = position.col.min(Self::last_col(screen, row));
-
-        if Self::is_nonblank(screen, row, col)
-            && col < Self::last_col(screen, row)
-            && Self::is_nonblank(screen, row, col + 1)
-        {
-            while col < Self::last_col(screen, row) && Self::is_nonblank(screen, row, col + 1) {
-                col += 1;
-            }
-
-            return CopyModePosition::new(row, col);
-        }
-
-        let start: CopyModePosition = Self::next_word_start(screen, position);
-        row = start.row.min(row_count - 1);
-        col = start.col.min(Self::last_col(screen, row));
-
-        while col < Self::last_col(screen, row) && Self::is_nonblank(screen, row, col + 1) {
-            col += 1;
-        }
-
-        CopyModePosition::new(row, col)
-    }
-
-    fn clamp_position(screen: &ScreenSnapshot, position: CopyModePosition) -> CopyModePosition {
-        let row_count: usize = screen.lines.len().max(1);
-        let row: usize = position.row.min(row_count - 1);
-        let col: usize = position.col.min(Self::last_col(screen, row));
-
-        CopyModePosition::new(row, col)
-    }
-
-    fn ordered_rows(anchor: CopyModePosition, cursor: CopyModePosition) -> (usize, usize) {
-        if anchor.row <= cursor.row {
-            (anchor.row, cursor.row)
-        } else {
-            (cursor.row, anchor.row)
-        }
-    }
-
-    fn ordered_positions(
-        anchor: CopyModePosition,
-        cursor: CopyModePosition,
-    ) -> (CopyModePosition, CopyModePosition) {
-        if (anchor.row, anchor.col) <= (cursor.row, cursor.col) {
-            (anchor, cursor)
-        } else {
-            (cursor, anchor)
-        }
-    }
-
-    fn last_col(screen: &ScreenSnapshot, row: usize) -> usize {
-        Self::line_len(screen, row).saturating_sub(1)
-    }
-
-    fn last_position(screen: &ScreenSnapshot) -> CopyModePosition {
-        let row_count: usize = screen.lines.len().max(1);
-        let row: usize = row_count - 1;
-
-        CopyModePosition::new(row, Self::last_col(screen, row))
-    }
-
-    fn page_rows(screen: &ScreenSnapshot) -> usize {
-        (screen.lines.len() / 2).clamp(5, 20)
-    }
-
-    fn line_len(screen: &ScreenSnapshot, row: usize) -> usize {
-        screen.lines.get(row).map(|line| line.len()).unwrap_or(0)
-    }
-
-    fn is_nonblank(screen: &ScreenSnapshot, row: usize, col: usize) -> bool {
-        screen
-            .lines
-            .get(row)
-            .and_then(|line| line.get(col))
-            .is_some_and(|cell| !cell.is_wide_continuation && !cell.ch.is_whitespace())
-    }
-
-    fn line_text(line: Option<&Vec<ScreenCell>>, start_col: usize, end_col: usize) -> String {
-        let Some(line) = line else {
-            return String::new();
-        };
-
-        line.iter()
-            .enumerate()
-            .filter(|(col, cell)| *col >= start_col && *col < end_col && !cell.is_wide_continuation)
-            .map(|(_, cell)| cell.ch)
-            .collect()
     }
 }
 

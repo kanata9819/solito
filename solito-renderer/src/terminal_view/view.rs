@@ -1,5 +1,5 @@
 use glyphon::FontSystem;
-use solito_terminal::{ScreenCell, ScreenSnapshot};
+use solito_terminal::{ScreenCell, ScreenSnapshot, TerminalSize};
 
 use crate::RendererConfig;
 
@@ -63,7 +63,7 @@ impl TerminalView {
         width: u32,
         height: u32,
         config: &RendererConfig,
-    ) -> (usize, usize) {
+    ) -> TerminalSize {
         let config: RendererConfig = config.clone().sanitized();
         let mut font_system: FontSystem = FontSystem::new();
         let cell_width: f32 =
@@ -71,7 +71,7 @@ impl TerminalView {
         let content_width: u32 = Self::terminal_content_width(width);
         let content_height: u32 = Self::terminal_content_height(height, config.line_height);
 
-        (
+        TerminalSize::new(
             ((content_width as f32 / cell_width).floor() as usize).max(1),
             ((content_height as f32 / config.line_height).floor() as usize).max(1),
         )

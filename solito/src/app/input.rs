@@ -1,3 +1,6 @@
+//! Translate keyboard input into application commands or PTY bytes.
+
+use solito_terminal::TerminalSize;
 use std::{error::Error, sync::mpsc::Sender};
 use winit::{
     dpi::PhysicalSize,
@@ -9,7 +12,7 @@ use crate::app::copy::CopyModeMove;
 use crate::session::runtime::SessionInput;
 
 pub(super) enum AppCommand {
-    None,
+    Noop,
     EnterCopyMode,
     CopyMode(CopyModeCommand),
     NewTab,
@@ -19,9 +22,8 @@ pub(super) enum AppCommand {
     CopySelection,
     PasteFromClipboard,
     Resize {
-        size: PhysicalSize<u32>,
-        cols: usize,
-        rows: usize,
+        window_size: PhysicalSize<u32>,
+        terminal_size: TerminalSize,
     },
 }
 
@@ -54,7 +56,7 @@ pub(super) fn handle_key(
         if copy_mode_active {
             return Ok(copy_mode_command(&logical_key, modifiers)
                 .map(AppCommand::CopyMode)
-                .unwrap_or(AppCommand::None));
+                .unwrap_or(AppCommand::Noop));
         }
 
         if let Some(command) = shortcut_command(&logical_key, modifiers) {
@@ -84,14 +86,14 @@ pub(super) fn handle_key(
                 handle_ctrl_c(&logical_key, modifiers, input_tx)?;
 
                 if let Some(text) = text {
-                    input_tx.send(SessionInput::Write(text.as_bytes().to_vec()))?;
-                    return Ok(AppCommand::None);
+                    input_tx.send(SessionInput::write(text.as_bytes().to_vec()))?;
+                    return Ok(AppCommand::Noop);
                 }
             }
         }
     }
 
-    Ok(AppCommand::None)
+    Ok(AppCommand::Noop)
 }
 
 fn handle_ctrl_c(
@@ -106,11 +108,11 @@ fn handle_ctrl_c(
         && modifiers.control_key()
         && char.eq_ignore_ascii_case("c")
     {
-        input_tx.send(SessionInput::Write(EXT.to_vec()))?;
-        return Ok(AppCommand::None);
+        input_tx.send(SessionInput::write(EXT.to_vec()))?;
+        return Ok(AppCommand::Noop);
     }
 
-    Ok(AppCommand::None)
+    Ok(AppCommand::Noop)
 }
 
 fn shortcut_command(logical_key: &Key<SmolStr>, modifiers: ModifiersState) -> Option<AppCommand> {

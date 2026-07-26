@@ -1,3 +1,4 @@
+use crate::TerminalSize;
 use crate::screen::Screen;
 use crate::screen::buffer::ScreenSnapshot;
 use vte::Parser;
@@ -8,10 +9,10 @@ pub struct TerminalState {
 }
 
 impl TerminalState {
-    pub fn new(cols: usize, rows: usize) -> Self {
+    pub fn new(size: TerminalSize) -> Self {
         Self {
             parser: Parser::new(),
-            screen: Screen::new(cols, rows),
+            screen: Screen::new(size),
         }
     }
 
@@ -19,8 +20,8 @@ impl TerminalState {
         self.parser.advance(&mut self.screen, bytes);
     }
 
-    pub fn resize(&mut self, cols: usize, rows: usize) {
-        self.screen.resize(cols, rows);
+    pub fn resize(&mut self, size: TerminalSize) {
+        self.screen.resize(size);
     }
 
     pub fn snapshot(&self) -> ScreenSnapshot {
@@ -31,7 +32,14 @@ impl TerminalState {
 #[cfg(test)]
 mod tests {
     use super::TerminalState;
-    use crate::screen::buffer::{ScreenCell, ScreenSnapshot};
+    use crate::{
+        TerminalSize,
+        screen::buffer::{ScreenCell, ScreenSnapshot},
+    };
+
+    fn terminal(cols: usize, rows: usize) -> TerminalState {
+        TerminalState::new(TerminalSize::new(cols, rows))
+    }
 
     fn line_text(line: &[ScreenCell]) -> String {
         line.iter()
@@ -42,7 +50,7 @@ mod tests {
 
     #[test]
     fn applies_cursor_position_and_overwrite() {
-        let mut state: TerminalState = TerminalState::new(10, 4);
+        let mut state: TerminalState = terminal(10, 4);
 
         state.apply_terminal_output(b"abc\r\nxyz\x1b[1;2HQ");
         let snapshot: ScreenSnapshot = state.snapshot();
@@ -53,7 +61,7 @@ mod tests {
 
     #[test]
     fn applies_clear_line_to_end() {
-        let mut state: TerminalState = TerminalState::new(10, 4);
+        let mut state: TerminalState = terminal(10, 4);
 
         state.apply_terminal_output(b"abcdef\x1b[1;3H\x1b[K");
         let snapshot: ScreenSnapshot = state.snapshot();
@@ -63,7 +71,7 @@ mod tests {
 
     #[test]
     fn wraps_wide_characters_without_splitting_cells() {
-        let mut state: TerminalState = TerminalState::new(4, 4);
+        let mut state: TerminalState = terminal(4, 4);
 
         state.apply_terminal_output("abcあz".as_bytes());
         let snapshot: ScreenSnapshot = state.snapshot();
@@ -74,7 +82,7 @@ mod tests {
 
     #[test]
     fn exposes_cursor_position_in_snapshot() {
-        let mut state: TerminalState = TerminalState::new(10, 4);
+        let mut state: TerminalState = terminal(10, 4);
 
         state.apply_terminal_output(b"abc\r\nxy");
         let snapshot: ScreenSnapshot = state.snapshot();
@@ -85,7 +93,7 @@ mod tests {
 
     #[test]
     fn applies_foreground_color_to_cells() {
-        let mut state: TerminalState = TerminalState::new(10, 4);
+        let mut state: TerminalState = terminal(10, 4);
 
         state.apply_terminal_output(b"a\x1b[31mR\x1b[39mW");
         let snapshot: ScreenSnapshot = state.snapshot();
@@ -100,7 +108,7 @@ mod tests {
 
     #[test]
     fn applies_cursor_color_from_osc() {
-        let mut state: TerminalState = TerminalState::new(10, 4);
+        let mut state: TerminalState = terminal(10, 4);
 
         state.apply_terminal_output(b"\x1b]12;#00ff80\x07");
         let snapshot: ScreenSnapshot = state.snapshot();
@@ -110,7 +118,7 @@ mod tests {
 
     #[test]
     fn resets_cursor_color_from_osc() {
-        let mut state: TerminalState = TerminalState::new(10, 4);
+        let mut state: TerminalState = terminal(10, 4);
 
         state.apply_terminal_output(b"\x1b]12;#00ff80\x07\x1b]112\x07");
         let snapshot: ScreenSnapshot = state.snapshot();
