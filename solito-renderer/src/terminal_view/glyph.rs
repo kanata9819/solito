@@ -35,6 +35,7 @@ impl GlyphonResources {
             &mut font_system,
             Metrics::new(config.font_size, config.line_height),
         );
+        text_buffer.set_wrap(Wrap::None);
 
         let physical_width: f32 = (f64::from(physical_size.width) * scale_factor) as f32;
         let physical_height: f32 = (f64::from(physical_size.height) * scale_factor) as f32;
@@ -57,6 +58,14 @@ impl GlyphonResources {
         font_system: &mut glyphon::FontSystem,
         config: &RendererConfig,
     ) -> f32 {
+        Self::measure_text_width(font_system, config, "M")
+    }
+
+    pub(super) fn measure_text_width(
+        font_system: &mut glyphon::FontSystem,
+        config: &RendererConfig,
+        text: &str,
+    ) -> f32 {
         let mut buffer: Buffer = Buffer::new(
             font_system,
             Metrics::new(config.font_size, config.line_height),
@@ -65,7 +74,7 @@ impl GlyphonResources {
         buffer.set_wrap(Wrap::None);
 
         buffer.set_text(
-            "M",
+            text,
             &Attrs::new().family(Family::Name(config.font_family.as_str())),
             Shaping::Advanced,
             None,

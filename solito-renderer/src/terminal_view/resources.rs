@@ -1,4 +1,5 @@
 use ::glyphon::{Buffer, FontSystem, SwashCache, TextAtlas, TextRenderer, Viewport};
+use std::collections::HashMap;
 
 use super::glyph::GlyphonResources;
 
@@ -9,6 +10,7 @@ pub(crate) struct GlyphResources {
     pub(crate) font_system: FontSystem,
     pub(crate) swash_cache: SwashCache,
     pub(crate) atlas: TextAtlas,
+    pub(crate) glyph_widths: HashMap<char, f32>,
 }
 
 impl GlyphResources {
@@ -20,6 +22,7 @@ impl GlyphResources {
             viewport: glyphon.viewport,
             swash_cache: glyphon.swash_cache,
             atlas: glyphon.atlas,
+            glyph_widths: HashMap::new(),
         }
     }
 }

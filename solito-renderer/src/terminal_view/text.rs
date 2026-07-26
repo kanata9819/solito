@@ -1,5 +1,6 @@
 use glyphon::{Attrs, Color, Family, Shaping};
 use solito_terminal::ScreenCell;
+use std::collections::HashMap;
 
 use crate::{
     RendererConfig,
@@ -8,6 +9,27 @@ use crate::{
 };
 
 use super::TerminalView;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct GridTextStyle {
+    color: Option<[u8; 4]>,
+    letter_spacing: f32,
+}
+
+impl Default for GridTextStyle {
+    fn default() -> Self {
+        Self {
+            color: None,
+            letter_spacing: 0.0,
+        }
+    }
+}
+
+struct GridMetrics<'a> {
+    cell_width: f32,
+    font_size: f32,
+    glyph_widths: &'a HashMap<char, f32>,
+}
 
 impl TerminalView {
     pub(super) fn set_text_buffer_size(
@@ -84,6 +106,7 @@ impl TerminalView {
             spans.push(("\n".to_string(), Self::text_attrs(None, font_family)));
         }
 
+        self.ensure_glyph_widths(start, end);
         spans.extend(Self::text_spans_for_lines(
             &self.snapshot.lines[start..end],
             start,
@@ -91,9 +114,36 @@ impl TerminalView {
             self.snapshot.cursor_col,
             Self::cursor_text_color(self.caret_color()),
             font_family,
+            &GridMetrics {
+                cell_width,
+                font_size: self.config.font_size,
+                glyph_widths: &self.glyphs.glyph_widths,
+            },
         ));
 
         spans
+    }
+
+    fn ensure_glyph_widths(&mut self, start: usize, end: usize) {
+        let chars: Vec<char> = self.snapshot.lines[start..end]
+            .iter()
+            .flat_map(|line| line.iter().map(|cell| cell.ch))
+            .collect();
+
+        for ch in chars {
+            if self.glyphs.glyph_widths.contains_key(&ch) {
+                continue;
+            }
+
+            let mut encoded: [u8; 4] = [0; 4];
+            let text: &str = ch.encode_utf8(&mut encoded);
+            let width: f32 = GlyphonResources::measure_text_width(
+                &mut self.glyphs.font_system,
+                &self.config,
+                text,
+            );
+            self.glyphs.glyph_widths.insert(ch, width);
+        }
     }
 
     fn cursor_text_color(caret_color: [f32; 4]) -> [u8; 4] {
@@ -120,18 +170,15 @@ impl TerminalView {
         cursor_col: usize,
         cursor_text_color: [u8; 4],
         font_family: &'a str,
+        grid: &GridMetrics<'_>,
     ) -> Vec<(String, Attrs<'a>)> {
         let mut spans: Vec<(String, Attrs<'a>)> = Vec::new();
         let mut current_text: String = String::new();
-        let mut current_color: Option<[u8; 4]> = None;
+        let mut current_style: GridTextStyle = GridTextStyle::default();
 
         for (line_index, line) in lines.iter().enumerate() {
             let absolute_row: usize = first_row + line_index;
             for (cell_col, cell) in line.iter().enumerate() {
-                if cell.is_wide_continuation {
-                    continue;
-                }
-
                 let color: Option<[u8; 4]> = Self::cell_text_color(
                     absolute_row,
                     cell_col,
@@ -140,12 +187,25 @@ impl TerminalView {
                     cursor_text_color,
                     cell,
                 );
+                let glyph_width: f32 = grid
+                    .glyph_widths
+                    .get(&cell.ch)
+                    .copied()
+                    .unwrap_or(grid.cell_width);
+                let style = GridTextStyle {
+                    color,
+                    letter_spacing: Self::grid_letter_spacing(
+                        grid.cell_width,
+                        glyph_width,
+                        grid.font_size,
+                    ),
+                };
 
                 if current_text.is_empty() {
-                    current_color = color;
-                } else if Self::should_start_new_span(&current_text, current_color, color) {
-                    Self::push_text_span(&mut spans, &mut current_text, current_color, font_family);
-                    current_color = color;
+                    current_style = style;
+                } else if Self::should_start_new_span(&current_text, current_style, style) {
+                    Self::push_text_span(&mut spans, &mut current_text, current_style, font_family);
+                    current_style = style;
                 }
 
                 current_text.push(Self::cell_char(cell));
@@ -156,7 +216,7 @@ impl TerminalView {
             }
         }
 
-        Self::push_text_span(&mut spans, &mut current_text, current_color, font_family);
+        Self::push_text_span(&mut spans, &mut current_text, current_style, font_family);
 
         spans
     }
@@ -179,11 +239,17 @@ impl TerminalView {
     fn push_text_span<'a>(
         spans: &mut Vec<(String, Attrs<'a>)>,
         text: &mut String,
-        color: Option<[u8; 4]>,
+        style: GridTextStyle,
         font_family: &'a str,
     ) {
         if !text.is_empty() {
-            spans.push((std::mem::take(text), Self::text_attrs(color, font_family)));
+            let attrs: Attrs<'a> = Self::text_attrs(style.color, font_family);
+            let attrs: Attrs<'a> = if style.letter_spacing == 0.0 {
+                attrs
+            } else {
+                attrs.letter_spacing(style.letter_spacing)
+            };
+            spans.push((std::mem::take(text), attrs));
         }
     }
 
@@ -193,19 +259,35 @@ impl TerminalView {
 
     fn should_start_new_span(
         current_text: &str,
-        current_color: Option<[u8; 4]>,
-        next_color: Option<[u8; 4]>,
+        current_style: GridTextStyle,
+        next_style: GridTextStyle,
     ) -> bool {
-        !current_text.is_empty() && current_color != next_color
+        !current_text.is_empty() && current_style != next_style
+    }
+
+    fn grid_letter_spacing(cell_width: f32, glyph_width: f32, font_size: f32) -> f32 {
+        let correction: f32 = cell_width - glyph_width;
+        if correction.abs() < 0.01 {
+            0.0
+        } else {
+            correction / font_size
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use glyphon::Color;
+    use glyphon::{Buffer, Color, FontSystem, Metrics, Shaping, Wrap};
     use solito_terminal::ScreenCell;
+    use std::collections::HashMap;
 
-    use crate::{RendererConfig, terminal_view::TerminalView, util::color::ThemeColor};
+    use crate::{
+        RendererConfig,
+        terminal_view::{TerminalView, glyph::GlyphonResources},
+        util::color::ThemeColor,
+    };
+
+    use super::GridMetrics;
 
     fn color([r, g, b, a]: [u8; 4]) -> Color {
         Color::rgba(r, g, b, a)
@@ -235,6 +317,7 @@ mod tests {
     fn text_spans_override_cursor_cell_color() {
         let mut cell: ScreenCell = ScreenCell::default();
         cell.ch = 'A';
+        let glyph_widths: HashMap<char, f32> = HashMap::from([('A', 10.0)]);
 
         let spans = TerminalView::text_spans_for_lines(
             &[vec![cell]],
@@ -243,6 +326,11 @@ mod tests {
             0,
             ThemeColor::BLACK,
             RendererConfig::DEFAULT_FONT_FAMILY,
+            &GridMetrics {
+                cell_width: 10.0,
+                font_size: RendererConfig::DEFAULT_FONT_SIZE,
+                glyph_widths: &glyph_widths,
+            },
         );
 
         assert_eq!(spans.len(), 1);
@@ -256,5 +344,110 @@ mod tests {
             TerminalView::text_attrs(Some([1, 2, 3, 4]), RendererConfig::DEFAULT_FONT_FAMILY);
 
         assert_eq!(attrs.color_opt, Some(Color::rgba(1, 2, 3, 4)));
+    }
+
+    #[test]
+    fn text_spans_preserve_wide_continuation_as_grid_cell() {
+        let mut ascii_a: ScreenCell = ScreenCell::default();
+        ascii_a.ch = 'A';
+        let mut wide: ScreenCell = ScreenCell::default();
+        wide.ch = 'あ';
+        let mut continuation: ScreenCell = ScreenCell::default();
+        continuation.ch = ' ';
+        continuation.is_wide_continuation = true;
+        let mut ascii_b: ScreenCell = ScreenCell::default();
+        ascii_b.ch = 'B';
+        let glyph_widths: HashMap<char, f32> =
+            HashMap::from([('A', 10.0), ('あ', 10.0), (' ', 10.0), ('B', 10.0)]);
+
+        let spans = TerminalView::text_spans_for_lines(
+            &[vec![ascii_a, wide, continuation, ascii_b]],
+            0,
+            usize::MAX,
+            usize::MAX,
+            ThemeColor::BLACK,
+            RendererConfig::DEFAULT_FONT_FAMILY,
+            &GridMetrics {
+                cell_width: 10.0,
+                font_size: RendererConfig::DEFAULT_FONT_SIZE,
+                glyph_widths: &glyph_widths,
+            },
+        );
+        let text: String = spans.iter().map(|(text, _)| text.as_str()).collect();
+
+        assert_eq!(text, "Aあ B");
+    }
+
+    #[test]
+    fn grid_spacing_places_ascii_after_wide_character_at_expected_column() {
+        let config: RendererConfig = RendererConfig::default();
+        let mut font_system: FontSystem = FontSystem::new();
+        let cell_width: f32 = GlyphonResources::measure_font_width(&mut font_system, &config);
+        let mut glyph_widths: HashMap<char, f32> = HashMap::new();
+
+        for ch in ['A', 'あ', ' ', 'B'] {
+            let mut encoded: [u8; 4] = [0; 4];
+            let text: &str = ch.encode_utf8(&mut encoded);
+            glyph_widths.insert(
+                ch,
+                GlyphonResources::measure_text_width(&mut font_system, &config, text),
+            );
+        }
+
+        let mut ascii_a: ScreenCell = ScreenCell::default();
+        ascii_a.ch = 'A';
+        let mut wide: ScreenCell = ScreenCell::default();
+        wide.ch = 'あ';
+        let mut continuation: ScreenCell = ScreenCell::default();
+        continuation.ch = ' ';
+        continuation.is_wide_continuation = true;
+        let mut ascii_b: ScreenCell = ScreenCell::default();
+        ascii_b.ch = 'B';
+
+        let spans = TerminalView::text_spans_for_lines(
+            &[vec![ascii_a, wide, continuation, ascii_b]],
+            0,
+            usize::MAX,
+            usize::MAX,
+            ThemeColor::BLACK,
+            config.font_family.as_str(),
+            &GridMetrics {
+                cell_width,
+                font_size: config.font_size,
+                glyph_widths: &glyph_widths,
+            },
+        );
+        let text: String = spans.iter().map(|(text, _)| text.as_str()).collect();
+        let b_start: usize = text.find('B').expect("B must be present");
+        let attrs = TerminalView::text_attrs(None, config.font_family.as_str());
+        let mut buffer: Buffer = Buffer::new(
+            &mut font_system,
+            Metrics::new(config.font_size, config.line_height),
+        );
+        buffer.set_size(Some(1000.0), Some(100.0));
+        buffer.set_wrap(Wrap::None);
+        buffer.set_rich_text(
+            spans
+                .iter()
+                .map(|(text, attrs)| (text.as_str(), attrs.clone())),
+            &attrs,
+            Shaping::Advanced,
+            None,
+        );
+        buffer.shape_until_scroll(&mut font_system, false);
+
+        let run = buffer.layout_runs().next().expect("layout run must exist");
+        let b = run
+            .glyphs
+            .iter()
+            .find(|glyph| glyph.start == b_start)
+            .expect("B glyph must exist");
+        let expected_x: f32 = 3.0 * cell_width;
+
+        assert!(
+            (b.x - expected_x).abs() < 0.05,
+            "B x={} expected={expected_x} cell_width={cell_width}",
+            b.x
+        );
     }
 }
