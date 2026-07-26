@@ -1,5 +1,3 @@
-use std::fmt::{self, Display};
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OscMessage {
     SetIconName(String),
@@ -13,29 +11,8 @@ pub enum OscMessage {
     },
 }
 
-impl Display for OscMessage {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            OscMessage::SetIconName(value) => write!(f, "OSC: SetIconName({:?})", value),
-            OscMessage::SetWindowTitle(value) => write!(f, "OSC: SetWindowTitle({:?})", value),
-            OscMessage::SetIconAndWindowTitle(value) => {
-                write!(f, "OSC: SetIconAndWindowTitle({:?})", value)
-            }
-            OscMessage::SetCursorColor(color) => write!(f, "OSC: SetCursorColor({:?})", color),
-            OscMessage::ResetCursorColor => write!(f, "OSC: ResetCursorColor"),
-            OscMessage::Unknown {
-                params,
-                bell_terminated,
-            } => write!(
-                f,
-                "OSC: Unknown(params={:?}, bell_terminated={})",
-                params, bell_terminated
-            ),
-        }
-    }
-}
-
-pub(super) fn decode_osc(params: &[&[u8]], bell_terminated: bool) -> Option<OscMessage> {
+#[must_use]
+pub fn decode_osc(params: &[&[u8]], bell_terminated: bool) -> Option<OscMessage> {
     let code: &&[u8] = params.first()?;
     let value: String = params
         .get(1)

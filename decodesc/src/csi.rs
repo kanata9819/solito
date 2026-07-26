@@ -1,7 +1,6 @@
-use std::fmt::{self, Display};
 use vte::Params;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EraseMode {
     ToEnd,
     ToStart,
@@ -40,59 +39,11 @@ pub enum CsiMessage {
     },
 }
 
-impl Display for CsiMessage {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CsiMessage::CursorUp(n) => write!(f, "CSI: CursorUp({})", n),
-            CsiMessage::CursorDown(n) => write!(f, "CSI: CursorDown({})", n),
-            CsiMessage::CursorForward(n) => write!(f, "CSI: CursorForward({})", n),
-            CsiMessage::CursorBackward(n) => write!(f, "CSI: CursorBackward({})", n),
-            CsiMessage::CursorNextLine(n) => write!(f, "CSI: CursorNextLine({})", n),
-            CsiMessage::CursorPreviousLine(n) => write!(f, "CSI: CursorPreviousLine({})", n),
-            CsiMessage::CursorHorizontalAbsolute(n) => {
-                write!(f, "CSI: CursorHorizontalAbsolute({})", n)
-            }
-            CsiMessage::CursorPosition { row, col } => {
-                write!(f, "CSI: CursorPosition(row={}, col={})", row, col)
-            }
-            CsiMessage::EraseDisplay(mode) => write!(f, "CSI: EraseDisplay({:?})", mode),
-            CsiMessage::EraseLine(mode) => write!(f, "CSI: EraseLine({:?})", mode),
-            CsiMessage::DeleteCharacters(n) => write!(f, "CSI: DeleteCharacters({})", n),
-            CsiMessage::ScrollUp(n) => write!(f, "CSI: ScrollUp({})", n),
-            CsiMessage::ScrollDown(n) => write!(f, "CSI: ScrollDown({})", n),
-            CsiMessage::SaveCursor => write!(f, "CSI: SaveCursor"),
-            CsiMessage::RestoreCursor => write!(f, "CSI: RestoreCursor"),
-            CsiMessage::SelectGraphicRendition(params) => {
-                write!(f, "CSI: SelectGraphicRendition({:?})", params)
-            }
-            CsiMessage::DeviceStatusReport(mode) => {
-                write!(f, "CSI: DeviceStatusReport({})", mode)
-            }
-            CsiMessage::ShowCursor => write!(f, "CSI: ShowCursor"),
-            CsiMessage::HideCursor => write!(f, "CSI: HideCursor"),
-            CsiMessage::Unknown {
-                params,
-                intermediates,
-                ignore,
-                action,
-            } => write!(
-                f,
-                "CSI: Unknown(params={:?}, intermediates={:?}, ignore={}, action={})",
-                params, intermediates, ignore, action
-            ),
-        }
-    }
-}
-
-pub(super) fn decode_csi(
-    params: &Params,
-    intermediates: &[u8],
-    ignore: bool,
-    action: char,
-) -> Option<CsiMessage> {
+#[must_use]
+pub fn decode_csi(params: &Params, intermediates: &[u8], ignore: bool, action: char) -> CsiMessage {
     let amount: u16 = param(params, 0, 1);
 
-    Some(match action {
+    match action {
         'A' => CsiMessage::CursorUp(amount),
         'B' => CsiMessage::CursorDown(amount),
         'C' => CsiMessage::CursorForward(amount),
@@ -121,7 +72,7 @@ pub(super) fn decode_csi(
             ignore,
             action,
         },
-    })
+    }
 }
 
 impl EraseMode {
@@ -158,4 +109,17 @@ fn params_to_vec(params: &Params) -> Vec<u16> {
         .iter()
         .flat_map(|param| param.iter().copied())
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CsiMessage, decode_csi};
+    use vte::Params;
+
+    #[test]
+    fn empty_cursor_up_uses_default_amount() {
+        let message = decode_csi(&Params::default(), &[], false, 'A');
+
+        assert_eq!(message, CsiMessage::CursorUp(1));
+    }
 }

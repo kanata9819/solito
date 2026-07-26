@@ -19,7 +19,7 @@ impl Screen {
         self.screen_buffer.resize(size);
     }
 
-    pub(super) fn clear_screen(&mut self) {
+    fn clear_screen(&mut self) {
         // Reset screen contents and move the cursor back to top-left.
         self.screen_buffer.lines.clear();
         self.screen_buffer.lines.push(Vec::new());
@@ -91,9 +91,9 @@ impl Screen {
         }
     }
 
-    pub(super) fn apply_osc(&mut self, message: OscMessage) {
+    pub(super) fn apply_osc(&mut self, message: &OscMessage) {
         match message {
-            OscMessage::SetCursorColor(color) => self.screen_buffer.cursor_color = Some(color),
+            OscMessage::SetCursorColor(color) => self.screen_buffer.cursor_color = Some(*color),
             OscMessage::ResetCursorColor => self.screen_buffer.cursor_color = None,
             OscMessage::SetIconName(_)
             | OscMessage::SetWindowTitle(_)
@@ -102,13 +102,9 @@ impl Screen {
         }
     }
 
-    pub(super) fn apply_print(&mut self, c: char) {
-        self.put_char(c);
-    }
-
     pub(super) fn apply_execute(&mut self, byte: u8) {
         match byte {
-            b'\n' => self.new_line(),
+            b'\n' => self.advance_to_next_line(),
             b'\r' => self.carriage_return(),
             0x08 | 0x7f => self.backspace(),
             b'\t' => self.tab(),
@@ -116,7 +112,7 @@ impl Screen {
         }
     }
 
-    fn put_char(&mut self, c: char) {
+    pub(super) fn put_char(&mut self, c: char) {
         if c == '\u{7f}' || c == '\u{8}' {
             return;
         }
@@ -126,14 +122,14 @@ impl Screen {
         if self.screen_buffer.pending_wrap {
             // If the previous character reached the right edge,
             // finalize line wrap (auto-wrap) at the next print timing.
-            self.wrap_line();
+            self.advance_to_next_line();
         }
 
         if char_width == 2 {
             let current_col: usize = self.screen_buffer.cursor.get_current_col();
             // If char width is over the buffer edge, start at next line.
             if current_col + 1 >= self.screen_buffer.cols() {
-                self.wrap_line();
+                self.advance_to_next_line();
             }
         }
 
@@ -172,14 +168,6 @@ impl Screen {
 
             self.screen_buffer.pending_wrap = true;
         }
-    }
-
-    fn new_line(&mut self) {
-        self.advance_to_next_line();
-    }
-
-    fn wrap_line(&mut self) {
-        self.advance_to_next_line();
     }
 
     fn carriage_return(&mut self) {
@@ -335,14 +323,5 @@ impl Screen {
         self.screen_buffer.cursor.reset_col();
         self.screen_buffer.pending_wrap = false;
         self.screen_buffer.ensure_cursor_line();
-    }
-
-    #[cfg(test)]
-    #[allow(dead_code)]
-    fn cursor_position(&self) -> CursorPosition {
-        CursorPosition {
-            row: self.screen_buffer.cursor.get_current_row(),
-            col: self.screen_buffer.cursor.get_current_col(),
-        }
     }
 }

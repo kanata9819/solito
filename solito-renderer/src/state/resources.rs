@@ -11,7 +11,7 @@ impl RenderResources {
         let uniform_buffer = rect::RectPipeline::create_screen_uniform_buffer(&gpu.device);
         let rect_pipeline = rect::RectPipeline::new(
             &gpu.device,
-            window_surface.config.clone(),
+            &window_surface.config,
             &gpu.queue,
             &uniform_buffer,
             window_surface.config.width,

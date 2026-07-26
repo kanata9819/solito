@@ -1,10 +1,10 @@
 use super::Screen;
-use decodesc::{DecodedEvent, VteEvent, decode};
+use decodesc::{decode_csi, decode_osc};
 use vte::{Params, Perform};
 
 impl Perform for Screen {
     fn print(&mut self, c: char) {
-        self.apply_print(c);
+        self.put_char(c);
     }
 
     fn execute(&mut self, byte: u8) {
@@ -18,30 +18,14 @@ impl Perform for Screen {
     fn unhook(&mut self) {}
 
     fn osc_dispatch(&mut self, params: &[&[u8]], bell_terminated: bool) {
-        if let Some(DecodedEvent { osc: Some(osc), .. }) = decode(VteEvent::Osc {
-            params,
-            bell_terminated,
-        }) {
-            self.apply_osc(osc);
+        if let Some(osc) = decode_osc(params, bell_terminated) {
+            self.apply_osc(&osc);
         }
     }
 
     fn csi_dispatch(&mut self, params: &Params, intermediates: &[u8], ignore: bool, action: char) {
-        if let Some(DecodedEvent { csi: Some(csi), .. }) = decode(VteEvent::Csi {
-            params,
-            intermediates,
-            ignore,
-            action,
-        }) {
-            self.apply_csi(csi);
-        }
+        self.apply_csi(decode_csi(params, intermediates, ignore, action));
     }
 
-    fn esc_dispatch(&mut self, intermediates: &[u8], ignore: bool, byte: u8) {
-        let _: Option<DecodedEvent> = decode(VteEvent::Esc {
-            intermediates,
-            ignore,
-            byte,
-        });
-    }
+    fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, _byte: u8) {}
 }

@@ -5,6 +5,6 @@ edition = "2024"
 license.workspace = true
 
 [dependencies]
-vte = "0.15.0"
+vte.workspace = true
 unicode-width = "0.2.2"
 decodesc = { path = "../decodesc" }

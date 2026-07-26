@@ -43,13 +43,11 @@ impl Renderer {
     fn draw_to_view(
         &mut self,
         encoder: &mut CommandEncoder,
-        view: TextureView,
+        view: &TextureView,
     ) -> Result<(), Box<dyn Error>> {
         self.update_rect_screen_uniform();
 
-        let mut rects: Vec<rect::RectSpec> = self
-            .terminal_view
-            .tab_bar_rects(self.window_surface.config.width);
+        let mut rects: Vec<rect::RectSpec> = self.terminal_view.tab_bar_rects();
         rects.extend(self.terminal_view.copy_mode_rects());
 
         // Copy mode draws its own cursor over the scrollback. Hiding the shell
@@ -76,12 +74,12 @@ impl Renderer {
             .rect_bind_group(&self.gpu.device, &self.render_resources.uniform_buffer);
 
         let mut render_pass: wgpu::RenderPass<'_> =
-            pass::begin_render_pass(encoder, &view, self.window_surface.clear_color);
+            pass::begin_render_pass(encoder, view, self.window_surface.clear_color);
 
         if let Some(rect_instance_buffer) = rect_instance_buffer.as_ref() {
             self.render_resources.rect_pipeline.draw_rects(
                 &mut render_pass,
-                rect_bind_group,
+                &rect_bind_group,
                 rect_instance_buffer,
                 rects.len(),
             );
@@ -116,7 +114,11 @@ impl Renderer {
                         .create_surface(self.window_surface.window.clone())?;
                     self.reconfigure_surface();
                 }
-                wgpu::CurrentSurfaceTexture::Validation => panic!("validation error"),
+                wgpu::CurrentSurfaceTexture::Validation => {
+                    return Err(
+                        std::io::Error::other("wgpu rejected the current surface texture").into(),
+                    );
+                }
             }
         }
 
@@ -176,7 +178,7 @@ impl Renderer {
         if let Some(frame) = frame {
             let view: TextureView = frame.texture.create_view(&TextureViewDescriptor::default());
             let mut encoder: CommandEncoder = self.create_encoder();
-            self.draw_to_view(&mut encoder, view)?;
+            self.draw_to_view(&mut encoder, &view)?;
             self.gpu.queue.submit(Some(encoder.finish()));
             self.gpu.queue.present(frame);
         }

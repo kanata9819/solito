@@ -1,6 +1,6 @@
 //! Convert winit window events into application commands or renderer actions.
 
-use super::{AppResult, SolitoApplication};
+use super::SolitoApplication;
 use crate::app::input::{self, AppCommand};
 use solito_renderer::TerminalSize;
 use tracing::error;
@@ -16,7 +16,7 @@ impl SolitoApplication {
         event_loop: &ActiveEventLoop,
         window_id: WindowId,
         event: WindowEvent,
-    ) -> AppResult<AppCommand> {
+    ) -> AppCommand {
         match event {
             WindowEvent::CloseRequested => {
                 if self
@@ -27,7 +27,7 @@ impl SolitoApplication {
                     self.window = None;
                     event_loop.exit();
                 }
-                Ok(AppCommand::Noop)
+                AppCommand::Noop
             }
             WindowEvent::RedrawRequested => {
                 if let Some(renderer) = &mut self.renderer
@@ -36,7 +36,7 @@ impl SolitoApplication {
                     error!("{err}");
                     event_loop.exit();
                 }
-                Ok(AppCommand::Noop)
+                AppCommand::Noop
             }
             WindowEvent::KeyboardInput {
                 event:
@@ -47,37 +47,30 @@ impl SolitoApplication {
                         ..
                     },
                 ..
-            } => {
-                let Some(input_tx) = self.tabs.active_input_tx() else {
-                    return Ok(AppCommand::Noop);
-                };
-
-                input::handle_key(
-                    text,
-                    logical_key,
-                    key_state,
-                    self.modifiers,
-                    input_tx,
-                    self.copy_mode.is_active(),
-                )
-            }
+            } => input::handle_key(
+                text,
+                &logical_key,
+                key_state,
+                self.modifiers,
+                self.copy_mode.is_active(),
+            ),
             WindowEvent::ModifiersChanged(modifiers) => {
                 self.modifiers = modifiers.state();
-                Ok(AppCommand::Noop)
+                AppCommand::Noop
             }
             WindowEvent::Resized(window_size) => {
                 let Some(renderer) = &self.renderer else {
-                    return Ok(AppCommand::Noop);
+                    return AppCommand::Noop;
                 };
                 let terminal_size: TerminalSize = renderer.terminal_size_for(window_size);
-                Ok(AppCommand::Resize {
+                AppCommand::Resize {
                     window_size,
                     terminal_size,
-                })
+                }
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 let Some(renderer) = &mut self.renderer else {
-                    return Ok(AppCommand::Noop);
+                    return AppCommand::Noop;
                 };
 
                 match delta {
@@ -87,11 +80,11 @@ impl SolitoApplication {
                         position.y as f32 / self.renderer_config.line_height,
                     ),
                 }
-                Ok(AppCommand::Noop)
+                AppCommand::Noop
             }
             _ => {
                 tracing::debug!("unhandled event: {event:?}");
-                Ok(AppCommand::Noop)
+                AppCommand::Noop
             }
         }
     }

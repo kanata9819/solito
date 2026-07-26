@@ -136,13 +136,7 @@ impl ApplicationHandler for SolitoApplication {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        let command: AppCommand = match self.handle_window_event(event_loop, window_id, event) {
-            Ok(command) => command,
-            Err(err) => {
-                error!("window event failed: {err}");
-                return;
-            }
-        };
+        let command: AppCommand = self.handle_window_event(event_loop, window_id, event);
 
         if let Err(err) = self.handle_command(command, event_loop) {
             error!("application command failed: {err}");

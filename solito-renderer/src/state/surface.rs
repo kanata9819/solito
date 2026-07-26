@@ -115,6 +115,8 @@ impl WindowSurface {
                 return;
             };
 
+            // SAFETY: BLACK_BRUSH is a valid stock-object identifier and the
+            // returned system-owned brush remains valid for the process lifetime.
             let brush = unsafe { GetStockObject(BLACK_BRUSH) };
             if brush.is_null() {
                 tracing::warn!("failed to get stock black brush for initial background");
@@ -124,6 +126,8 @@ impl WindowSurface {
             // wgpu can fail to acquire a surface texture while the window is hidden
             // or just becoming visible. Set the native erase background to black so
             // a one-frame OS fallback paint matches the terminal instead of flashing white.
+            // SAFETY: hwnd comes from winit's live Win32 window and brush is the
+            // valid stock brush checked above.
             unsafe {
                 SetClassLongPtrW(
                     handle.hwnd.get() as HWND,
@@ -168,6 +172,8 @@ impl WindowSurface {
 
             let hwnd: HWND = handle.hwnd.get() as HWND;
             let dark_mode: i32 = 1;
+            // SAFETY: hwnd is owned by the live winit window; the attribute
+            // pointer and byte size refer to `dark_mode` for this call only.
             let dark_hr = unsafe {
                 DwmSetWindowAttribute(
                     hwnd,
@@ -181,6 +187,8 @@ impl WindowSurface {
             }
 
             let backdrop = DWMSBT_TRANSIENTWINDOW;
+            // SAFETY: the attribute pointer and size refer to the local
+            // `backdrop` value for the duration of the synchronous call.
             let hr = unsafe {
                 DwmSetWindowAttribute(
                     hwnd,
@@ -242,12 +250,14 @@ impl WindowSurface {
                 return;
             };
 
+            // SAFETY: the library name is a static NUL-terminated string.
             let user32 = unsafe { LoadLibraryA(c"user32.dll".as_ptr() as PCSTR) };
             if user32.is_null() {
                 tracing::warn!("failed to load user32.dll for acrylic");
                 return;
             }
 
+            // SAFETY: both the module handle and symbol name are valid.
             let Some(function) = (unsafe {
                 GetProcAddress(user32, c"SetWindowCompositionAttribute".as_ptr() as PCSTR)
             }) else {
@@ -255,6 +265,8 @@ impl WindowSurface {
                 return;
             };
 
+            // SAFETY: Windows exports this symbol with the signature declared
+            // by `SetWindowCompositionAttribute`.
             let set_window_composition_attribute: SetWindowCompositionAttribute =
                 unsafe { std::mem::transmute(function) };
 
@@ -278,6 +290,8 @@ impl WindowSurface {
                 size_of_data: std::mem::size_of::<AccentPolicy>(),
             };
 
+            // SAFETY: hwnd belongs to the live winit window and `data` points to
+            // the live `policy` value with the matching C layout.
             if unsafe { set_window_composition_attribute(handle.hwnd.get() as HWND, &mut data) }
                 == 0
             {

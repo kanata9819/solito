@@ -1,3 +1,4 @@
+use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 use wgpu::wgt::SurfaceConfiguration;
 use wgpu::{Buffer, ShaderModule};
@@ -43,7 +44,7 @@ impl RectSpec {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Pod, Zeroable)]
 struct RectInstance {
     pos: [f32; 2],
     size: [f32; 2],
@@ -70,7 +71,7 @@ const RECT_INSTANCE_ATTRIBUTES: [wgpu::VertexAttribute; 4] =
 impl RectPipeline {
     pub(crate) fn new(
         device: &wgpu::Device,
-        config: SurfaceConfiguration<Vec<wgpu::TextureFormat>>,
+        config: &SurfaceConfiguration<Vec<wgpu::TextureFormat>>,
         queue: &wgpu::Queue,
         uniform_buffer: &Buffer,
         window_width: u32,
@@ -144,6 +145,7 @@ impl RectPipeline {
     }
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct ScreenUniform<'a> {
     pub uniform_buffer: &'a Buffer,
     pub queue: &'a wgpu::Queue,
@@ -176,9 +178,11 @@ impl RectPipeline {
             0.0, 0.0, // padding
         ];
 
-        uniform
-            .queue
-            .write_buffer(uniform.uniform_buffer, 0, as_bytes(&screen_uniform));
+        uniform.queue.write_buffer(
+            uniform.uniform_buffer,
+            0,
+            bytemuck::bytes_of(&screen_uniform),
+        );
     }
 
     fn rect_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
@@ -224,7 +228,7 @@ impl RectPipeline {
         Some(
             device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Rect Instance Buffer"),
-                contents: slice_as_bytes(&instances),
+                contents: bytemuck::cast_slice(&instances),
                 usage: wgpu::BufferUsages::VERTEX,
             }),
         )
@@ -233,7 +237,7 @@ impl RectPipeline {
     pub(crate) fn draw_rects(
         &self,
         pass: &mut wgpu::RenderPass,
-        bind_group: wgpu::BindGroup,
+        bind_group: &wgpu::BindGroup,
         instance_buffer: &wgpu::Buffer,
         rect_count: usize,
     ) {
@@ -241,18 +245,8 @@ impl RectPipeline {
         const VERTICES_COUNT: Range<u32> = 0..6;
 
         pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &bind_group, &[]);
+        pass.set_bind_group(0, bind_group, &[]);
         pass.set_vertex_buffer(0, instance_buffer.slice(..));
         pass.draw(VERTICES_COUNT, 0..rect_count as u32);
-    }
-}
-
-fn as_bytes<T>(value: &T) -> &[u8] {
-    unsafe { std::slice::from_raw_parts(value as *const T as *const u8, std::mem::size_of::<T>()) }
-}
-
-fn slice_as_bytes<T>(values: &[T]) -> &[u8] {
-    unsafe {
-        std::slice::from_raw_parts(values.as_ptr() as *const u8, std::mem::size_of_val(values))
     }
 }

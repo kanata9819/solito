@@ -30,10 +30,11 @@ impl Tab {
         let title: String = tab_title_for_program(&shell_program);
 
         std::thread::spawn(move || {
-            let runtime = SessionRuntime::new(input_rx, output_tx, size, shell_program);
-            if let Err(err) = runtime.run_session() {
+            let result = SessionRuntime::new(input_rx, output_tx, size, &shell_program)
+                .and_then(SessionRuntime::run_session);
+            if let Err(err) = result {
                 error!("terminal session failed: {err}");
-            };
+            }
         });
 
         Self {

@@ -44,17 +44,17 @@ impl SessionRuntime {
         input_rx: Receiver<SessionInput>,
         output_tx: Sender<Vec<u8>>,
         size: TerminalSize,
-        shell_program: String,
-    ) -> Self {
-        let pty_pair: PtyPair = Self::pty_pair(size);
-        let child: PtyChild = Self::spawn_command(pty_pair.slave, &shell_program);
+        shell_program: &str,
+    ) -> Result<Self, Box<dyn Error>> {
+        let pty_pair = Self::pty_pair(size)?;
+        let child = Self::spawn_command(&pty_pair.slave, shell_program)?;
 
-        Self {
+        Ok(Self {
             child,
             input_rx,
             master: pty_pair.master,
             output_tx,
-        }
+        })
     }
 
     pub(crate) fn run_session(mut self) -> Result<(), Box<dyn Error>> {
@@ -72,24 +72,18 @@ impl SessionRuntime {
         Ok(())
     }
 
-    fn pty_pair(size: TerminalSize) -> PtyPair {
-        portable_pty::native_pty_system()
-            .openpty(PtySize {
-                rows: clamp_pty_size(size.rows),
-                cols: clamp_pty_size(size.cols),
-                pixel_height: 0,
-                pixel_width: 0,
-            })
-            .expect("failed to create pty pair")
+    fn pty_pair(size: TerminalSize) -> Result<PtyPair, Box<dyn Error>> {
+        Ok(portable_pty::native_pty_system().openpty(PtySize {
+            rows: clamp_pty_size(size.rows),
+            cols: clamp_pty_size(size.cols),
+            pixel_height: 0,
+            pixel_width: 0,
+        })?)
     }
 
-    fn spawn_command(slave: PtySlave, shell_program: &str) -> PtyChild {
+    fn spawn_command(slave: &PtySlave, shell_program: &str) -> Result<PtyChild, Box<dyn Error>> {
         let cmd: CommandBuilder = CommandBuilder::new(shell_program);
-        let child: PtyChild = slave
-            .spawn_command(cmd)
-            .expect("failed to spawn shell command");
-
-        child
+        Ok(slave.spawn_command(cmd)?)
     }
 
     fn spawn_reading_thread(output_tx: Sender<Vec<u8>>, mut reader: PtyReader) -> JoinHandle<()> {
@@ -108,7 +102,8 @@ impl SessionRuntime {
                         }
                     }
                     Err(err) => {
-                        error!("failed to read PTY output: {err}")
+                        error!("failed to read PTY output: {err}");
+                        break;
                     }
                 }
             }
@@ -125,7 +120,8 @@ impl SessionRuntime {
             // CSI cursor position reports are 1-based, so this means top-left.
             if let Err(err) = writer.write_all(b"\x1b[1;1R") {
                 error!("failed to report initial cursor position: {err}");
-            };
+                return;
+            }
 
             // After that response, normal input and resize events can be forwarded.
             while let Ok(input) = input_rx.recv() {
@@ -134,11 +130,13 @@ impl SessionRuntime {
                         if let Err(err) = writer.write_all(&bytes) {
                             error!("failed to write PTY input: {err}");
                             break;
-                        } else {
-                            debug!("wrote: {}", String::from_utf8_lossy(&bytes));
                         }
+                        debug!("wrote: {}", String::from_utf8_lossy(&bytes));
 
-                        writer.flush().expect("flush error");
+                        if let Err(err) = writer.flush() {
+                            error!("failed to flush PTY input: {err}");
+                            break;
+                        }
                     }
                     SessionInput::Resize(size) => {
                         let cols = clamp_pty_size(size.cols);
@@ -161,5 +159,17 @@ impl SessionRuntime {
 }
 
 fn clamp_pty_size(value: usize) -> u16 {
-    value.max(1).min(u16::MAX as usize) as u16
+    u16::try_from(value.clamp(1, usize::from(u16::MAX))).unwrap_or(u16::MAX)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clamp_pty_size;
+
+    #[test]
+    fn pty_size_stays_within_valid_range() {
+        assert_eq!(clamp_pty_size(0), 1);
+        assert_eq!(clamp_pty_size(80), 80);
+        assert_eq!(clamp_pty_size(usize::MAX), u16::MAX);
+    }
 }

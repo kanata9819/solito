@@ -38,14 +38,17 @@ flowchart LR
 winit WindowEvent
   -> app/application/window_event.rs
   -> app/input.rs
-  -> AppCommand または SessionInput::Write
-  -> app/application/command.rs または session/runtime.rs
+  -> AppCommand（SendTerminalInputを含む）
+  -> app/application/command.rs
+  -> SessionInput::Write
+  -> session/runtime.rs
   -> PTY
 ```
 
 - ショートカットの変更は `app/input.rs`
 - コマンド実行時の状態変更は `app/application/command.rs`
-- シェルへ送るバイト列は `app/input.rs`
+- シェルへ送るバイト列への変換は `app/input.rs`
+- 実際のPTY送信は `app/application/command.rs`
 
 ### シェル出力
 

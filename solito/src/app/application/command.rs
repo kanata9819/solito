@@ -30,6 +30,11 @@ impl SolitoApplication {
     ) -> AppResult {
         match command {
             AppCommand::Noop => {}
+            AppCommand::SendTerminalInput(bytes) => {
+                if let Some(input_tx) = self.tabs.active_input_tx() {
+                    input_tx.send(SessionInput::write(bytes))?;
+                }
+            }
             AppCommand::EnterCopyMode => {
                 if let Some(snapshot) = self.tabs.active_snapshot() {
                     self.copy_mode.enter(&snapshot);
