@@ -25,19 +25,19 @@ impl WindowSurface {
         Self::apply_initial_window_background(window.as_ref());
         Self::apply_window_effects(window.as_ref(), renderer_config);
 
-        let surface_caps: wgpu::SurfaceCapabilities = surface.get_capabilities(&gpu.adapter);
+        let surface_caps = surface.get_capabilities(&gpu.adapter);
 
-        let surface_format: wgpu::TextureFormat = surface_caps
+        let surface_format = surface_caps
             .formats
             .iter()
             .find(|f| f.is_srgb())
             .copied()
             .unwrap_or(surface_caps.formats[0]);
 
-        let alpha_mode: wgpu::CompositeAlphaMode = Self::choose_alpha_mode(&surface_caps);
-        let clear_color: wgpu::Color = Self::clear_color(alpha_mode, renderer_config);
+        let alpha_mode = Self::choose_alpha_mode(&surface_caps);
+        let clear_color = Self::clear_color(alpha_mode, renderer_config);
 
-        let config: SurfaceConfiguration = SurfaceConfiguration {
+        let config = SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
             color_space: wgpu::SurfaceColorSpace::Auto,
@@ -170,8 +170,8 @@ impl WindowSurface {
                 return false;
             };
 
-            let hwnd: HWND = handle.hwnd.get() as HWND;
-            let dark_mode: i32 = 1;
+            let hwnd = handle.hwnd.get() as HWND;
+            let dark_mode = 1;
             // SAFETY: hwnd is owned by the live winit window; the attribute
             // pointer and byte size refer to `dark_mode` for this call only.
             let dark_hr = unsafe {
@@ -267,15 +267,15 @@ impl WindowSurface {
 
             // SAFETY: Windows exports this symbol with the signature declared
             // by `SetWindowCompositionAttribute`.
-            let set_window_composition_attribute: SetWindowCompositionAttribute =
-                unsafe { std::mem::transmute(function) };
+            let set_window_composition_attribute =
+                unsafe { std::mem::transmute::<_, SetWindowCompositionAttribute>(function) };
 
             let (r, g, b, mut a) = acrylic_tint;
             if a == 0 {
                 a = 1;
             }
 
-            let mut policy: AccentPolicy = AccentPolicy {
+            let mut policy = AccentPolicy {
                 accent_state: ACCENT_ENABLE_ACRYLICBLURBEHIND,
                 accent_flags: 0,
                 gradient_color: r as u32

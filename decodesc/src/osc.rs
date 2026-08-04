@@ -13,8 +13,8 @@ pub enum OscMessage {
 
 #[must_use]
 pub fn decode_osc(params: &[&[u8]], bell_terminated: bool) -> Option<OscMessage> {
-    let code: &&[u8] = params.first()?;
-    let value: String = params
+    let code = params.first()?;
+    let value = params
         .get(1)
         .map(|value| String::from_utf8_lossy(value).into_owned())
         .unwrap_or_default();
@@ -38,13 +38,13 @@ pub fn decode_osc(params: &[&[u8]], bell_terminated: bool) -> Option<OscMessage>
 }
 
 fn parse_color(value: Option<&[u8]>) -> Option<[u8; 4]> {
-    let value: &str = std::str::from_utf8(value?).ok()?;
+    let value = std::str::from_utf8(value?).ok()?;
 
     parse_hash_color(value).or_else(|| parse_rgb_color(value))
 }
 
 fn parse_hash_color(value: &str) -> Option<[u8; 4]> {
-    let value: &str = value.strip_prefix('#')?;
+    let value = value.strip_prefix('#')?;
     if value.len() != 6 {
         return None;
     }
@@ -58,7 +58,7 @@ fn parse_hash_color(value: &str) -> Option<[u8; 4]> {
 }
 
 fn parse_rgb_color(value: &str) -> Option<[u8; 4]> {
-    let value: &str = value.strip_prefix("rgb:")?;
+    let value = value.strip_prefix("rgb:")?;
     let mut parts = value.split('/');
 
     Some([
@@ -74,9 +74,9 @@ fn parse_rgb_component(value: &str) -> Option<u8> {
         return None;
     }
 
-    let digit_count: usize = value.len();
-    let value: u16 = u16::from_str_radix(value, 16).ok()?;
-    let max: u32 = (1_u32 << (digit_count * 4)) - 1;
+    let digit_count = value.len();
+    let value = u16::from_str_radix(value, 16).ok()?;
+    let max = (1_u32 << (digit_count * 4)) - 1;
 
     Some(((u32::from(value) * 255 + (max / 2)) / max) as u8)
 }

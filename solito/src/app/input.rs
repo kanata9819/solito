@@ -65,7 +65,7 @@ pub(super) fn handle_key(
         return command;
     }
 
-    let bytes: Option<Vec<u8>> = match logical_key {
+    let bytes = match logical_key {
         Key::Named(NamedKey::Enter) => Some(ENTER.to_vec()),
         Key::Named(NamedKey::Backspace) => Some(BACKSPACE.to_vec()),
         Key::Named(NamedKey::Tab) => Some(TAB.to_vec()),
@@ -275,7 +275,7 @@ mod tests {
 
     #[test]
     fn ctrl_tab_switch_next_tab() {
-        let command: Option<AppCommand> = shortcut_command(
+        let command = shortcut_command(
             &Key::Named(winit::keyboard::NamedKey::Tab),
             ModifiersState::CONTROL,
         );
@@ -285,7 +285,7 @@ mod tests {
 
     #[test]
     fn ctrl_tab_switch_previous_tab() {
-        let command: Option<AppCommand> = shortcut_command(
+        let command = shortcut_command(
             &Key::Named(winit::keyboard::NamedKey::Tab),
             ModifiersState::SHIFT | ModifiersState::CONTROL,
         );

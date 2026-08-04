@@ -1,6 +1,6 @@
 use std::{error::Error, sync::Arc};
-use wgpu::{Instance, Surface, TextureFormat};
-use winit::{dpi::PhysicalSize, window::Window};
+use wgpu::TextureFormat;
+use winit::window::Window;
 
 use crate::{
     RendererConfig,
@@ -22,9 +22,9 @@ impl Renderer {
         window: Arc<Window>,
         renderer_config: RendererConfig,
     ) -> Result<Self, Box<dyn Error>> {
-        let size: PhysicalSize<u32> = window.inner_size();
-        let instance: Instance = GpuContext::create_instance();
-        let surface: Surface<'_> = instance.create_surface(window.clone())?;
+        let size = window.inner_size();
+        let instance = GpuContext::create_instance();
+        let surface = instance.create_surface(window.clone())?;
         let gpu = GpuContext::new(instance, &surface).await?;
         let window_surface = WindowSurface::new(window, surface, &gpu, size, &renderer_config);
         let render_resources = RenderResources::new(&gpu, &window_surface);

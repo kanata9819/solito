@@ -2,7 +2,7 @@
 //!
 //! This module never interprets terminal output; `solito-terminal` owns that job.
 
-use portable_pty::{Child, CommandBuilder, ExitStatus, MasterPty, PtyPair, PtySize, SlavePty};
+use portable_pty::{Child, CommandBuilder, MasterPty, PtyPair, PtySize, SlavePty};
 use solito_terminal::TerminalSize;
 use std::error::Error;
 use std::io::{Read, Write};
@@ -58,15 +58,15 @@ impl SessionRuntime {
     }
 
     pub(crate) fn run_session(mut self) -> Result<(), Box<dyn Error>> {
-        let reader: PtyReader = self.master.try_clone_reader()?;
-        let writer: PtyWriter = self.master.take_writer()?;
+        let reader = self.master.try_clone_reader()?;
+        let writer = self.master.take_writer()?;
 
         // Thread to read output from the PTY.
         Self::spawn_reading_thread(self.output_tx, reader);
         // Thread to write input and resize events into the PTY.
         Self::spawn_input_thread(self.input_rx, writer, self.master);
 
-        let status: ExitStatus = self.child.wait()?;
+        let status = self.child.wait()?;
         debug!("exited with status: {:?}", status);
 
         Ok(())
@@ -82,7 +82,7 @@ impl SessionRuntime {
     }
 
     fn spawn_command(slave: &PtySlave, shell_program: &str) -> Result<PtyChild, Box<dyn Error>> {
-        let cmd: CommandBuilder = CommandBuilder::new(shell_program);
+        let cmd = CommandBuilder::new(shell_program);
         Ok(slave.spawn_command(cmd)?)
     }
 

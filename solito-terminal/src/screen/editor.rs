@@ -11,7 +11,7 @@ pub(crate) struct Screen {
 
 impl Screen {
     pub(crate) fn new(size: TerminalSize) -> Self {
-        let screen_buffer: ScreenBuffer = ScreenBuffer::new(size);
+        let screen_buffer = ScreenBuffer::new(size);
         Self { screen_buffer }
     }
 
@@ -31,13 +31,13 @@ impl Screen {
 
     fn erase_line(&mut self, mode: EraseMode) {
         self.screen_buffer.ensure_cursor_line();
-        let row: usize = self.screen_buffer.cursor.get_current_row();
-        let col: usize = self.screen_buffer.cursor.get_current_col();
-        let line: &mut Vec<ScreenCell> = &mut self.screen_buffer.lines[row];
+        let row = self.screen_buffer.cursor.get_current_row();
+        let col = self.screen_buffer.cursor.get_current_col();
+        let line = &mut self.screen_buffer.lines[row];
 
         match mode {
             EraseMode::ToStart => {
-                let end: usize = col.saturating_add(1).min(line.len());
+                let end = col.saturating_add(1).min(line.len());
                 for cell in line.iter_mut().take(end) {
                     *cell = ScreenCell::blank(CellStyle::default());
                 }
@@ -117,7 +117,7 @@ impl Screen {
             return;
         }
 
-        let char_width: usize = UnicodeWidthChar::width(c).unwrap_or(1).clamp(1, 2);
+        let char_width = UnicodeWidthChar::width(c).unwrap_or(1).clamp(1, 2);
 
         if self.screen_buffer.pending_wrap {
             // If the previous character reached the right edge,
@@ -126,7 +126,7 @@ impl Screen {
         }
 
         if char_width == 2 {
-            let current_col: usize = self.screen_buffer.cursor.get_current_col();
+            let current_col = self.screen_buffer.cursor.get_current_col();
             // If char width is over the buffer edge, start at next line.
             if current_col + 1 >= self.screen_buffer.cols() {
                 self.advance_to_next_line();
@@ -136,10 +136,10 @@ impl Screen {
         // Fill with spaces up to the cursor position to allow overwriting at arbitrary positions.
         self.screen_buffer.ensure_cursor_col();
 
-        let row: usize = self.screen_buffer.cursor.get_current_row();
-        let col: usize = self.screen_buffer.cursor.get_current_col();
+        let row = self.screen_buffer.cursor.get_current_row();
+        let col = self.screen_buffer.cursor.get_current_col();
 
-        let line: &mut Vec<ScreenCell> = &mut self.screen_buffer.lines[row];
+        let line = &mut self.screen_buffer.lines[row];
         if col == line.len() {
             line.push(ScreenCell::new(c, self.screen_buffer.style));
         } else {
@@ -147,7 +147,7 @@ impl Screen {
         }
 
         if char_width == 2 {
-            let continuation_col: usize = col + 1;
+            let continuation_col = col + 1;
             if continuation_col == line.len() {
                 line.push(ScreenCell::wide_continuation(self.screen_buffer.style));
             } else {
@@ -182,9 +182,9 @@ impl Screen {
         }
 
         self.screen_buffer.cursor.move_left();
-        let col: usize = self.screen_buffer.cursor.get_current_col();
-        let row: usize = self.screen_buffer.cursor.get_current_row();
-        let line: &mut Vec<ScreenCell> = &mut self.screen_buffer.lines[row];
+        let col = self.screen_buffer.cursor.get_current_col();
+        let row = self.screen_buffer.cursor.get_current_row();
+        let line = &mut self.screen_buffer.lines[row];
 
         if col < line.len() {
             line.remove(col);
@@ -193,7 +193,7 @@ impl Screen {
 
     fn tab(&mut self) {
         // Move to the next tab stop on an 8-column boundary.
-        let next_tab: usize = ((self.screen_buffer.cursor.get_current_col() / 8) + 1) * 8;
+        let next_tab = ((self.screen_buffer.cursor.get_current_col() / 8) + 1) * 8;
         self.move_cursor_to_col(next_tab.min(self.screen_buffer.cols().saturating_sub(1)));
     }
 
@@ -202,7 +202,7 @@ impl Screen {
     }
 
     fn move_cursor_up(&mut self, amount: usize) {
-        let next_row: usize = self
+        let next_row = self
             .screen_buffer
             .cursor
             .get_current_row()
@@ -213,19 +213,19 @@ impl Screen {
     }
 
     fn move_cursor_down(&mut self, amount: usize) {
-        let next_row: usize = self.screen_buffer.cursor.get_current_row() + amount;
+        let next_row = self.screen_buffer.cursor.get_current_row() + amount;
         self.screen_buffer.cursor.move_to_row(next_row);
         self.screen_buffer.pending_wrap = false;
         self.screen_buffer.ensure_cursor_line();
     }
 
     fn move_cursor_forward(&mut self, amount: usize) {
-        let next_col: usize = self.screen_buffer.cursor.get_current_col() + amount;
+        let next_col = self.screen_buffer.cursor.get_current_col() + amount;
         self.move_cursor_to_col(next_col);
     }
 
     fn move_cursor_backward(&mut self, amount: usize) {
-        let next_col: usize = self
+        let next_col = self
             .screen_buffer
             .cursor
             .get_current_col()
@@ -249,14 +249,14 @@ impl Screen {
     }
 
     fn erase_display_before_cursor(&mut self) {
-        let cursor_row: usize = self.screen_buffer.cursor.get_current_row();
-        let cursor_col: usize = self.screen_buffer.cursor.get_current_col();
-        let last_row: usize = cursor_row.min(self.screen_buffer.lines.len().saturating_sub(1));
+        let cursor_row = self.screen_buffer.cursor.get_current_row();
+        let cursor_col = self.screen_buffer.cursor.get_current_col();
+        let last_row = cursor_row.min(self.screen_buffer.lines.len().saturating_sub(1));
 
         for row in 0..=last_row {
             // On the cursor row, erase up to the cursor position.
             // In the rows above, erase to the end of the line by filling spaces.
-            let end: usize = if row == cursor_row {
+            let end = if row == cursor_row {
                 cursor_col
                     .saturating_add(1)
                     .min(self.screen_buffer.lines[row].len())
@@ -273,8 +273,8 @@ impl Screen {
     fn erase_display_after_cursor(&mut self) {
         self.screen_buffer.ensure_cursor_line();
 
-        let cursor_row: usize = self.screen_buffer.cursor.get_current_row();
-        let cursor_col: usize = self.screen_buffer.cursor.get_current_col();
+        let cursor_row = self.screen_buffer.cursor.get_current_row();
+        let cursor_col = self.screen_buffer.cursor.get_current_col();
 
         // Fully clear lines below the cursor.
         for row in cursor_row + 1..self.screen_buffer.lines.len() {
@@ -282,7 +282,7 @@ impl Screen {
         }
 
         // On the cursor row, delete content to the right of the cursor.
-        let line: &mut Vec<ScreenCell> = &mut self.screen_buffer.lines[cursor_row];
+        let line = &mut self.screen_buffer.lines[cursor_row];
         if cursor_col < line.len() {
             line.truncate(cursor_col);
         }
@@ -291,9 +291,9 @@ impl Screen {
     fn delete_characters(&mut self, amount: usize) {
         self.screen_buffer.ensure_cursor_line();
 
-        let row: usize = self.screen_buffer.cursor.get_current_row();
-        let col: usize = self.screen_buffer.cursor.get_current_col();
-        let line: &mut Vec<ScreenCell> = &mut self.screen_buffer.lines[row];
+        let row = self.screen_buffer.cursor.get_current_row();
+        let col = self.screen_buffer.cursor.get_current_col();
+        let line = &mut self.screen_buffer.lines[row];
 
         for _ in 0..amount {
             if col < line.len() {

@@ -2,7 +2,6 @@
 
 use super::SolitoApplication;
 use crate::app::input::{self, AppCommand};
-use solito_renderer::TerminalSize;
 use tracing::error;
 use winit::{
     event::{KeyEvent, WindowEvent},
@@ -62,7 +61,7 @@ impl SolitoApplication {
                 let Some(renderer) = &self.renderer else {
                     return AppCommand::Noop;
                 };
-                let terminal_size: TerminalSize = renderer.terminal_size_for(window_size);
+                let terminal_size = renderer.terminal_size_for(window_size);
                 AppCommand::Resize {
                     window_size,
                     terminal_size,

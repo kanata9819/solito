@@ -42,7 +42,7 @@ impl TerminalView {
         self.copy_mode = copy_mode;
 
         if self.copy_mode.active {
-            let row_count: usize = self.row_count();
+            let row_count = self.row_count();
             self.viewport
                 .scroll_to_include(self.copy_mode.cursor.row, row_count);
         }
@@ -59,7 +59,7 @@ impl TerminalView {
             return Vec::new();
         }
 
-        let row_count: usize = self.row_count();
+        let row_count = self.row_count();
         self.viewport.clamp(row_count);
         let (visible_start, visible_end): (usize, usize) = self.viewport.visible_range(row_count);
         Self::copy_mode_rects_for(
@@ -82,7 +82,7 @@ impl TerminalView {
         line_height: f32,
         has_tab_bar: bool,
     ) -> Vec<RectSpec> {
-        let mut rects: Vec<RectSpec> = Vec::new();
+        let mut rects = Vec::new();
 
         if let Some(selection) = copy_mode.selection {
             for row in visible_start..visible_end {
@@ -90,7 +90,7 @@ impl TerminalView {
                     Self::selected_cols_for_row(selection, row, lines)
                     && start_col < end_col
                 {
-                    let visible_row: usize = row.saturating_sub(visible_start);
+                    let visible_row = row.saturating_sub(visible_start);
                     rects.push(RectSpec::new(
                         Self::PADDING_X + start_col as f32 * cell_width,
                         Self::terminal_row_y(visible_row, line_height, has_tab_bar),
@@ -103,8 +103,8 @@ impl TerminalView {
         }
 
         if copy_mode.cursor.row >= visible_start && copy_mode.cursor.row < visible_end {
-            let visible_row: usize = copy_mode.cursor.row - visible_start;
-            let cursor_col: usize = copy_mode
+            let visible_row = copy_mode.cursor.row - visible_start;
+            let cursor_col = copy_mode
                 .cursor
                 .col
                 .min(Self::display_col_count(lines, copy_mode.cursor.row) - 1);
@@ -145,13 +145,13 @@ impl TerminalView {
                     return None;
                 }
 
-                let col_count: usize = Self::display_col_count(lines, row);
-                let start_col: usize = if row == start.row {
+                let col_count = Self::display_col_count(lines, row);
+                let start_col = if row == start.row {
                     start.col.min(col_count - 1)
                 } else {
                     0
                 };
-                let end_col: usize = if row == end.row {
+                let end_col = if row == end.row {
                     end.col.min(col_count - 1) + 1
                 } else {
                     col_count

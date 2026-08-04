@@ -32,10 +32,7 @@ impl TerminalState {
 #[cfg(test)]
 mod tests {
     use super::TerminalState;
-    use crate::{
-        TerminalSize,
-        screen::buffer::{ScreenCell, ScreenSnapshot},
-    };
+    use crate::{TerminalSize, screen::buffer::ScreenCell};
 
     fn terminal(cols: usize, rows: usize) -> TerminalState {
         TerminalState::new(TerminalSize::new(cols, rows))
@@ -50,10 +47,10 @@ mod tests {
 
     #[test]
     fn applies_cursor_position_and_overwrite() {
-        let mut state: TerminalState = terminal(10, 4);
+        let mut state = terminal(10, 4);
 
         state.apply_terminal_output(b"abc\r\nxyz\x1b[1;2HQ");
-        let snapshot: ScreenSnapshot = state.snapshot();
+        let snapshot = state.snapshot();
 
         assert_eq!(line_text(&snapshot.lines[0]), "aQc");
         assert_eq!(line_text(&snapshot.lines[1]), "xyz");
@@ -61,20 +58,20 @@ mod tests {
 
     #[test]
     fn applies_clear_line_to_end() {
-        let mut state: TerminalState = terminal(10, 4);
+        let mut state = terminal(10, 4);
 
         state.apply_terminal_output(b"abcdef\x1b[1;3H\x1b[K");
-        let snapshot: ScreenSnapshot = state.snapshot();
+        let snapshot = state.snapshot();
 
         assert_eq!(line_text(&snapshot.lines[0]), "ab");
     }
 
     #[test]
     fn wraps_wide_characters_without_splitting_cells() {
-        let mut state: TerminalState = terminal(4, 4);
+        let mut state = terminal(4, 4);
 
         state.apply_terminal_output("abcあz".as_bytes());
-        let snapshot: ScreenSnapshot = state.snapshot();
+        let snapshot = state.snapshot();
 
         assert_eq!(line_text(&snapshot.lines[0]), "abc");
         assert_eq!(line_text(&snapshot.lines[1]), "あz");
@@ -82,10 +79,10 @@ mod tests {
 
     #[test]
     fn exposes_cursor_position_in_snapshot() {
-        let mut state: TerminalState = terminal(10, 4);
+        let mut state = terminal(10, 4);
 
         state.apply_terminal_output(b"abc\r\nxy");
-        let snapshot: ScreenSnapshot = state.snapshot();
+        let snapshot = state.snapshot();
 
         assert_eq!(snapshot.cursor_row, 1);
         assert_eq!(snapshot.cursor_col, 2);
@@ -93,10 +90,10 @@ mod tests {
 
     #[test]
     fn applies_foreground_color_to_cells() {
-        let mut state: TerminalState = terminal(10, 4);
+        let mut state = terminal(10, 4);
 
         state.apply_terminal_output(b"a\x1b[31mR\x1b[39mW");
-        let snapshot: ScreenSnapshot = state.snapshot();
+        let snapshot = state.snapshot();
 
         assert_eq!(snapshot.lines[0][0].foreground_rgba(), None);
         assert_eq!(
@@ -108,20 +105,20 @@ mod tests {
 
     #[test]
     fn applies_cursor_color_from_osc() {
-        let mut state: TerminalState = terminal(10, 4);
+        let mut state = terminal(10, 4);
 
         state.apply_terminal_output(b"\x1b]12;#00ff80\x07");
-        let snapshot: ScreenSnapshot = state.snapshot();
+        let snapshot = state.snapshot();
 
         assert_eq!(snapshot.cursor_color, Some([0, 255, 128, 255]));
     }
 
     #[test]
     fn resets_cursor_color_from_osc() {
-        let mut state: TerminalState = terminal(10, 4);
+        let mut state = terminal(10, 4);
 
         state.apply_terminal_output(b"\x1b]12;#00ff80\x07\x1b]112\x07");
-        let snapshot: ScreenSnapshot = state.snapshot();
+        let snapshot = state.snapshot();
 
         assert_eq!(snapshot.cursor_color, None);
     }

@@ -1,7 +1,7 @@
 use bytemuck::{Pod, Zeroable};
+use wgpu::Buffer;
 use wgpu::util::DeviceExt;
 use wgpu::wgt::SurfaceConfiguration;
-use wgpu::{Buffer, ShaderModule};
 
 pub(crate) struct RectPipeline {
     pipeline: wgpu::RenderPipeline,
@@ -77,59 +77,57 @@ impl RectPipeline {
         window_width: u32,
         window_height: u32,
     ) -> Self {
-        let shader: ShaderModule =
-            device.create_shader_module(wgpu::include_wgsl!("../shader/rect.wgsl"));
-        let bind_group_layout: wgpu::BindGroupLayout = Self::rect_bind_group_layout(device);
+        let shader = device.create_shader_module(wgpu::include_wgsl!("../shader/rect.wgsl"));
+        let bind_group_layout = Self::rect_bind_group_layout(device);
 
-        let render_pipeline_layout: wgpu::PipelineLayout =
+        let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
                 bind_group_layouts: &[Some(&bind_group_layout)],
                 immediate_size: 0,
             });
 
-        let render_pipeline: wgpu::RenderPipeline =
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("Render Pipeline"),
-                layout: Some(&render_pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: Some("vs_main"),
-                    buffers: &[Some(wgpu::VertexBufferLayout {
-                        array_stride: std::mem::size_of::<RectInstance>() as wgpu::BufferAddress,
-                        step_mode: wgpu::VertexStepMode::Instance,
-                        attributes: &RECT_INSTANCE_ATTRIBUTES,
-                    })],
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: Some("fs_main"),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: config.format,
-                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                }),
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: Some(wgpu::Face::Back),
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    unclipped_depth: false,
-                    conservative: false,
-                },
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState {
-                    count: 1,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
-                multiview_mask: None,
-                cache: None,
-            });
+        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Render Pipeline"),
+            layout: Some(&render_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                buffers: &[Some(wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<RectInstance>() as wgpu::BufferAddress,
+                    step_mode: wgpu::VertexStepMode::Instance,
+                    attributes: &RECT_INSTANCE_ATTRIBUTES,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview_mask: None,
+            cache: None,
+        });
 
         Self::update_screen_uniform(ScreenUniform {
             uniform_buffer,
@@ -159,7 +157,7 @@ impl RectPipeline {
         device: &wgpu::Device,
         uniform_buffer: &Buffer,
     ) -> wgpu::BindGroup {
-        let bind_group: wgpu::BindGroup = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Rect Bind Group"),
             layout: &self.layout,
             entries: &[wgpu::BindGroupEntry {
@@ -186,26 +184,25 @@ impl RectPipeline {
     }
 
     fn rect_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
-        let bind_group_layout: wgpu::BindGroupLayout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Rect Layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-            });
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Rect Layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
 
         bind_group_layout
     }
 
     pub(crate) fn create_screen_uniform_buffer(device: &wgpu::Device) -> wgpu::Buffer {
-        let screen_uniform_buffer: wgpu::Buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        let screen_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Rect Screen Uniform Buffer"),
             size: std::mem::size_of::<[f32; 4]>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
@@ -223,7 +220,11 @@ impl RectPipeline {
             return None;
         }
 
-        let instances: Vec<RectInstance> = rects.iter().copied().map(RectInstance::from).collect();
+        let instances = rects
+            .iter()
+            .copied()
+            .map(RectInstance::from)
+            .collect::<Vec<_>>();
 
         Some(
             device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

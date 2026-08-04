@@ -5,7 +5,6 @@ use crate::{
     app::input::{AppCommand, CopyModeCommand},
     session::runtime::SessionInput,
 };
-use solito_renderer::TerminalSize;
 use winit::event_loop::ActiveEventLoop;
 
 impl SolitoApplication {
@@ -46,7 +45,7 @@ impl SolitoApplication {
             AppCommand::NewTab => {
                 self.leave_copy_mode();
                 if let Some(renderer) = &mut self.renderer {
-                    let size: TerminalSize = renderer.terminal_size();
+                    let size = renderer.terminal_size();
                     self.tabs.open(size, self.config.shell.program.clone());
                     self.refresh_tab_bar();
                     self.show_active_terminal_at_bottom();

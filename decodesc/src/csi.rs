@@ -41,7 +41,7 @@ pub enum CsiMessage {
 
 #[must_use]
 pub fn decode_csi(params: &Params, intermediates: &[u8], ignore: bool, action: char) -> CsiMessage {
-    let amount: u16 = param(params, 0, 1);
+    let amount = param(params, 0, 1);
 
     match action {
         'A' => CsiMessage::CursorUp(amount),
@@ -95,7 +95,7 @@ fn param(params: &Params, index: usize, default: u16) -> u16 {
 }
 
 fn graphics_rendition_params(params: &Params) -> Vec<u16> {
-    let collected: Vec<u16> = params_to_vec(params);
+    let collected = params_to_vec(params);
 
     if collected.is_empty() {
         vec![0]

@@ -30,7 +30,7 @@ pub struct TabBarSnapshot {
 
 impl TabBarSnapshot {
     pub fn new(titles: Vec<String>, active_index: usize) -> Self {
-        let active_index: usize = active_index.min(titles.len().saturating_sub(1));
+        let active_index = active_index.min(titles.len().saturating_sub(1));
 
         Self {
             titles,
@@ -70,7 +70,7 @@ impl TerminalView {
         font_family: &'a str,
         cell_width: f32,
     ) -> Vec<(String, Attrs<'a>)> {
-        let mut spans: Vec<(String, Attrs<'a>)> = Vec::new();
+        let mut spans = Vec::new();
 
         if tab_bar.titles().len() <= 1 {
             return spans;
@@ -84,8 +84,8 @@ impl TerminalView {
                 ));
             }
 
-            let active: bool = index == tab_bar.active_index();
-            let text: String = Self::padded_tab_title(title);
+            let active = index == tab_bar.active_index();
+            let text = Self::padded_tab_title(title);
 
             let color: [u8; 4] = if active {
                 TabStyle::TAB_ACTIVE_TEXT_COLOR
@@ -112,8 +112,8 @@ impl TerminalView {
         width: f32,
         color: [f32; 4],
     ) -> RectSpec {
-        let bottom_slant: f32 = TabStyle::TAB_SLANT * (1.0 - (strip_y + strip_height) / tab_height);
-        let strip_slant: f32 = TabStyle::TAB_SLANT * strip_height / tab_height;
+        let bottom_slant = TabStyle::TAB_SLANT * (1.0 - (strip_y + strip_height) / tab_height);
+        let strip_slant = TabStyle::TAB_SLANT * strip_height / tab_height;
 
         RectSpec::slanted(
             tab_x + bottom_slant,
@@ -130,25 +130,25 @@ impl TerminalView {
         cell_width: f32,
         line_height: f32,
     ) -> Vec<RectSpec> {
-        let mut rects: Vec<RectSpec> = Vec::new();
+        let mut rects = Vec::new();
 
         if tab_bar.titles().len() <= 1 {
             return rects;
         }
 
-        let mut x: f32 = Self::PADDING_X;
-        let tab_y: f32 = 6.0;
-        let tab_height: f32 = Self::tab_bar_height_for(line_height) + 2.0;
-        let tab_text_gap_width: f32 = Self::tab_text_gap_chars(cell_width) as f32 * cell_width;
+        let mut x = Self::PADDING_X;
+        let tab_y = 6.0;
+        let tab_height = Self::tab_bar_height_for(line_height) + 2.0;
+        let tab_text_gap_width = Self::tab_text_gap_chars(cell_width) as f32 * cell_width;
 
         for (index, title) in tab_bar.titles().iter().enumerate() {
             if index > 0 {
                 x += (tab_text_gap_width - TabStyle::TAB_SLANT).max(0.0);
             }
 
-            let tab_width: f32 = Self::tab_title_width(title, cell_width);
-            let slanted_width: f32 = tab_width + TabStyle::TAB_SLANT;
-            let active: bool = index == tab_bar.active_index();
+            let tab_width = Self::tab_title_width(title, cell_width);
+            let slanted_width = tab_width + TabStyle::TAB_SLANT;
+            let active = index == tab_bar.active_index();
             let background: [f32; 4] = if active {
                 TabStyle::TAB_ACTIVE_BACKGROUND
             } else {
@@ -205,8 +205,7 @@ impl TerminalView {
     }
 
     fn tab_text_gap_chars(cell_width: f32) -> usize {
-        let gap_width: f32 =
-            cell_width * TabStyle::TAB_GAP_CHARS as f32 + TabStyle::TAB_SLANT * 2.0;
+        let gap_width = cell_width * TabStyle::TAB_GAP_CHARS as f32 + TabStyle::TAB_SLANT * 2.0;
 
         (gap_width / cell_width).ceil() as usize
     }
@@ -230,15 +229,14 @@ mod tests {
 
     #[test]
     fn clamps_active_index_to_existing_tabs() {
-        let snapshot: TabBarSnapshot = TabBarSnapshot::new(vec!["Tab 1".to_string()], 99);
+        let snapshot = TabBarSnapshot::new(vec!["Tab 1".to_string()], 99);
 
         assert_eq!(snapshot.active_index(), 0);
     }
 
     #[test]
     fn tab_bar_text_gap_matches_next_tab_rect() {
-        let snapshot: TabBarSnapshot =
-            TabBarSnapshot::new(vec!["Tab 1".to_string(), "Tab 2".to_string()], 0);
+        let snapshot = TabBarSnapshot::new(vec!["Tab 1".to_string(), "Tab 2".to_string()], 0);
         let cell_width = 10.0;
         let spans =
             TerminalView::tab_bar_spans_for(&snapshot, RendererConfig::DEFAULT_FONT_FAMILY, 10.0);
@@ -247,7 +245,7 @@ mod tests {
             cell_width,
             RendererConfig::DEFAULT_LINE_HEIGHT,
         );
-        let second_tab_text_x: f32 =
+        let second_tab_text_x =
             TerminalView::PADDING_X + (spans[0].0.len() + spans[1].0.len()) as f32 * cell_width;
 
         assert_eq!(second_tab_text_x, rects[3].x);
@@ -255,7 +253,7 @@ mod tests {
 
     #[test]
     fn tab_bar_rects_hide_for_single_tab() {
-        let snapshot: TabBarSnapshot = TabBarSnapshot::new(vec!["Tab 1".to_string()], 0);
+        let snapshot = TabBarSnapshot::new(vec!["Tab 1".to_string()], 0);
 
         assert!(
             TerminalView::tab_bar_rects_for(&snapshot, 10.0, RendererConfig::DEFAULT_LINE_HEIGHT)
@@ -265,8 +263,7 @@ mod tests {
 
     #[test]
     fn tab_bar_rects_include_background_tabs_and_active_accents() {
-        let snapshot: TabBarSnapshot =
-            TabBarSnapshot::new(vec!["Tab 1".to_string(), "Tab 2".to_string()], 0);
+        let snapshot = TabBarSnapshot::new(vec!["Tab 1".to_string(), "Tab 2".to_string()], 0);
         let rects =
             TerminalView::tab_bar_rects_for(&snapshot, 10.0, RendererConfig::DEFAULT_LINE_HEIGHT);
 
@@ -291,8 +288,7 @@ mod tests {
 
     #[test]
     fn tab_bar_spans_mark_active_tab() {
-        let snapshot: TabBarSnapshot =
-            TabBarSnapshot::new(vec!["Tab 1".to_string(), "Tab 2".to_string()], 0);
+        let snapshot = TabBarSnapshot::new(vec!["Tab 1".to_string(), "Tab 2".to_string()], 0);
         let spans =
             TerminalView::tab_bar_spans_for(&snapshot, RendererConfig::DEFAULT_FONT_FAMILY, 10.0);
 

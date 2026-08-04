@@ -27,26 +27,26 @@ impl GlyphonResources {
         scale_factor: f64,
         config: &RendererConfig,
     ) -> Self {
-        let mut font_system: FontSystem = FontSystem::new();
-        let swash_cache: SwashCache = SwashCache::new();
-        let cache: Cache = Cache::new(device);
-        let viewport: Viewport = Viewport::new(device, &cache);
-        let mut atlas: TextAtlas = TextAtlas::new(device, queue, &cache, swapchain);
-        let text_renderer: TextRenderer =
+        let mut font_system = FontSystem::new();
+        let swash_cache = SwashCache::new();
+        let cache = Cache::new(device);
+        let viewport = Viewport::new(device, &cache);
+        let mut atlas = TextAtlas::new(device, queue, &cache, swapchain);
+        let text_renderer =
             TextRenderer::new(&mut atlas, device, MultisampleState::default(), None);
-        let mut text_buffer: Buffer = Buffer::new(
+        let mut text_buffer = Buffer::new(
             &mut font_system,
             Metrics::new(config.font_size, config.line_height),
         );
         text_buffer.set_wrap(Wrap::None);
 
-        let physical_width: f32 = (f64::from(physical_size.width) * scale_factor) as f32;
-        let physical_height: f32 = (f64::from(physical_size.height) * scale_factor) as f32;
+        let physical_width = (f64::from(physical_size.width) * scale_factor) as f32;
+        let physical_height = (f64::from(physical_size.height) * scale_factor) as f32;
 
         text_buffer.set_size(Some(physical_width), Some(physical_height));
 
         text_buffer.shape_until_scroll(&mut font_system, false);
-        let cell_width: f32 = Self::measure_font_width(&mut font_system, config).max(1.0);
+        let cell_width = Self::measure_font_width(&mut font_system, config).max(1.0);
 
         Self {
             text_buffer,
@@ -72,7 +72,7 @@ impl GlyphonResources {
         config: &RendererConfig,
         text: &str,
     ) -> f32 {
-        let mut buffer: Buffer = Buffer::new(
+        let mut buffer = Buffer::new(
             font_system,
             Metrics::new(config.font_size, config.line_height),
         );

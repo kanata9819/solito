@@ -47,7 +47,7 @@ impl Renderer {
     ) -> Result<(), Box<dyn Error>> {
         self.update_rect_screen_uniform();
 
-        let mut rects: Vec<rect::RectSpec> = self.terminal_view.tab_bar_rects();
+        let mut rects = self.terminal_view.tab_bar_rects();
         rects.extend(self.terminal_view.copy_mode_rects());
 
         // Copy mode draws its own cursor over the scrollback. Hiding the shell
@@ -66,14 +66,14 @@ impl Renderer {
             }
         }
 
-        let rect_instance_buffer: Option<wgpu::Buffer> =
+        let rect_instance_buffer =
             rect::RectPipeline::create_instance_buffer(&self.gpu.device, &rects);
-        let rect_bind_group: wgpu::BindGroup = self
+        let rect_bind_group = self
             .render_resources
             .rect_pipeline
             .rect_bind_group(&self.gpu.device, &self.render_resources.uniform_buffer);
 
-        let mut render_pass: wgpu::RenderPass<'_> =
+        let mut render_pass =
             pass::begin_render_pass(encoder, view, self.window_surface.clear_color);
 
         if let Some(rect_instance_buffer) = rect_instance_buffer.as_ref() {
@@ -167,7 +167,7 @@ impl Renderer {
 
         self.prepare_text()?;
 
-        let frame: Option<SurfaceTexture> = match self.acquire_frame() {
+        let frame = match self.acquire_frame() {
             Ok(frame) => frame,
             Err(err) => {
                 tracing::error!("acquire frame failed: {err}");
@@ -176,8 +176,8 @@ impl Renderer {
         };
 
         if let Some(frame) = frame {
-            let view: TextureView = frame.texture.create_view(&TextureViewDescriptor::default());
-            let mut encoder: CommandEncoder = self.create_encoder();
+            let view = frame.texture.create_view(&TextureViewDescriptor::default());
+            let mut encoder = self.create_encoder();
             self.draw_to_view(&mut encoder, &view)?;
             self.gpu.queue.submit(Some(encoder.finish()));
             self.gpu.queue.present(frame);

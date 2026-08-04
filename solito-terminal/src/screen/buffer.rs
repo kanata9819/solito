@@ -100,7 +100,7 @@ impl ScreenBuffer {
 
     pub(super) fn ensure_cursor_col(&mut self) {
         self.ensure_cursor_line();
-        let line: &mut Vec<ScreenCell> = &mut self.lines[self.cursor.get_current_row()];
+        let line = &mut self.lines[self.cursor.get_current_row()];
 
         while line.len() < self.cursor.get_current_col() {
             line.push(ScreenCell::blank(self.style));

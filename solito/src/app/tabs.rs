@@ -27,7 +27,7 @@ impl Tab {
     fn spawn(size: TerminalSize, shell_program: String) -> Self {
         let (input_tx, input_rx) = channel::<SessionInput>();
         let (output_tx, output_rx) = channel::<Vec<u8>>();
-        let title: String = tab_title_for_program(&shell_program);
+        let title = tab_title_for_program(&shell_program);
 
         std::thread::spawn(move || {
             let result = SessionRuntime::new(input_rx, output_tx, size, &shell_program)
@@ -60,7 +60,7 @@ impl TerminalTab for Tab {
     }
 
     fn drain_output(&mut self) -> bool {
-        let mut updated: bool = false;
+        let mut updated = false;
         while let Ok(output) = self.output_rx.try_recv() {
             self.terminal.apply_terminal_output(&output);
             updated = true;
@@ -139,11 +139,11 @@ impl<T: TerminalTab> Tabs<T> {
     }
 
     pub(super) fn drain_outputs(&mut self) -> bool {
-        let active: usize = self.active;
-        let mut active_updated: bool = false;
+        let active = self.active;
+        let mut active_updated = false;
 
         for (index, tab) in self.tabs.iter_mut().enumerate() {
-            let updated: bool = tab.drain_output();
+            let updated = tab.drain_output();
             active_updated |= updated && index == active;
         }
 
@@ -187,7 +187,7 @@ impl<T: TerminalTab> Tabs<T> {
 }
 
 fn tab_title_for_program(program: &str) -> String {
-    let program: &str = program.trim();
+    let program = program.trim();
 
     if program.is_empty() {
         return "shell".to_string();
@@ -252,7 +252,7 @@ mod tests {
 
     #[test]
     fn activating_tabs_wraps_around() {
-        let mut tabs: Tabs<FakeTab> = Tabs::new();
+        let mut tabs = Tabs::new();
         tabs.push(FakeTab::new());
         tabs.push(FakeTab::new());
 
@@ -265,7 +265,7 @@ mod tests {
 
     #[test]
     fn closing_active_tab_selects_neighbor() {
-        let mut tabs: Tabs<FakeTab> = Tabs::new();
+        let mut tabs = Tabs::new();
         tabs.push(FakeTab::new());
         tabs.push(FakeTab::new());
         tabs.push(FakeTab::new());
@@ -278,7 +278,7 @@ mod tests {
 
     #[test]
     fn closing_last_tab_leaves_tabs_empty() {
-        let mut tabs: Tabs<FakeTab> = Tabs::new();
+        let mut tabs = Tabs::new();
         tabs.push(FakeTab::new());
 
         assert!(tabs.close_active());

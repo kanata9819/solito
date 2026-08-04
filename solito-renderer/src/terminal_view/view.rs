@@ -29,8 +29,8 @@ impl TerminalView {
         scale_factor: f64,
         config: RendererConfig,
     ) -> Self {
-        let config: RendererConfig = config.sanitized();
-        let mut glyphs: GlyphonResources = GlyphonResources::new(
+        let config = config.sanitized();
+        let mut glyphs = GlyphonResources::new(
             device,
             queue,
             swapchain,
@@ -64,12 +64,11 @@ impl TerminalView {
         height: u32,
         config: &RendererConfig,
     ) -> TerminalSize {
-        let config: RendererConfig = config.clone().sanitized();
-        let mut font_system: FontSystem = FontSystem::new();
-        let cell_width: f32 =
-            GlyphonResources::measure_font_width(&mut font_system, &config).max(1.0);
-        let content_width: u32 = Self::terminal_content_width(width);
-        let content_height: u32 = Self::terminal_content_height(height, config.line_height);
+        let config = config.clone().sanitized();
+        let mut font_system = FontSystem::new();
+        let cell_width = GlyphonResources::measure_font_width(&mut font_system, &config).max(1.0);
+        let content_width = Self::terminal_content_width(width);
+        let content_height = Self::terminal_content_height(height, config.line_height);
 
         TerminalSize::new(
             ((content_width as f32 / cell_width).floor() as usize).max(1),
@@ -88,7 +87,7 @@ impl TerminalView {
     }
 
     pub(crate) fn set_snapshot(&mut self, snapshot: ScreenSnapshot) {
-        let keep_start: Option<usize> = if self.viewport.is_at_bottom() {
+        let keep_start = if self.viewport.is_at_bottom() {
             None
         } else {
             Some(self.viewport.visible_range(self.row_count()).0)
@@ -117,13 +116,13 @@ impl TerminalView {
     }
 
     pub(crate) fn visible_cols(&self, width: u32) -> usize {
-        let content_width: u32 = Self::terminal_content_width(width);
+        let content_width = Self::terminal_content_width(width);
 
         ((content_width as f32 / self.glyphs.cell_width).floor() as usize).max(1)
     }
 
     pub(crate) fn visible_rows(&self, height: u32) -> usize {
-        let content_height: u32 = Self::terminal_content_height(height, self.config.line_height);
+        let content_height = Self::terminal_content_height(height, self.config.line_height);
         ((content_height as f32 / self.config.line_height).floor() as usize).max(1)
     }
 

@@ -6,7 +6,7 @@ impl TerminalView {
     pub(super) const DEFAULT_CARET_COLOR: [f32; 4] = ThemeColor::WHITE_ALPHA;
 
     pub(crate) fn caret_rect(&mut self) -> (f32, f32, f32, f32) {
-        let row_count: usize = self.row_count();
+        let row_count = self.row_count();
         self.viewport.clamp(row_count);
         let (start, end): (usize, usize) = self.viewport.visible_range(row_count);
 
@@ -14,10 +14,9 @@ impl TerminalView {
             return (Self::PADDING_X, self.terminal_origin_y(), 0.0, 0.0);
         }
 
-        let visible_row: usize = self.snapshot.cursor_row - start;
-        let caret_x: f32 =
-            Self::PADDING_X + self.snapshot.cursor_col as f32 * self.glyphs.cell_width;
-        let caret_y: f32 = if self.tab_bar.titles().len() <= 1 {
+        let visible_row = self.snapshot.cursor_row - start;
+        let caret_x = Self::PADDING_X + self.snapshot.cursor_col as f32 * self.glyphs.cell_width;
+        let caret_y = if self.tab_bar.titles().len() <= 1 {
             Self::PADDING_Y + visible_row as f32 * self.config.line_height
         } else {
             Self::PADDING_Y + self.config.line_height + visible_row as f32 * self.config.line_height

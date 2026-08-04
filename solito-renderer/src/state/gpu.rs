@@ -24,7 +24,7 @@ impl GpuContext {
         instance: Instance,
         surface: &Surface<'_>,
     ) -> Result<Self, Box<dyn Error>> {
-        let adapter: Adapter = instance
+        let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
                 compatible_surface: Some(surface),

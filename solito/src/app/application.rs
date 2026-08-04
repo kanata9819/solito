@@ -22,7 +22,7 @@ use winit::{
     window::{Window, WindowAttributes, WindowId},
 };
 
-use crate::app::{copy::CopyMode, icon, input::AppCommand, tabs::AppTabs};
+use crate::app::{copy::CopyMode, icon, tabs::AppTabs};
 
 pub(super) type AppResult<T = ()> = Result<T, Box<dyn Error>>;
 
@@ -136,7 +136,7 @@ impl ApplicationHandler for SolitoApplication {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        let command: AppCommand = self.handle_window_event(event_loop, window_id, event);
+        let command = self.handle_window_event(event_loop, window_id, event);
 
         if let Err(err) = self.handle_command(command, event_loop) {
             error!("application command failed: {err}");

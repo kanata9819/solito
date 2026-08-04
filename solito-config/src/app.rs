@@ -17,16 +17,16 @@ pub struct AppConfig {
 
 impl AppConfig {
     pub fn load_or_create() -> Result<Self, Box<dyn Error>> {
-        let paths: AppPaths = AppPaths::resolve()?;
+        let paths = AppPaths::resolve()?;
         paths.ensure_config_dir()?;
 
         if !paths.config_file.exists() {
-            let default_config: String = toml::to_string_pretty(&Self::default())?;
+            let default_config = toml::to_string_pretty(&Self::default())?;
             fs::write(&paths.config_file, default_config)?;
         }
 
-        let config_text: String = fs::read_to_string(&paths.config_file)?;
-        let config: Self = toml::from_str::<Self>(&config_text)?.sanitized();
+        let config_text = fs::read_to_string(&paths.config_file)?;
+        let config = toml::from_str::<Self>(&config_text)?.sanitized();
 
         Ok(config)
     }
@@ -87,7 +87,7 @@ pub struct WindowConfig {
 
 impl WindowConfig {
     fn sanitized(mut self) -> Self {
-        let default: Self = Self::default();
+        let default = Self::default();
         self.width = sanitize_positive_f32(self.width, default.width);
         self.height = sanitize_positive_f32(self.height, default.height);
 
@@ -146,7 +146,7 @@ pub(crate) struct FontConfig {
 
 impl FontConfig {
     fn sanitized(mut self) -> Self {
-        let default: Self = Self::default();
+        let default = Self::default();
 
         if self.family.trim().is_empty() {
             self.family = default.family;
@@ -201,10 +201,9 @@ struct AppPaths {
 
 impl AppPaths {
     fn resolve() -> Result<Self, Box<dyn Error>> {
-        let base_dirs: BaseDirs =
-            BaseDirs::new().ok_or("failed to resolve user directories for config")?;
-        let config_dir: PathBuf = base_dirs.data_local_dir().join(APP_DIR_NAME);
-        let config_file: PathBuf = config_dir.join("config.toml");
+        let base_dirs = BaseDirs::new().ok_or("failed to resolve user directories for config")?;
+        let config_dir = base_dirs.data_local_dir().join(APP_DIR_NAME);
+        let config_file = config_dir.join("config.toml");
 
         Ok(Self {
             config_dir,
@@ -233,7 +232,7 @@ mod tests {
 
     #[test]
     fn partial_config_uses_defaults() {
-        let config: AppConfig = toml::from_str(
+        let config = toml::from_str::<AppConfig>(
             r#"
             [font]
             size = 16.0
@@ -249,7 +248,7 @@ mod tests {
 
     #[test]
     fn renderer_config_maps_window_and_font_settings() {
-        let config: AppConfig = toml::from_str(
+        let config = toml::from_str::<AppConfig>(
             r#"
             [window]
             backdrop = "transparent"
@@ -263,7 +262,7 @@ mod tests {
         )
         .unwrap();
 
-        let renderer_config: RendererConfig = config.renderer_config();
+        let renderer_config = config.renderer_config();
 
         assert_eq!(renderer_config.font_family, "JetBrains Mono");
         assert_eq!(renderer_config.font_size, 18.0);
@@ -274,7 +273,7 @@ mod tests {
 
     #[test]
     fn invalid_config_values_fall_back_to_defaults() {
-        let config: AppConfig = AppConfig {
+        let config = AppConfig {
             shell: super::ShellConfig {
                 program: String::new(),
             },
