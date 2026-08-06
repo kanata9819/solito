@@ -44,7 +44,7 @@ impl ViewportState {
     pub(super) fn scroll_to_start(&mut self, start: usize, row_count: usize) {
         let start = start.min(row_count.saturating_sub(self.visible_rows));
         let end = start.saturating_add(self.visible_rows).min(row_count);
-        self.scroll_offset = row_count.saturating_sub(end as usize) as f32;
+        self.scroll_offset = row_count.saturating_sub(end) as f32;
         self.scroll_accumulator = 0.0;
         self.clamp(row_count);
     }

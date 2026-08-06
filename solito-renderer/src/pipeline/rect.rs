@@ -157,16 +157,16 @@ impl RectPipeline {
         device: &wgpu::Device,
         uniform_buffer: &Buffer,
     ) -> wgpu::BindGroup {
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        
+
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Rect Bind Group"),
             layout: &self.layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: uniform_buffer.as_entire_binding(),
             }],
-        });
-
-        bind_group
+        })
     }
 
     pub(crate) fn update_screen_uniform(uniform: ScreenUniform) {
@@ -184,7 +184,9 @@ impl RectPipeline {
     }
 
     fn rect_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        
+
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Rect Layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
@@ -196,20 +198,18 @@ impl RectPipeline {
                 },
                 count: None,
             }],
-        });
-
-        bind_group_layout
+        })
     }
 
     pub(crate) fn create_screen_uniform_buffer(device: &wgpu::Device) -> wgpu::Buffer {
-        let screen_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        
+
+        device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Rect Screen Uniform Buffer"),
             size: std::mem::size_of::<[f32; 4]>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
-        });
-
-        screen_uniform_buffer
+        })
     }
 
     pub(crate) fn create_instance_buffer(
