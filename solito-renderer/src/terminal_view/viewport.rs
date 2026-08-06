@@ -50,13 +50,9 @@ impl ViewportState {
     }
 
     pub(super) fn scroll(&mut self, y: f32, row_count: usize) {
-        // self.scroll_accumulator += y;
+        self.scroll_accumulator += y;
 
-        if y < 0.0 {
-            self.scroll_offset -= y;
-        } else {
-            self.scroll_offset += y;
-        }
+        self.scroll_offset += y;
 
         self.clamp(row_count);
     }

@@ -8,7 +8,7 @@ impl TerminalView {
     pub(crate) fn caret_rect(&mut self) -> (f32, f32, f32, f32) {
         let row_count = self.row_count();
         self.viewport.clamp(row_count);
-        let (start, end): (usize, usize) = self.viewport.visible_range(row_count);
+        let (start, end) = self.viewport.visible_range(row_count);
 
         if self.snapshot.cursor_row < start || self.snapshot.cursor_row >= end {
             return (Self::PADDING_X, self.terminal_origin_y(), 0.0, 0.0);

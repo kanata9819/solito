@@ -68,6 +68,7 @@ impl Renderer {
 
         let rect_instance_buffer =
             rect::RectPipeline::create_instance_buffer(&self.gpu.device, &rects);
+
         let rect_bind_group = self
             .render_resources
             .rect_pipeline
