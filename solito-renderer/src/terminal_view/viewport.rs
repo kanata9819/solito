@@ -1,6 +1,6 @@
 pub(super) struct ViewportState {
     line_height: f32,
-    scroll_offset: f32,
+    scroll_offset: usize,
     scroll_accumulator: f32,
     visible_rows: usize,
 }
@@ -9,7 +9,7 @@ impl ViewportState {
     pub(super) fn new(height: u32, line_height: f32) -> Self {
         Self {
             line_height,
-            scroll_offset: 0.0,
+            scroll_offset: 0,
             scroll_accumulator: 0.0,
             visible_rows: Self::visible_rows(height, line_height),
         }
@@ -27,24 +27,22 @@ impl ViewportState {
     }
 
     pub(super) fn clamp(&mut self, row_count: usize) {
-        self.scroll_offset = self
-            .scroll_offset
-            .min(self.max_scroll_offset(row_count) as f32);
+        self.scroll_offset = self.scroll_offset.min(self.max_scroll_offset(row_count));
     }
 
     pub(super) fn reset(&mut self) {
-        self.scroll_offset = 0.0;
+        self.scroll_offset = 0;
         self.scroll_accumulator = 0.0;
     }
 
     pub(super) fn is_at_bottom(&self) -> bool {
-        self.scroll_offset == 0.0
+        self.scroll_offset == 0
     }
 
     pub(super) fn scroll_to_start(&mut self, start: usize, row_count: usize) {
         let start = start.min(row_count.saturating_sub(self.visible_rows));
         let end = start.saturating_add(self.visible_rows).min(row_count);
-        self.scroll_offset = row_count.saturating_sub(end) as f32;
+        self.scroll_offset = row_count.saturating_sub(end);
         self.scroll_accumulator = 0.0;
         self.clamp(row_count);
     }
@@ -52,7 +50,13 @@ impl ViewportState {
     pub(super) fn scroll(&mut self, y: f32, row_count: usize) {
         self.scroll_accumulator += y;
 
-        self.scroll_offset += y;
+        if self.scroll_accumulator >= 1.0 {
+            self.scroll_offset = self.scroll_offset.saturating_add(1);
+            self.scroll_accumulator -= 1.0;
+        } else {
+            self.scroll_offset = self.scroll_offset.saturating_sub(1);
+            self.scroll_accumulator += 1.0;
+        }
 
         self.clamp(row_count);
     }
@@ -63,9 +67,9 @@ impl ViewportState {
 
         if row < start {
             let desired_end = row.saturating_add(self.visible_rows).min(row_count);
-            self.scroll_offset = row_count.saturating_sub(desired_end) as f32;
+            self.scroll_offset = row_count.saturating_sub(desired_end);
         } else if row >= end {
-            self.scroll_offset = row_count.saturating_sub(row.saturating_add(1)) as f32;
+            self.scroll_offset = row_count.saturating_sub(row.saturating_add(1));
         }
 
         self.scroll_accumulator = 0.0;
