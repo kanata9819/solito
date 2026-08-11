@@ -157,8 +157,6 @@ impl RectPipeline {
         device: &wgpu::Device,
         uniform_buffer: &Buffer,
     ) -> wgpu::BindGroup {
-        
-
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Rect Bind Group"),
             layout: &self.layout,
@@ -184,8 +182,6 @@ impl RectPipeline {
     }
 
     fn rect_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
-        
-
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Rect Layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -202,8 +198,6 @@ impl RectPipeline {
     }
 
     pub(crate) fn create_screen_uniform_buffer(device: &wgpu::Device) -> wgpu::Buffer {
-        
-
         device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Rect Screen Uniform Buffer"),
             size: std::mem::size_of::<[f32; 4]>() as u64,
