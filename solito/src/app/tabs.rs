@@ -7,6 +7,9 @@ use std::{
     sync::mpsc::{Receiver, Sender, channel},
 };
 use tracing::error;
+use winit::event_loop::EventLoopProxy;
+
+use crate::app::event::AppEvent;
 
 pub(super) trait TerminalTab {
     fn input_tx(&self) -> &Sender<SessionInput>;
@@ -24,14 +27,19 @@ pub(super) struct Tab {
 }
 
 impl Tab {
-    fn spawn(size: TerminalSize, shell_program: String) -> Self {
+    fn spawn(
+        size: TerminalSize,
+        shell_program: String,
+        event_proxy: EventLoopProxy<AppEvent>,
+    ) -> Self {
         let (input_tx, input_rx) = channel::<SessionInput>();
         let (output_tx, output_rx) = channel::<Vec<u8>>();
         let title = tab_title_for_program(&shell_program);
 
         std::thread::spawn(move || {
-            let result = SessionRuntime::new(input_rx, output_tx, size, &shell_program)
-                .and_then(SessionRuntime::run_session);
+            let result =
+                SessionRuntime::new(input_rx, output_tx, event_proxy, size, &shell_program)
+                    .and_then(SessionRuntime::run_session);
             if let Err(err) = result {
                 error!("terminal session failed: {err}");
             }
@@ -113,8 +121,13 @@ impl<T> Tabs<T> {
 }
 
 impl Tabs<Tab> {
-    pub(super) fn open(&mut self, size: TerminalSize, shell_program: String) {
-        self.push(Tab::spawn(size, shell_program));
+    pub(super) fn open(
+        &mut self,
+        size: TerminalSize,
+        shell_program: String,
+        event_proxy: EventLoopProxy<AppEvent>,
+    ) {
+        self.push(Tab::spawn(size, shell_program, event_proxy));
     }
 }
 

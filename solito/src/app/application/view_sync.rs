@@ -17,6 +17,7 @@ impl SolitoApplication {
             let copy_mode = self.copy_mode.renderer_snapshot(&snapshot);
             renderer.set_terminal_snapshot(snapshot);
             renderer.set_copy_mode(copy_mode);
+            self.needs_redraw = true;
         }
     }
 
@@ -26,6 +27,7 @@ impl SolitoApplication {
             let copy_mode = self.copy_mode.renderer_snapshot(&snapshot);
             renderer.set_terminal_snapshot_at_bottom(snapshot);
             renderer.set_copy_mode(copy_mode);
+            self.needs_redraw = true;
         }
     }
 
@@ -33,6 +35,7 @@ impl SolitoApplication {
         let snapshot = self.tab_bar_snapshot();
         if let Some(renderer) = &mut self.renderer {
             renderer.set_tab_bar(snapshot);
+            self.needs_redraw = true;
         }
     }
 
@@ -43,6 +46,7 @@ impl SolitoApplication {
     pub(super) fn refresh_copy_mode(&mut self, snapshot: &ScreenSnapshot) {
         if let Some(renderer) = &mut self.renderer {
             renderer.set_copy_mode(self.copy_mode.renderer_snapshot(snapshot));
+            self.needs_redraw = true;
         }
     }
 
@@ -54,6 +58,7 @@ impl SolitoApplication {
         self.copy_mode.exit();
         if let Some(renderer) = &mut self.renderer {
             renderer.set_copy_mode(Default::default());
+            self.needs_redraw = true;
         }
         self.update_window_title();
     }

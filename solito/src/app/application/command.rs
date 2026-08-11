@@ -46,7 +46,11 @@ impl SolitoApplication {
                 self.leave_copy_mode();
                 if let Some(renderer) = &mut self.renderer {
                     let size = renderer.terminal_size();
-                    self.tabs.open(size, self.config.shell.program.clone());
+                    self.tabs.open(
+                        size,
+                        self.config.shell.program.clone(),
+                        self.event_proxy.clone(),
+                    );
                     self.refresh_tab_bar();
                     self.show_active_terminal_at_bottom();
                 }
@@ -90,6 +94,7 @@ impl SolitoApplication {
                     let copy_mode = self.copy_mode.renderer_snapshot(&snapshot);
                     renderer.resize(window_size, snapshot);
                     renderer.set_copy_mode(copy_mode);
+                    self.needs_redraw = true;
                 }
             }
         }

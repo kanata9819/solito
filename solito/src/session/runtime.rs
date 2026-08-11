@@ -9,6 +9,9 @@ use std::io::{Read, Write};
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread::{self, JoinHandle};
 use tracing::{debug, error, info};
+use winit::event_loop::EventLoopProxy;
+
+use crate::app::event::AppEvent;
 
 type PtyReader = Box<dyn Read + Send>;
 type PtyWriter = Box<dyn Write + Send>;
@@ -21,6 +24,7 @@ pub(crate) struct SessionRuntime {
     input_rx: Receiver<SessionInput>,
     master: PtyMaster,
     output_tx: Sender<Vec<u8>>,
+    event_proxy: EventLoopProxy<AppEvent>,
 }
 
 #[derive(Debug)]
@@ -43,6 +47,7 @@ impl SessionRuntime {
     pub(crate) fn new(
         input_rx: Receiver<SessionInput>,
         output_tx: Sender<Vec<u8>>,
+        event_proxy: EventLoopProxy<AppEvent>,
         size: TerminalSize,
         shell_program: &str,
     ) -> Result<Self, Box<dyn Error>> {
@@ -54,6 +59,7 @@ impl SessionRuntime {
             input_rx,
             master: pty_pair.master,
             output_tx,
+            event_proxy,
         })
     }
 
@@ -62,7 +68,7 @@ impl SessionRuntime {
         let writer = self.master.take_writer()?;
 
         // Thread to read output from the PTY.
-        Self::spawn_reading_thread(self.output_tx, reader);
+        Self::spawn_reading_thread(self.output_tx, self.event_proxy, reader);
         // Thread to write input and resize events into the PTY.
         Self::spawn_input_thread(self.input_rx, writer, self.master);
 
@@ -86,7 +92,11 @@ impl SessionRuntime {
         Ok(slave.spawn_command(cmd)?)
     }
 
-    fn spawn_reading_thread(output_tx: Sender<Vec<u8>>, mut reader: PtyReader) -> JoinHandle<()> {
+    fn spawn_reading_thread(
+        output_tx: Sender<Vec<u8>>,
+        event_proxy: EventLoopProxy<AppEvent>,
+        mut reader: PtyReader,
+    ) -> JoinHandle<()> {
         thread::spawn(move || {
             let mut buffer: [u8; 1024] = [0u8; 1024];
 
@@ -98,6 +108,13 @@ impl SessionRuntime {
                     }
                     Ok(n) => {
                         if output_tx.send(buffer[..n].to_vec()).is_err() {
+                            break;
+                        }
+                        // PTY output is the wake-up signal; idle terminals stay asleep.
+                        if event_proxy
+                            .send_event(AppEvent::TerminalOutputReady)
+                            .is_err()
+                        {
                             break;
                         }
                     }

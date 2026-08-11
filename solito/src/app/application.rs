@@ -17,12 +17,12 @@ use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
     event::WindowEvent,
-    event_loop::ActiveEventLoop,
+    event_loop::{ActiveEventLoop, EventLoopProxy},
     keyboard::ModifiersState,
     window::{Window, WindowAttributes, WindowId},
 };
 
-use crate::app::{copy::CopyMode, icon, tabs::AppTabs};
+use crate::app::{copy::CopyMode, event::AppEvent, icon, tabs::AppTabs};
 
 pub(super) type AppResult<T = ()> = Result<T, Box<dyn Error>>;
 
@@ -34,10 +34,12 @@ pub(crate) struct SolitoApplication {
     tabs: AppTabs,
     copy_mode: CopyMode,
     modifiers: ModifiersState,
+    event_proxy: EventLoopProxy<AppEvent>,
+    needs_redraw: bool,
 }
 
 impl SolitoApplication {
-    pub(crate) fn new(config: AppConfig) -> Self {
+    pub(crate) fn new(config: AppConfig, event_proxy: EventLoopProxy<AppEvent>) -> Self {
         let renderer_config = config.renderer_config();
 
         Self {
@@ -48,6 +50,8 @@ impl SolitoApplication {
             tabs: AppTabs::new(),
             copy_mode: CopyMode::default(),
             modifiers: ModifiersState::default(),
+            event_proxy,
+            needs_redraw: false,
         }
     }
 
@@ -88,7 +92,11 @@ impl SolitoApplication {
     }
 
     fn open_initial_tab(&mut self, size: TerminalSize) {
-        self.tabs.open(size, self.config.shell.program.clone());
+        self.tabs.open(
+            size,
+            self.config.shell.program.clone(),
+            self.event_proxy.clone(),
+        );
     }
 
     fn create_renderer(&self, window: &Arc<Window>) -> AppResult<Renderer> {
@@ -123,10 +131,18 @@ impl SolitoApplication {
     }
 }
 
-impl ApplicationHandler for SolitoApplication {
+impl ApplicationHandler<AppEvent> for SolitoApplication {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if let Err(err) = self.create_window(event_loop) {
+        if self.window.is_none()
+            && let Err(err) = self.create_window(event_loop)
+        {
             error!("create window failed: {err}");
+        }
+    }
+
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: AppEvent) {
+        match event {
+            AppEvent::TerminalOutputReady => self.drain_terminal_output(),
         }
     }
 
@@ -144,8 +160,9 @@ impl ApplicationHandler for SolitoApplication {
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        self.drain_terminal_output();
-        if let Some(window) = &self.window {
+        if self.needs_redraw
+            && let Some(window) = &self.window
+        {
             window.request_redraw();
         }
     }

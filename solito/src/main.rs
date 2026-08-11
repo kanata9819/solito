@@ -9,7 +9,7 @@ use solito_config::app::AppConfig;
 use tracing_subscriber::EnvFilter;
 use winit::event_loop::EventLoop;
 
-use crate::app::application::SolitoApplication;
+use crate::app::{application::SolitoApplication, event::AppEvent};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let config = AppConfig::load_or_create()?;
@@ -27,8 +27,8 @@ fn init_tracing(config: &AppConfig) {
 }
 
 fn run_app(config: AppConfig) -> Result<(), Box<dyn Error>> {
-    let event_loop = EventLoop::new()?;
-    let mut solito = SolitoApplication::new(config);
+    let event_loop = EventLoop::<AppEvent>::with_user_event().build()?;
+    let mut solito = SolitoApplication::new(config, event_loop.create_proxy());
     event_loop.run_app(&mut solito)?;
 
     Ok(())

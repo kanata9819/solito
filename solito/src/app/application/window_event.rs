@@ -29,6 +29,7 @@ impl SolitoApplication {
                 AppCommand::Noop
             }
             WindowEvent::RedrawRequested => {
+                self.needs_redraw = false;
                 if let Some(renderer) = &mut self.renderer
                     && let Err(err) = renderer.draw_frame()
                 {
@@ -79,6 +80,7 @@ impl SolitoApplication {
                         position.y as f32 / self.renderer_config.line_height,
                     ),
                 }
+                self.needs_redraw = true;
                 AppCommand::Noop
             }
             _ => {
