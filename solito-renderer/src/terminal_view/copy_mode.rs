@@ -39,15 +39,20 @@ impl TerminalView {
     const COPY_MODE_CURSOR_COLOR: [f32; 4] = ThemeColor::YELLOW_400_ALPHA;
 
     pub(crate) fn set_copy_mode(&mut self, copy_mode: CopyModeSnapshot) {
+        let copy_mode_changed = self.copy_mode != copy_mode;
         self.copy_mode = copy_mode;
 
-        if self.copy_mode.active {
+        let viewport_changed = if self.copy_mode.active {
             let row_count = self.row_count();
             self.viewport
-                .scroll_to_include(self.copy_mode.cursor.row, row_count);
-        }
+                .scroll_to_include(self.copy_mode.cursor.row, row_count)
+        } else {
+            false
+        };
 
-        self.set_text_to_buffer();
+        if copy_mode_changed || viewport_changed {
+            self.mark_text_buffer_dirty();
+        }
     }
 
     pub(crate) fn copy_mode_active(&self) -> bool {

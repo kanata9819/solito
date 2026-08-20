@@ -63,9 +63,10 @@ impl ViewportState {
         self.clamp(row_count);
     }
 
-    pub(super) fn scroll_to_include(&mut self, row: usize, row_count: usize) {
+    pub(super) fn scroll_to_include(&mut self, row: usize, row_count: usize) -> bool {
         self.clamp(row_count);
-        let (start, end) = self.visible_range(row_count);
+        let previous_range = self.visible_range(row_count);
+        let (start, end) = previous_range;
 
         if row < start {
             let desired_end = row.saturating_add(self.visible_rows).min(row_count);
@@ -76,6 +77,8 @@ impl ViewportState {
 
         self.scroll_accumulator = 0.0;
         self.clamp(row_count);
+
+        self.visible_range(row_count) != previous_range
     }
 
     fn visible_rows(height: u32, line_height: f32) -> usize {
@@ -111,6 +114,25 @@ mod tests {
         viewport.reset();
 
         assert!(viewport.is_at_bottom());
+        assert_eq!(viewport.visible_range(10), (7, 10));
+    }
+
+    #[test]
+    fn scroll_to_include_reincludes_same_cursor_after_rows_grow() {
+        let mut viewport = ViewportState::new(30, 10.0);
+
+        assert!(!viewport.scroll_to_include(4, 5));
+        assert_eq!(viewport.visible_range(5), (2, 5));
+
+        assert!(viewport.scroll_to_include(4, 10));
+        assert_eq!(viewport.visible_range(10), (4, 7));
+    }
+
+    #[test]
+    fn scroll_to_include_reports_no_change_for_visible_cursor() {
+        let mut viewport = ViewportState::new(30, 10.0);
+
+        assert!(!viewport.scroll_to_include(8, 10));
         assert_eq!(viewport.visible_range(10), (7, 10));
     }
 }

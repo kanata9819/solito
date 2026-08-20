@@ -44,7 +44,20 @@ impl TerminalView {
         width.saturating_sub(horizontal_padding).max(1)
     }
 
-    pub(super) fn set_text_to_buffer(&mut self) {
+    pub(super) fn mark_text_buffer_dirty(&mut self) {
+        self.text_buffer_dirty = true;
+    }
+
+    pub(crate) fn rebuild_text_buffer_if_dirty(&mut self) {
+        if !self.text_buffer_dirty {
+            return;
+        }
+
+        self.set_text_to_buffer();
+        self.text_buffer_dirty = false;
+    }
+
+    fn set_text_to_buffer(&mut self) {
         let font_family = self.config.font_family.clone();
         let spans = self.visible_text_spans(font_family.as_str());
         let attrs = Self::text_attrs(None, font_family.as_str());

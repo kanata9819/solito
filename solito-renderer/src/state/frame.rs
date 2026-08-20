@@ -13,6 +13,10 @@ use crate::{pass, pipeline::rect, terminal_view::TerminalView, util::color::Them
 
 impl Renderer {
     fn prepare_text(&mut self) -> Result<(), Box<dyn Error>> {
+        // Several state updates can arrive before one redraw. Shape their
+        // final text state once, immediately before glyph preparation.
+        self.terminal_view.rebuild_text_buffer_if_dirty();
+
         let [default_r, default_g, default_b, _] = ThemeColor::WHITE;
 
         self.terminal_view.glyphs.text_renderer.prepare(

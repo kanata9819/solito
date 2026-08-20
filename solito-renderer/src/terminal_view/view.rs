@@ -15,6 +15,7 @@ pub(crate) struct TerminalView {
     pub(super) tab_bar: TabBarSnapshot,
     pub(super) viewport: ViewportState,
     pub(super) copy_mode: CopyModeSnapshot,
+    pub(super) text_buffer_dirty: bool,
 }
 
 impl TerminalView {
@@ -56,6 +57,7 @@ impl TerminalView {
             snapshot: ScreenSnapshot::default(),
             tab_bar: TabBarSnapshot::default(),
             copy_mode: CopyModeSnapshot::default(),
+            text_buffer_dirty: true,
         }
     }
 
@@ -83,7 +85,7 @@ impl TerminalView {
             Self::terminal_content_height(height, self.config.line_height),
             self.row_count(),
         );
-        self.set_text_to_buffer();
+        self.mark_text_buffer_dirty();
     }
 
     pub(crate) fn set_snapshot(&mut self, snapshot: ScreenSnapshot) {
@@ -101,18 +103,18 @@ impl TerminalView {
             self.viewport.clamp(self.row_count());
         }
 
-        self.set_text_to_buffer();
+        self.mark_text_buffer_dirty();
     }
 
     pub(crate) fn set_snapshot_at_bottom(&mut self, snapshot: ScreenSnapshot) {
         self.snapshot = snapshot;
         self.viewport.reset();
-        self.set_text_to_buffer();
+        self.mark_text_buffer_dirty();
     }
 
     pub(crate) fn scroll(&mut self, _x: f32, y: f32) {
         self.viewport.scroll(y, self.row_count());
-        self.set_text_to_buffer();
+        self.mark_text_buffer_dirty();
     }
 
     pub(crate) fn visible_cols(&self, width: u32) -> usize {
