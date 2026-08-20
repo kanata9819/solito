@@ -6,6 +6,15 @@ use serde::{Deserialize, Serialize};
 
 const APP_DIR_NAME: &str = "Solito";
 
+#[cfg(target_os = "windows")]
+const DEFAULT_SHELL_PROGRAM: &str = "pwsh";
+#[cfg(target_os = "linux")]
+const DEFAULT_SHELL_PROGRAM: &str = "bash";
+#[cfg(target_os = "macos")]
+const DEFAULT_SHELL_PROGRAM: &str = "zsh";
+#[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+const DEFAULT_SHELL_PROGRAM: &str = "sh";
+
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
 #[serde(default)]
 pub struct AppConfig {
@@ -71,7 +80,7 @@ impl ShellConfig {
 impl Default for ShellConfig {
     fn default() -> Self {
         Self {
-            program: "nu".to_string(),
+            program: DEFAULT_SHELL_PROGRAM.to_string(),
         }
     }
 }
@@ -227,7 +236,7 @@ fn sanitize_positive_f32(value: f32, fallback: f32) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppConfig, BackdropConfig};
+    use super::{AppConfig, BackdropConfig, ShellConfig};
     use crate::renderer::{RendererConfig, WindowBackdrop};
 
     #[test]
@@ -240,7 +249,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(config.shell.program, "nu");
+        assert_eq!(config.shell.program, ShellConfig::default().program);
         assert_eq!(config.font.family, RendererConfig::DEFAULT_FONT_FAMILY);
         assert_eq!(config.font.size, 16.0);
         assert_eq!(config.window.width, 1000.0);
@@ -294,12 +303,40 @@ mod tests {
         }
         .sanitized();
 
-        assert_eq!(config.shell.program, "nu");
+        assert_eq!(config.shell.program, ShellConfig::default().program);
         assert_eq!(config.window.width, 1000.0);
         assert_eq!(config.window.height, 650.0);
         assert_eq!(config.font.family, RendererConfig::DEFAULT_FONT_FAMILY);
         assert_eq!(config.font.size, RendererConfig::DEFAULT_FONT_SIZE);
         assert_eq!(config.font.line_height, RendererConfig::DEFAULT_LINE_HEIGHT);
         assert_eq!(config.tracing.filter, "error");
+    }
+
+    #[test]
+    fn shell_default_matches_the_target_platform() {
+        let program = ShellConfig::default().program;
+
+        #[cfg(target_os = "windows")]
+        assert_eq!(program, "pwsh");
+        #[cfg(target_os = "linux")]
+        assert_eq!(program, "bash");
+        #[cfg(target_os = "macos")]
+        assert_eq!(program, "zsh");
+        #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+        assert_eq!(program, "sh");
+    }
+
+    #[test]
+    fn explicit_shell_program_is_preserved() {
+        let config = toml::from_str::<AppConfig>(
+            r#"
+            [shell]
+            program = "nu"
+            "#,
+        )
+        .unwrap()
+        .sanitized();
+
+        assert_eq!(config.shell.program, "nu");
     }
 }
