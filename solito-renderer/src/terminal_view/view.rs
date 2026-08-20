@@ -27,18 +27,10 @@ impl TerminalView {
         queue: &wgpu::Queue,
         swapchain: wgpu::TextureFormat,
         physical_size: winit::dpi::PhysicalSize<u32>,
-        scale_factor: f64,
         config: RendererConfig,
     ) -> Self {
         let config = config.sanitized();
-        let mut glyphs = GlyphonResources::new(
-            device,
-            queue,
-            swapchain,
-            physical_size,
-            scale_factor,
-            &config,
-        );
+        let mut glyphs = GlyphonResources::new(device, queue, swapchain, &config);
 
         Self::set_text_buffer_size(
             &mut glyphs,
@@ -137,7 +129,7 @@ impl TerminalView {
     }
 
     pub(super) fn display_col_count(lines: &[Vec<ScreenCell>], row: usize) -> usize {
-        lines.get(row).map(|line| line.len()).unwrap_or(0).max(1)
+        lines.get(row).map_or(1, |line| line.len().max(1))
     }
 
     pub(super) fn row_count(&self) -> usize {
@@ -176,5 +168,11 @@ mod tests {
     fn terminal_content_width_reserves_horizontal_padding() {
         assert_eq!(TerminalView::terminal_content_width(100), 80);
         assert_eq!(TerminalView::terminal_content_width(10), 1);
+    }
+
+    #[test]
+    fn terminal_row_y_accounts_for_the_tab_bar() {
+        assert_eq!(TerminalView::terminal_row_y(2, 30.0, false), 70.0);
+        assert_eq!(TerminalView::terminal_row_y(2, 30.0, true), 100.0);
     }
 }

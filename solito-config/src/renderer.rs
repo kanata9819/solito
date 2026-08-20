@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct RendererConfig {
     pub font_family: String,
@@ -7,7 +9,8 @@ pub struct RendererConfig {
     pub window_acrylic_tint: (u8, u8, u8, u8),
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
 pub enum WindowBackdrop {
     None,
     Transparent,
@@ -50,7 +53,7 @@ impl Default for RendererConfig {
     }
 }
 
-fn sanitize_positive_f32(value: f32, fallback: f32) -> f32 {
+pub(crate) fn sanitize_positive_f32(value: f32, fallback: f32) -> f32 {
     if value.is_finite() && value > 0.0 {
         value
     } else {

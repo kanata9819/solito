@@ -35,7 +35,7 @@ impl TerminalView {
     }
 
     pub(super) fn terminal_content_height(height: u32, line_height: f32) -> u32 {
-        height.saturating_sub(Self::tab_bar_height_for(line_height).ceil() as u32)
+        height.saturating_sub(line_height.ceil() as u32)
     }
 
     pub(super) fn terminal_content_width(width: u32) -> u32 {
@@ -200,12 +200,12 @@ impl TerminalView {
 
                 if current_text.is_empty() {
                     current_style = style;
-                } else if Self::should_start_new_span(&current_text, current_style, style) {
+                } else if current_style != style {
                     Self::push_text_span(&mut spans, &mut current_text, current_style, font_family);
                     current_style = style;
                 }
 
-                current_text.push(Self::cell_char(cell));
+                current_text.push(cell.ch);
             }
 
             if line_index + 1 < lines.len() {
@@ -250,18 +250,6 @@ impl TerminalView {
         }
     }
 
-    fn cell_char(cell: &ScreenCell) -> char {
-        cell.ch
-    }
-
-    fn should_start_new_span(
-        current_text: &str,
-        current_style: GridTextStyle,
-        next_style: GridTextStyle,
-    ) -> bool {
-        !current_text.is_empty() && current_style != next_style
-    }
-
     fn grid_letter_spacing(cell_width: f32, glyph_width: f32, font_size: f32) -> f32 {
         let correction = cell_width - glyph_width;
         if correction.abs() < 0.01 {
@@ -288,14 +276,6 @@ mod tests {
 
     fn color([r, g, b, a]: [u8; 4]) -> Color {
         Color::rgba(r, g, b, a)
-    }
-
-    #[test]
-    fn cell_char_returns_cell_character() {
-        let mut cell = ScreenCell::default();
-        cell.ch = 'A';
-
-        assert_eq!(TerminalView::cell_char(&cell), 'A');
     }
 
     #[test]

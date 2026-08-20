@@ -11,12 +11,6 @@ impl Perform for Screen {
         self.apply_execute(byte);
     }
 
-    fn hook(&mut self, _params: &Params, _intermediates: &[u8], _ignore: bool, _action: char) {}
-
-    fn put(&mut self, _byte: u8) {}
-
-    fn unhook(&mut self) {}
-
     fn osc_dispatch(&mut self, params: &[&[u8]], bell_terminated: bool) {
         if let Some(osc) = decode_osc(params, bell_terminated) {
             self.apply_osc(&osc);
@@ -26,6 +20,4 @@ impl Perform for Screen {
     fn csi_dispatch(&mut self, params: &Params, intermediates: &[u8], ignore: bool, action: char) {
         self.apply_csi(decode_csi(params, intermediates, ignore, action));
     }
-
-    fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, _byte: u8) {}
 }

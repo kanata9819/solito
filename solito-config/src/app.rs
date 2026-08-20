@@ -1,6 +1,6 @@
 use std::{error::Error, fs, path::PathBuf};
 
-use super::renderer::{RendererConfig, WindowBackdrop};
+use super::renderer::{RendererConfig, WindowBackdrop, sanitize_positive_f32};
 use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 
@@ -41,12 +41,14 @@ impl AppConfig {
     }
 
     pub fn renderer_config(&self) -> RendererConfig {
+        let [r, g, b, a] = self.window.acrylic_tint;
+
         RendererConfig {
             font_family: self.font.family.clone(),
             font_size: self.font.size,
             line_height: self.font.line_height,
-            window_backdrop: self.window.backdrop.into(),
-            window_acrylic_tint: self.window.acrylic_tint_tuple(),
+            window_backdrop: self.window.backdrop,
+            window_acrylic_tint: (r, g, b, a),
         }
         .sanitized()
     }
@@ -90,7 +92,7 @@ impl Default for ShellConfig {
 pub struct WindowConfig {
     pub width: f32,
     pub height: f32,
-    pub(crate) backdrop: BackdropConfig,
+    pub(crate) backdrop: WindowBackdrop,
     pub(crate) acrylic_tint: [u8; 4],
 }
 
@@ -102,15 +104,6 @@ impl WindowConfig {
 
         self
     }
-
-    fn acrylic_tint_tuple(&self) -> (u8, u8, u8, u8) {
-        (
-            self.acrylic_tint[0],
-            self.acrylic_tint[1],
-            self.acrylic_tint[2],
-            self.acrylic_tint[3],
-        )
-    }
 }
 
 impl Default for WindowConfig {
@@ -120,27 +113,8 @@ impl Default for WindowConfig {
         Self {
             width: 1000.0,
             height: 650.0,
-            backdrop: BackdropConfig::Acrylic,
+            backdrop: WindowBackdrop::Acrylic,
             acrylic_tint: [r, g, b, a],
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, Default)]
-#[serde(rename_all = "lowercase")]
-pub(crate) enum BackdropConfig {
-    None,
-    Transparent,
-    #[default]
-    Acrylic,
-}
-
-impl From<BackdropConfig> for WindowBackdrop {
-    fn from(value: BackdropConfig) -> Self {
-        match value {
-            BackdropConfig::None => Self::None,
-            BackdropConfig::Transparent => Self::Transparent,
-            BackdropConfig::Acrylic => Self::Acrylic,
         }
     }
 }
@@ -226,17 +200,9 @@ impl AppPaths {
     }
 }
 
-fn sanitize_positive_f32(value: f32, fallback: f32) -> f32 {
-    if value.is_finite() && value > 0.0 {
-        value
-    } else {
-        fallback
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{AppConfig, BackdropConfig, ShellConfig};
+    use super::{AppConfig, ShellConfig};
     use crate::renderer::{RendererConfig, WindowBackdrop};
 
     #[test]
@@ -281,6 +247,31 @@ mod tests {
     }
 
     #[test]
+    fn backdrop_variants_keep_their_toml_names() {
+        for (name, expected) in [
+            ("none", WindowBackdrop::None),
+            ("transparent", WindowBackdrop::Transparent),
+            ("acrylic", WindowBackdrop::Acrylic),
+        ] {
+            let config =
+                toml::from_str::<AppConfig>(&format!("[window]\nbackdrop = \"{name}\"")).unwrap();
+
+            assert_eq!(config.window.backdrop, expected);
+        }
+    }
+
+    #[test]
+    fn default_config_round_trips_through_toml() {
+        let encoded = toml::to_string_pretty(&AppConfig::default()).unwrap();
+        let config = toml::from_str::<AppConfig>(&encoded).unwrap();
+
+        assert!(encoded.contains("backdrop = \"acrylic\""));
+        assert!(encoded.contains("acrylic_tint = ["));
+        assert_eq!(config.window.backdrop, WindowBackdrop::Acrylic);
+        assert_eq!(config.window.acrylic_tint, [18, 18, 18, 190]);
+    }
+
+    #[test]
     fn invalid_config_values_fall_back_to_defaults() {
         let config = AppConfig {
             shell: super::ShellConfig {
@@ -289,7 +280,7 @@ mod tests {
             window: super::WindowConfig {
                 width: 0.0,
                 height: f32::NAN,
-                backdrop: BackdropConfig::Acrylic,
+                backdrop: WindowBackdrop::Acrylic,
                 acrylic_tint: [18, 18, 18, 190],
             },
             font: super::FontConfig {

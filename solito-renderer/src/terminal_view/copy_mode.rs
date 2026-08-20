@@ -2,7 +2,7 @@ use solito_terminal::ScreenCell;
 
 use crate::{pipeline::rect::RectSpec, terminal_view::TerminalView, util::color::ThemeColor};
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CopyModePosition {
     pub row: usize,
     pub col: usize,
@@ -133,8 +133,8 @@ impl TerminalView {
     ) -> Option<(usize, usize)> {
         match selection.kind {
             CopyModeSelectionKind::Line => {
-                let (start_row, end_row): (usize, usize) =
-                    Self::ordered_rows(selection.anchor, selection.cursor);
+                let start_row = selection.anchor.row.min(selection.cursor.row);
+                let end_row = selection.anchor.row.max(selection.cursor.row);
 
                 if row < start_row || row > end_row {
                     return None;
@@ -143,8 +143,8 @@ impl TerminalView {
                 Some((0, Self::display_col_count(lines, row)))
             }
             CopyModeSelectionKind::Cell => {
-                let (start, end): (CopyModePosition, CopyModePosition) =
-                    Self::ordered_positions(selection.anchor, selection.cursor);
+                let start = selection.anchor.min(selection.cursor);
+                let end = selection.anchor.max(selection.cursor);
 
                 if row < start.row || row > end.row {
                     return None;
@@ -164,25 +164,6 @@ impl TerminalView {
 
                 Some((start_col, end_col))
             }
-        }
-    }
-
-    fn ordered_rows(anchor: CopyModePosition, cursor: CopyModePosition) -> (usize, usize) {
-        if anchor.row <= cursor.row {
-            (anchor.row, cursor.row)
-        } else {
-            (cursor.row, anchor.row)
-        }
-    }
-
-    fn ordered_positions(
-        anchor: CopyModePosition,
-        cursor: CopyModePosition,
-    ) -> (CopyModePosition, CopyModePosition) {
-        if (anchor.row, anchor.col) <= (cursor.row, cursor.col) {
-            (anchor, cursor)
-        } else {
-            (cursor, anchor)
         }
     }
 }

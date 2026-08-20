@@ -21,7 +21,7 @@ impl ViewportState {
     }
 
     pub(super) fn visible_range(&self, row_count: usize) -> (usize, usize) {
-        let end = row_count.saturating_sub(self.scroll_offset as usize);
+        let end = row_count.saturating_sub(self.scroll_offset);
         let start = end.saturating_sub(self.visible_rows);
         (start, end)
     }

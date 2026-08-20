@@ -23,8 +23,6 @@ impl GlyphonResources {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         swapchain: wgpu::TextureFormat,
-        physical_size: winit::dpi::PhysicalSize<u32>,
-        scale_factor: f64,
         config: &RendererConfig,
     ) -> Self {
         let mut font_system = FontSystem::new();
@@ -39,13 +37,6 @@ impl GlyphonResources {
             Metrics::new(config.font_size, config.line_height),
         );
         text_buffer.set_wrap(Wrap::None);
-
-        let physical_width = (f64::from(physical_size.width) * scale_factor) as f32;
-        let physical_height = (f64::from(physical_size.height) * scale_factor) as f32;
-
-        text_buffer.set_size(Some(physical_width), Some(physical_height));
-
-        text_buffer.shape_until_scroll(&mut font_system, false);
         let cell_width = Self::measure_font_width(&mut font_system, config).max(1.0);
 
         Self {

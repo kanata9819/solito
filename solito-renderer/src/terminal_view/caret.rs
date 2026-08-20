@@ -11,16 +11,18 @@ impl TerminalView {
         let (start, end) = self.viewport.visible_range(row_count);
 
         if self.snapshot.cursor_row < start || self.snapshot.cursor_row >= end {
-            return (Self::PADDING_X, self.terminal_origin_y(), 0.0, 0.0);
+            return (
+                Self::PADDING_X,
+                Self::PADDING_Y + self.config.line_height,
+                0.0,
+                0.0,
+            );
         }
 
         let visible_row = self.snapshot.cursor_row - start;
         let caret_x = Self::PADDING_X + self.snapshot.cursor_col as f32 * self.glyphs.cell_width;
-        let caret_y = if self.tab_bar.titles().len() <= 1 {
-            Self::PADDING_Y + visible_row as f32 * self.config.line_height
-        } else {
-            Self::PADDING_Y + self.config.line_height + visible_row as f32 * self.config.line_height
-        };
+        let caret_y =
+            Self::terminal_row_y(visible_row, self.config.line_height, self.has_tab_bar());
 
         (
             caret_x,
@@ -35,13 +37,5 @@ impl TerminalView {
             .cursor_color
             .map(util::color::rgba_to_f32)
             .unwrap_or(Self::DEFAULT_CARET_COLOR)
-    }
-
-    fn terminal_origin_y(&self) -> f32 {
-        Self::terminal_origin_y_for(self.config.line_height)
-    }
-
-    fn terminal_origin_y_for(line_height: f32) -> f32 {
-        Self::PADDING_Y + Self::tab_bar_height_for(line_height)
     }
 }

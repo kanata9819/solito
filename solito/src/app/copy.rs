@@ -64,40 +64,19 @@ impl CopyMode {
     }
 
     pub(super) fn toggle_cell_selection(&mut self) {
-        if !self.snapshot.active {
-            return;
-        }
-
-        if matches!(
-            self.snapshot.selection,
-            Some(CopyModeSelection {
-                kind: CopyModeSelectionKind::Cell,
-                ..
-            })
-        ) {
-            self.snapshot.selection = None;
-            return;
-        }
-
-        self.snapshot.selection = Some(CopyModeSelection {
-            anchor: self.snapshot.cursor,
-            cursor: self.snapshot.cursor,
-            kind: CopyModeSelectionKind::Cell,
-        });
+        self.toggle_selection(CopyModeSelectionKind::Cell);
     }
 
     pub(super) fn toggle_line_selection(&mut self) {
+        self.toggle_selection(CopyModeSelectionKind::Line);
+    }
+
+    fn toggle_selection(&mut self, kind: CopyModeSelectionKind) {
         if !self.snapshot.active {
             return;
         }
 
-        if matches!(
-            self.snapshot.selection,
-            Some(CopyModeSelection {
-                kind: CopyModeSelectionKind::Line,
-                ..
-            })
-        ) {
+        if self.snapshot.selection.map(|selection| selection.kind) == Some(kind) {
             self.snapshot.selection = None;
             return;
         }
@@ -105,7 +84,7 @@ impl CopyMode {
         self.snapshot.selection = Some(CopyModeSelection {
             anchor: self.snapshot.cursor,
             cursor: self.snapshot.cursor,
-            kind: CopyModeSelectionKind::Line,
+            kind,
         });
     }
 
@@ -132,6 +111,7 @@ impl CopyMode {
 #[cfg(test)]
 mod tests {
     use super::{CopyMode, CopyModeMove};
+    use solito_renderer::{CopyModePosition, CopyModeSelectionKind};
     use solito_terminal::{ScreenCell, ScreenSnapshot};
 
     fn screen(lines: &[&str], cursor_row: usize, cursor_col: usize) -> ScreenSnapshot {
@@ -168,6 +148,19 @@ mod tests {
     }
 
     #[test]
+    fn cell_selection_orders_a_reversed_range() {
+        let screen = screen(&["abc"], 0, 2);
+        let mut copy_mode = CopyMode::default();
+
+        copy_mode.enter(&screen);
+        copy_mode.toggle_cell_selection();
+        copy_mode.move_cursor(&screen, CopyModeMove::Left);
+        copy_mode.move_cursor(&screen, CopyModeMove::Left);
+
+        assert_eq!(copy_mode.selected_text(&screen), Some("abc".to_string()));
+    }
+
+    #[test]
     fn line_selection_copies_whole_rows() {
         let screen = screen(&["abc", "def"], 0, 1);
         let mut copy_mode = CopyMode::default();
@@ -189,22 +182,13 @@ mod tests {
 
         copy_mode.enter(&screen);
         copy_mode.move_cursor(&screen, CopyModeMove::NextWord);
-        assert_eq!(
-            copy_mode.snapshot.cursor,
-            solito_renderer::CopyModePosition::new(0, 5)
-        );
+        assert_eq!(copy_mode.snapshot.cursor, CopyModePosition::new(0, 5));
 
         copy_mode.move_cursor(&screen, CopyModeMove::WordEnd);
-        assert_eq!(
-            copy_mode.snapshot.cursor,
-            solito_renderer::CopyModePosition::new(0, 7)
-        );
+        assert_eq!(copy_mode.snapshot.cursor, CopyModePosition::new(0, 7));
 
         copy_mode.move_cursor(&screen, CopyModeMove::PreviousWord);
-        assert_eq!(
-            copy_mode.snapshot.cursor,
-            solito_renderer::CopyModePosition::new(0, 5)
-        );
+        assert_eq!(copy_mode.snapshot.cursor, CopyModePosition::new(0, 5));
     }
 
     #[test]
@@ -214,16 +198,10 @@ mod tests {
 
         copy_mode.enter(&screen);
         copy_mode.move_cursor(&screen, CopyModeMove::EndOfLine);
-        assert_eq!(
-            copy_mode.snapshot.cursor,
-            solito_renderer::CopyModePosition::new(0, 2)
-        );
+        assert_eq!(copy_mode.snapshot.cursor, CopyModePosition::new(0, 2));
 
         copy_mode.move_cursor(&screen, CopyModeMove::StartOfLine);
-        assert_eq!(
-            copy_mode.snapshot.cursor,
-            solito_renderer::CopyModePosition::new(0, 0)
-        );
+        assert_eq!(copy_mode.snapshot.cursor, CopyModePosition::new(0, 0));
     }
 
     #[test]
@@ -233,15 +211,31 @@ mod tests {
 
         copy_mode.enter(&screen);
         copy_mode.move_cursor(&screen, CopyModeMove::LastLine);
-        assert_eq!(
-            copy_mode.snapshot.cursor,
-            solito_renderer::CopyModePosition::new(2, 1)
-        );
+        assert_eq!(copy_mode.snapshot.cursor, CopyModePosition::new(2, 1));
 
         copy_mode.move_cursor(&screen, CopyModeMove::FirstLine);
+        assert_eq!(copy_mode.snapshot.cursor, CopyModePosition::new(0, 1));
+    }
+
+    #[test]
+    fn toggling_selection_switches_kind_and_clears_the_same_kind() {
+        let screen = screen(&["abc"], 0, 1);
+        let mut copy_mode = CopyMode::default();
+        copy_mode.enter(&screen);
+
+        copy_mode.toggle_cell_selection();
         assert_eq!(
-            copy_mode.snapshot.cursor,
-            solito_renderer::CopyModePosition::new(0, 1)
+            copy_mode.snapshot.selection.map(|selection| selection.kind),
+            Some(CopyModeSelectionKind::Cell)
         );
+
+        copy_mode.toggle_line_selection();
+        assert_eq!(
+            copy_mode.snapshot.selection.map(|selection| selection.kind),
+            Some(CopyModeSelectionKind::Line)
+        );
+
+        copy_mode.toggle_line_selection();
+        assert!(copy_mode.snapshot.selection.is_none());
     }
 }

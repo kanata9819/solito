@@ -61,10 +61,6 @@ impl TerminalView {
         )
     }
 
-    pub(super) fn tab_bar_height_for(line_height: f32) -> f32 {
-        line_height
-    }
-
     pub(super) fn tab_bar_spans_for<'a>(
         tab_bar: &TabBarSnapshot,
         font_family: &'a str,
@@ -138,7 +134,7 @@ impl TerminalView {
 
         let mut x = Self::PADDING_X;
         let tab_y = 6.0;
-        let tab_height = Self::tab_bar_height_for(line_height) + 2.0;
+        let tab_height = line_height + 2.0;
         let tab_text_gap_width = Self::tab_text_gap_chars(cell_width) as f32 * cell_width;
 
         for (index, title) in tab_bar.titles().iter().enumerate() {
@@ -270,10 +266,7 @@ mod tests {
         assert_eq!(rects.len(), 4);
         assert_eq!(rects[0].x, TerminalView::PADDING_X);
         assert_eq!(rects[0].width, 100.0);
-        assert_eq!(
-            rects[0].height,
-            TerminalView::tab_bar_height_for(RendererConfig::DEFAULT_LINE_HEIGHT) + 2.0
-        );
+        assert_eq!(rects[0].height, RendererConfig::DEFAULT_LINE_HEIGHT + 2.0);
         assert_eq!(rects[0].color, TabStyle::TAB_ACTIVE_BACKGROUND);
         assert_eq!(rects[0].slant, TabStyle::TAB_SLANT);
         assert_eq!(rects[2].height, TabStyle::TAB_UNDERLINE_HEIGHT);

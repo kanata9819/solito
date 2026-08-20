@@ -4,11 +4,7 @@ const ICON_WIDTH: u32 = 64;
 const ICON_HEIGHT: u32 = 64;
 const ICON_RGBA: &[u8] = include_bytes!("../../assets/solito-icon-64.rgba");
 
-pub(super) fn window_icon() -> Option<Icon> {
-    Icon::from_rgba(ICON_RGBA.to_vec(), ICON_WIDTH, ICON_HEIGHT).ok()
-}
-
-pub(super) fn taskbar_icon() -> Option<Icon> {
+pub(super) fn app_icon() -> Option<Icon> {
     Icon::from_rgba(ICON_RGBA.to_vec(), ICON_WIDTH, ICON_HEIGHT).ok()
 }
 

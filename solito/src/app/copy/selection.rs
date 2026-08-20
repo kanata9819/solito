@@ -1,6 +1,6 @@
 //! Convert a copy-mode selection into clipboard text.
 
-use solito_renderer::{CopyModePosition, CopyModeSelection, CopyModeSelectionKind};
+use solito_renderer::{CopyModeSelection, CopyModeSelectionKind};
 use solito_terminal::{ScreenCell, ScreenSnapshot};
 
 pub(super) fn selected_text(
@@ -17,7 +17,8 @@ pub(super) fn selected_text(
 }
 
 fn selected_lines(selection: CopyModeSelection, screen: &ScreenSnapshot) -> Vec<String> {
-    let (start_row, end_row) = ordered_rows(selection.anchor, selection.cursor);
+    let start_row = selection.anchor.row.min(selection.cursor.row);
+    let end_row = selection.anchor.row.max(selection.cursor.row);
 
     (start_row..=end_row)
         .map(|row| line_text(screen.lines.get(row), 0, usize::MAX))
@@ -25,7 +26,8 @@ fn selected_lines(selection: CopyModeSelection, screen: &ScreenSnapshot) -> Vec<
 }
 
 fn selected_cells(selection: CopyModeSelection, screen: &ScreenSnapshot) -> Vec<String> {
-    let (start, end) = ordered_positions(selection.anchor, selection.cursor);
+    let start = selection.anchor.min(selection.cursor);
+    let end = selection.anchor.max(selection.cursor);
 
     (start.row..=end.row)
         .map(|row| {
@@ -40,25 +42,6 @@ fn selected_cells(selection: CopyModeSelection, screen: &ScreenSnapshot) -> Vec<
             line_text(screen.lines.get(row), start_col.min(line_len), end_col)
         })
         .collect()
-}
-
-fn ordered_rows(anchor: CopyModePosition, cursor: CopyModePosition) -> (usize, usize) {
-    if anchor.row <= cursor.row {
-        (anchor.row, cursor.row)
-    } else {
-        (cursor.row, anchor.row)
-    }
-}
-
-fn ordered_positions(
-    anchor: CopyModePosition,
-    cursor: CopyModePosition,
-) -> (CopyModePosition, CopyModePosition) {
-    if (anchor.row, anchor.col) <= (cursor.row, cursor.col) {
-        (anchor, cursor)
-    } else {
-        (cursor, anchor)
-    }
 }
 
 fn line_text(line: Option<&Vec<ScreenCell>>, start_col: usize, end_col: usize) -> String {

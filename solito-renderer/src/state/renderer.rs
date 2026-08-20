@@ -34,7 +34,6 @@ impl Renderer {
             &gpu.queue,
             swapchain_format,
             size,
-            1.0,
             renderer_config,
         );
 

@@ -113,7 +113,7 @@ impl SolitoApplication {
                 self.config.window.height,
             ))
             .with_transparent(self.renderer_config.window_backdrop.is_transparent())
-            .with_window_icon(icon::window_icon())
+            .with_window_icon(icon::app_icon())
             .with_title("Solito")
             .with_visible(false)
     }
@@ -122,7 +122,7 @@ impl SolitoApplication {
     fn with_platform_window_attributes(attributes: WindowAttributes) -> WindowAttributes {
         use winit::platform::windows::WindowAttributesExtWindows;
 
-        attributes.with_taskbar_icon(icon::taskbar_icon())
+        attributes.with_taskbar_icon(icon::app_icon())
     }
 
     #[cfg(not(target_os = "windows"))]
