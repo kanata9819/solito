@@ -22,6 +22,7 @@ pub enum CsiMessage {
     },
     EraseDisplay(EraseMode),
     EraseLine(EraseMode),
+    EraseCharacters(u16),
     DeleteCharacters(u16),
     ScrollUp(u16),
     ScrollDown(u16),
@@ -57,6 +58,7 @@ pub fn decode_csi(params: &Params, intermediates: &[u8], ignore: bool, action: c
         },
         'J' => CsiMessage::EraseDisplay(EraseMode::from_csi_mode(param(params, 0, 0))),
         'K' => CsiMessage::EraseLine(EraseMode::from_csi_mode(param(params, 0, 0))),
+        'X' if !ignore && intermediates.is_empty() => CsiMessage::EraseCharacters(amount),
         'P' => CsiMessage::DeleteCharacters(amount),
         'S' => CsiMessage::ScrollUp(amount),
         'T' => CsiMessage::ScrollDown(amount),
@@ -121,5 +123,27 @@ mod tests {
         let message = decode_csi(&Params::default(), &[], false, 'A');
 
         assert_eq!(message, CsiMessage::CursorUp(1));
+    }
+
+    #[test]
+    fn empty_erase_characters_uses_default_amount() {
+        let message = decode_csi(&Params::default(), &[], false, 'X');
+
+        assert_eq!(message, CsiMessage::EraseCharacters(1));
+    }
+
+    #[test]
+    fn private_erase_characters_remains_unknown() {
+        let message = decode_csi(&Params::default(), b"?", false, 'X');
+
+        assert_eq!(
+            message,
+            CsiMessage::Unknown {
+                params: Vec::new(),
+                intermediates: vec![b'?'],
+                ignore: false,
+                action: 'X',
+            }
+        );
     }
 }

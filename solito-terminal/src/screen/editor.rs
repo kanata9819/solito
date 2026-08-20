@@ -74,6 +74,7 @@ impl Screen {
             }),
             CsiMessage::EraseDisplay(mode) => self.erase_display(mode),
             CsiMessage::EraseLine(mode) => self.erase_line(mode),
+            CsiMessage::EraseCharacters(amount) => self.erase_characters(usize::from(amount)),
             CsiMessage::DeleteCharacters(amount) => self.delete_characters(usize::from(amount)),
             CsiMessage::SaveCursor => self.save_cursor_position(),
             CsiMessage::RestoreCursor => self.restore_cursor_position(),
@@ -299,6 +300,33 @@ impl Screen {
             if col < line.len() {
                 line.remove(col);
             }
+        }
+    }
+
+    fn erase_characters(&mut self, amount: usize) {
+        self.screen_buffer.ensure_cursor_line();
+
+        let row = self.screen_buffer.cursor.get_current_row();
+        let col = self.screen_buffer.cursor.get_current_col();
+        let cols = self.screen_buffer.cols();
+        let line = &mut self.screen_buffer.lines[row];
+
+        if amount == 0 || col >= cols || col >= line.len() {
+            return;
+        }
+
+        let mut start = col;
+        let mut end = col.saturating_add(amount).min(cols).min(line.len());
+
+        if line[start].is_wide_continuation {
+            start = start.saturating_sub(1);
+        }
+        if line.get(end).is_some_and(|cell| cell.is_wide_continuation) {
+            end += 1;
+        }
+
+        for cell in &mut line[start..end] {
+            *cell = ScreenCell::blank(CellStyle::default());
         }
     }
 

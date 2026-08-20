@@ -67,6 +67,51 @@ mod tests {
     }
 
     #[test]
+    fn erases_characters_without_moving_or_shifting() {
+        let mut state = terminal(10, 4);
+
+        state.apply_terminal_output(b"abcdefgh\x1b[1;3H\x1b[3X");
+        let snapshot = state.snapshot();
+
+        assert_eq!(line_text(&snapshot.lines[0]), "ab   fgh");
+        assert_eq!(snapshot.cursor_col, 2);
+    }
+
+    #[test]
+    fn erase_characters_empty_or_zero_defaults_to_one() {
+        for sequence in [
+            b"abcdef\x1b[1;3H\x1b[X".as_slice(),
+            b"abcdef\x1b[1;3H\x1b[0X".as_slice(),
+        ] {
+            let mut state = terminal(10, 4);
+
+            state.apply_terminal_output(sequence);
+            let snapshot = state.snapshot();
+
+            assert_eq!(line_text(&snapshot.lines[0]), "ab def");
+            assert_eq!(snapshot.cursor_col, 2);
+        }
+    }
+
+    #[test]
+    fn erase_characters_clears_both_cells_of_a_wide_character() {
+        for cursor_col in [2, 3] {
+            let mut state = terminal(10, 4);
+            let sequence = format!("AあB\x1b[1;{cursor_col}H\x1b[X");
+
+            state.apply_terminal_output(sequence.as_bytes());
+            let snapshot = state.snapshot();
+
+            assert_eq!(line_text(&snapshot.lines[0]), "A  B");
+            assert!(
+                snapshot.lines[0]
+                    .iter()
+                    .all(|cell| !cell.is_wide_continuation)
+            );
+        }
+    }
+
+    #[test]
     fn wraps_wide_characters_without_splitting_cells() {
         let mut state = terminal(4, 4);
 
