@@ -74,15 +74,22 @@ pub(super) fn handle_key(
         Key::Named(NamedKey::ArrowDown) => Some(ARROWDOWN.to_vec()),
         Key::Named(NamedKey::ArrowRight) => Some(ARROWRIGHT.to_vec()),
         Key::Named(NamedKey::ArrowLeft) => Some(ARROWLEFT.to_vec()),
-        Key::Character(character)
-            if modifiers.control_key() && character.eq_ignore_ascii_case("c") =>
-        {
-            Some(b"\x03".to_vec())
+        Key::Character(character) if modifiers.control_key() => {
+            control_character(character).map(|byte| vec![byte])
         }
         _ => text.map(|text| text.as_bytes().to_vec()),
     };
 
     bytes.map_or(AppCommand::Noop, AppCommand::SendTerminalInput)
+}
+
+fn control_character(character: &str) -> Option<u8> {
+    let [byte] = character.as_bytes() else {
+        return None;
+    };
+
+    byte.is_ascii_alphabetic()
+        .then(|| byte.to_ascii_uppercase() - b'@')
 }
 
 fn shortcut_command(logical_key: &Key<SmolStr>, modifiers: ModifiersState) -> Option<AppCommand> {
@@ -238,6 +245,19 @@ mod tests {
         );
 
         assert_eq!(command, AppCommand::SendTerminalInput(b"\x03".to_vec()));
+    }
+
+    #[test]
+    fn ctrl_e_becomes_end_of_line_byte() {
+        let command = handle_key(
+            None,
+            &Key::Character(SmolStr::new("e")),
+            ElementState::Pressed,
+            ModifiersState::CONTROL,
+            false,
+        );
+
+        assert_eq!(command, AppCommand::SendTerminalInput(b"\x05".to_vec()));
     }
 
     #[test]
