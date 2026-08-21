@@ -2,7 +2,7 @@ use super::buffer::{CellStyle, ScreenBuffer, ScreenCell, ScreenSnapshot};
 use super::cursor::CursorPosition;
 use super::sgr;
 use crate::TerminalSize;
-use decodesc::{CsiMessage, EraseMode, OscMessage, TabClearMode};
+use decodesc::{CsiMessage, EraseMode, EscMessage, OscMessage, TabClearMode};
 use unicode_width::UnicodeWidthChar;
 
 pub(crate) struct Screen {
@@ -139,6 +139,21 @@ impl Screen {
             | OscMessage::SetWindowTitle(_)
             | OscMessage::SetIconAndWindowTitle(_)
             | OscMessage::Unknown { .. } => {}
+        }
+    }
+
+    pub(super) fn apply_esc(&mut self, message: EscMessage) {
+        match message {
+            EscMessage::SaveCursor => self.save_cursor_position(),
+            EscMessage::RestoreCursor => self.restore_cursor_position(),
+            EscMessage::Index => self.index(),
+            EscMessage::NextLine => {
+                self.index();
+                self.carriage_return();
+            }
+            EscMessage::ReverseIndex => self.reverse_index(),
+            EscMessage::Reset => self.reset(),
+            EscMessage::Unknown { .. } => {}
         }
     }
 
@@ -579,6 +594,48 @@ impl Screen {
         self.screen_buffer.cursor.reset_col();
         self.screen_buffer.pending_wrap = false;
         self.screen_buffer.ensure_cursor_line();
+    }
+
+    fn index(&mut self) {
+        let cursor_row = self.screen_buffer.cursor.get_current_row();
+        if self.screen_buffer.scroll_region_active {
+            let (top, bottom) = self.scroll_region_bounds();
+            if (top..=bottom).contains(&cursor_row) && cursor_row == bottom {
+                self.scroll_up(1);
+            } else {
+                self.screen_buffer.cursor.move_down();
+            }
+        } else {
+            self.screen_buffer.cursor.move_down();
+        }
+        self.screen_buffer.pending_wrap = false;
+        self.screen_buffer.ensure_cursor_line();
+    }
+
+    fn reverse_index(&mut self) {
+        let cursor_row = self.screen_buffer.cursor.get_current_row();
+        if self.screen_buffer.scroll_region_active {
+            let (top, bottom) = self.scroll_region_bounds();
+            if (top..=bottom).contains(&cursor_row) && cursor_row == top {
+                self.scroll_down(1);
+            } else {
+                self.screen_buffer
+                    .cursor
+                    .move_to_row(cursor_row.saturating_sub(1));
+            }
+        } else {
+            self.screen_buffer
+                .cursor
+                .move_to_row(cursor_row.saturating_sub(1));
+        }
+        self.screen_buffer.pending_wrap = false;
+    }
+
+    fn reset(&mut self) {
+        let size = TerminalSize::new(self.screen_buffer.cols(), self.screen_buffer.rows());
+        self.screen_buffer = ScreenBuffer::new(size);
+        self.primary_screen = None;
+        self.last_printed = None;
     }
 
     fn set_modes(&mut self, private: bool, modes: &[u16]) {

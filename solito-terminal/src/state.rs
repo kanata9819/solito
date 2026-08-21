@@ -140,6 +140,32 @@ mod tests {
     }
 
     #[test]
+    fn applies_escape_cursor_and_line_controls() {
+        let mut state = terminal(8, 4);
+
+        state.apply_terminal_output(b"ab\x1b7\x1bD!\x1b8Z\x1bEX");
+        let snapshot = state.snapshot();
+
+        assert_eq!(line_text(&snapshot.lines[0]), "abZ");
+        assert_eq!(line_text(&snapshot.lines[1]), "X !");
+        assert_eq!((snapshot.cursor_row, snapshot.cursor_col), (1, 1));
+    }
+
+    #[test]
+    fn applies_reverse_index_and_terminal_reset() {
+        let mut state = terminal(8, 4);
+
+        state.apply_terminal_output(b"A\r\nB\x1bMZ");
+        assert_eq!(line_text(&state.snapshot().lines[0]), "AZ");
+
+        state.apply_terminal_output(b"\x1bc");
+        let snapshot = state.snapshot();
+        assert_eq!(snapshot.lines.len(), 1);
+        assert!(snapshot.lines[0].is_empty());
+        assert_eq!((snapshot.cursor_row, snapshot.cursor_col), (0, 0));
+    }
+
+    #[test]
     fn erases_characters_without_moving_or_shifting() {
         let mut state = terminal(10, 4);
 
