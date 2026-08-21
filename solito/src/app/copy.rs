@@ -131,6 +131,7 @@ mod tests {
             cursor_row,
             cursor_col,
             cursor_color: None,
+            cursor_visible: true,
         }
     }
 
