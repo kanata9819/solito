@@ -104,11 +104,16 @@ impl TerminalView {
         }
 
         self.ensure_glyph_widths(start, end);
+        let (cursor_row, cursor_col) = if self.snapshot.cursor_visible {
+            (self.snapshot.cursor_row, self.snapshot.cursor_col)
+        } else {
+            (usize::MAX, usize::MAX)
+        };
         spans.extend(Self::text_spans_for_lines(
             &self.snapshot.lines[start..end],
             start,
-            self.snapshot.cursor_row,
-            self.snapshot.cursor_col,
+            cursor_row,
+            cursor_col,
             Self::cursor_text_color(self.caret_color()),
             font_family,
             &GridMetrics {

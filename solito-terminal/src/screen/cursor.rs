@@ -1,4 +1,4 @@
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(super) struct Cursor {
     cursor_col: usize,
     cursor_row: usize,

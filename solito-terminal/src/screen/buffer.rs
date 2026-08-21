@@ -49,8 +49,10 @@ pub struct ScreenSnapshot {
     pub cursor_row: usize,
     pub cursor_col: usize,
     pub cursor_color: Option<[u8; 4]>,
+    pub cursor_visible: bool,
 }
 
+#[derive(Clone)]
 pub(super) struct ScreenBuffer {
     cols: usize,
     rows: usize,
@@ -59,6 +61,13 @@ pub(super) struct ScreenBuffer {
     pub(super) pending_wrap: bool,
     pub(super) style: CellStyle,
     pub(super) cursor_color: Option<[u8; 4]>,
+    pub(super) scroll_region: (usize, usize),
+    pub(super) scroll_region_active: bool,
+    pub(super) origin_mode: bool,
+    pub(super) insert_mode: bool,
+    pub(super) auto_wrap: bool,
+    pub(super) cursor_visible: bool,
+    pub(super) tab_stops: Vec<bool>,
 }
 
 impl ScreenBuffer {
@@ -71,12 +80,30 @@ impl ScreenBuffer {
             pending_wrap: false,
             style: CellStyle::default(),
             cursor_color: None,
+            scroll_region: (0, size.rows.saturating_sub(1)),
+            scroll_region_active: false,
+            origin_mode: false,
+            insert_mode: false,
+            auto_wrap: true,
+            cursor_visible: true,
+            tab_stops: default_tab_stops(size.cols),
         }
     }
 
     pub(super) fn resize(&mut self, size: TerminalSize) {
         self.cols = size.cols;
         self.rows = size.rows;
+        self.scroll_region.0 = self.scroll_region.0.min(size.rows.saturating_sub(1));
+        self.scroll_region.1 = self
+            .scroll_region
+            .1
+            .clamp(self.scroll_region.0, size.rows.saturating_sub(1));
+        self.tab_stops.resize_with(size.cols, || false);
+        for (col, stop) in self.tab_stops.iter_mut().enumerate() {
+            if col % 8 == 0 && !*stop {
+                *stop = true;
+            }
+        }
     }
 
     pub(super) fn snapshot(&self) -> ScreenSnapshot {
@@ -85,11 +112,16 @@ impl ScreenBuffer {
             cursor_row: self.cursor.get_current_row(),
             cursor_col: self.cursor.get_current_col(),
             cursor_color: self.cursor_color,
+            cursor_visible: self.cursor_visible,
         }
     }
 
     pub(super) fn cols(&self) -> usize {
         self.cols
+    }
+
+    pub(super) fn rows(&self) -> usize {
+        self.rows
     }
 
     pub(super) fn ensure_cursor_line(&mut self) {
@@ -110,4 +142,8 @@ impl ScreenBuffer {
     pub(super) fn get_viewport_top(&self) -> usize {
         self.lines.len().saturating_sub(self.rows)
     }
+}
+
+fn default_tab_stops(cols: usize) -> Vec<bool> {
+    (0..cols).map(|col| col % 8 == 0).collect()
 }

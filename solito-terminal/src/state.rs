@@ -67,6 +67,79 @@ mod tests {
     }
 
     #[test]
+    fn applies_cursor_next_line_and_resets_the_column() {
+        let mut state = terminal(10, 4);
+
+        state.apply_terminal_output(b"abc\x1b[2EZ");
+        let snapshot = state.snapshot();
+
+        assert_eq!(line_text(&snapshot.lines[0]), "abc");
+        assert_eq!(line_text(&snapshot.lines[2]), "Z");
+        assert_eq!((snapshot.cursor_row, snapshot.cursor_col), (2, 1));
+    }
+
+    #[test]
+    fn applies_cursor_previous_line_and_resets_the_column() {
+        let mut state = terminal(10, 4);
+
+        state.apply_terminal_output(b"top\x1b[3Ebottom\x1b[2FZ");
+        let snapshot = state.snapshot();
+
+        assert_eq!(line_text(&snapshot.lines[1]), "Z");
+        assert_eq!((snapshot.cursor_row, snapshot.cursor_col), (1, 1));
+    }
+
+    #[test]
+    fn applies_extended_cursor_and_character_editing_commands() {
+        let mut state = terminal(10, 4);
+
+        state.apply_terminal_output(b"abcd\x1b[1;3H\x1b[2@Z\x1b[2aQ\x1b[2dR");
+        let snapshot = state.snapshot();
+
+        assert_eq!(line_text(&snapshot.lines[0]), "abZ cQ");
+        assert_eq!(line_text(&snapshot.lines[1]), "      R");
+        assert_eq!((snapshot.cursor_row, snapshot.cursor_col), (1, 7));
+    }
+
+    #[test]
+    fn applies_line_editing_and_scrolling_commands() {
+        let mut state = terminal(8, 4);
+
+        state.apply_terminal_output(b"A\r\nB\r\nC\r\nD\x1b[2S");
+        let snapshot = state.snapshot();
+
+        assert_eq!(line_text(&snapshot.lines[0]), "C");
+        assert_eq!(line_text(&snapshot.lines[1]), "D");
+        assert!(snapshot.lines[2].is_empty());
+        assert!(snapshot.lines[3].is_empty());
+    }
+
+    #[test]
+    fn applies_tab_repeat_and_modes() {
+        let mut state = terminal(8, 4);
+
+        state.apply_terminal_output(b"A\x1b[3b\x1b[4h\x1b[1;2HX\x1b[4l\x1b[3g\tZ\x1b[?25l");
+        let snapshot = state.snapshot();
+
+        assert_eq!(line_text(&snapshot.lines[0]), "AXAAA  Z");
+        assert!(!snapshot.cursor_visible);
+    }
+
+    #[test]
+    fn restores_the_primary_screen_after_alternate_screen_mode() {
+        let mut state = terminal(10, 4);
+
+        state.apply_terminal_output(b"main\x1b[?1049halt");
+        assert_eq!(line_text(&state.snapshot().lines[0]), "alt");
+
+        state.apply_terminal_output(b"\x1b[?1049l");
+        let snapshot = state.snapshot();
+
+        assert_eq!(line_text(&snapshot.lines[0]), "main");
+        assert_eq!((snapshot.cursor_row, snapshot.cursor_col), (0, 4));
+    }
+
+    #[test]
     fn erases_characters_without_moving_or_shifting() {
         let mut state = terminal(10, 4);
 

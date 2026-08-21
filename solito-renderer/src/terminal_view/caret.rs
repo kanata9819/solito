@@ -6,6 +6,10 @@ impl TerminalView {
     pub(super) const DEFAULT_CARET_COLOR: [f32; 4] = ThemeColor::WHITE_ALPHA;
 
     pub(crate) fn caret_rect(&mut self) -> (f32, f32, f32, f32) {
+        if !self.snapshot.cursor_visible {
+            return (Self::PADDING_X, Self::PADDING_Y, 0.0, 0.0);
+        }
+
         let row_count = self.row_count();
         self.viewport.clamp(row_count);
         let (start, end) = self.viewport.visible_range(row_count);
