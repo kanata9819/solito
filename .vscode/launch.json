@@ -1,0 +1,77 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug executable 'solito'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "run",
+                    "--bin=solito",
+                    "--package=solito"
+                ]
+            },
+            "args": []
+        },
+        {
+            "name": "Debug unit tests in library 'decodesc'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=decodesc"
+                ]
+            }
+        },
+        {
+            "name": "Debug unit tests in executable 'solito'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--bin=solito",
+                    "--package=solito"
+                ]
+            }
+        },
+        {
+            "name": "Debug unit tests in library 'solito_config'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=solito-config"
+                ]
+            }
+        },
+        {
+            "name": "Debug unit tests in library 'solito_renderer'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=solito-renderer"
+                ]
+            }
+        },
+        {
+            "name": "Debug unit tests in library 'solito_terminal'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=solito-terminal"
+                ]
+            }
+        }
+    ]
+}
