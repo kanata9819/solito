@@ -11,8 +11,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     match cli::parse()? {
-        cli::Command::Compare(options) => benchmark::compare(&options)?,
-        cli::Command::Measure { target, options } => benchmark::measure(target, &options)?,
+        cli::Command::Measure(options) => benchmark::measure(&options)?,
         cli::Command::Workload(config) => workload::run(&config)?,
         cli::Command::Help => print!("{}", cli::HELP),
     }

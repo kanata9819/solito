@@ -6,8 +6,6 @@ pub const HELP: &str = r#"Solito terminal performance benchmark
 
 Usage:
   solito-bench solito [OPTIONS]
-  solito-bench compare [OPTIONS]
-  solito-bench alacritty [OPTIONS]
   solito-bench workload [OPTIONS]
 
 Options:
@@ -17,7 +15,6 @@ Options:
   --warmup <N>               Warmup duration [default: 2]
   --fps <N>                  Workload update rate [default: 60]
   --solito <PATH>            Solito executable override
-  --alacritty <PATH>         Alacritty executable override
   -h, --help                 Print this help
 
 Examples:
@@ -26,21 +23,6 @@ Examples:
   cargo run -p solito-bench --release -- solito --seconds 10
 "#;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BenchmarkTarget {
-    Solito,
-    Alacritty,
-}
-
-impl BenchmarkTarget {
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::Solito => "Solito",
-            Self::Alacritty => "Alacritty",
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct BenchmarkOptions {
     pub mode: WorkloadMode,
@@ -48,7 +30,6 @@ pub struct BenchmarkOptions {
     pub warmup: u64,
     pub fps: u32,
     pub solito: Option<PathBuf>,
-    pub alacritty: Option<PathBuf>,
 }
 
 impl Default for BenchmarkOptions {
@@ -59,18 +40,13 @@ impl Default for BenchmarkOptions {
             warmup: 2,
             fps: 60,
             solito: None,
-            alacritty: None,
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Command {
-    Compare(BenchmarkOptions),
-    Measure {
-        target: BenchmarkTarget,
-        options: BenchmarkOptions,
-    },
+    Measure(BenchmarkOptions),
     Workload(WorkloadConfig),
     Help,
 }
@@ -114,7 +90,6 @@ fn parse_from(args: impl IntoIterator<Item = String>) -> io::Result<Command> {
             }
             "--fps" => options.fps = positive_u32(option, value)?,
             "--solito" => options.solito = Some(PathBuf::from(value)),
-            "--alacritty" => options.alacritty = Some(PathBuf::from(value)),
             "--duration" => workload_duration = Some(positive_u64(option, value)?),
             _ => return Err(invalid(format!("unknown option: {option}"))),
         }
@@ -122,15 +97,7 @@ fn parse_from(args: impl IntoIterator<Item = String>) -> io::Result<Command> {
     }
 
     match command.as_str() {
-        "compare" => Ok(Command::Compare(options)),
-        "solito" => Ok(Command::Measure {
-            target: BenchmarkTarget::Solito,
-            options,
-        }),
-        "alacritty" => Ok(Command::Measure {
-            target: BenchmarkTarget::Alacritty,
-            options,
-        }),
+        "solito" => Ok(Command::Measure(options)),
         "workload" => Ok(Command::Workload(WorkloadConfig {
             mode: options.mode,
             duration_seconds: workload_duration.unwrap_or(options.seconds),
@@ -166,7 +133,7 @@ fn invalid(message: String) -> io::Error {
 
 #[cfg(test)]
 mod tests {
-    use super::{BenchmarkTarget, Command, parse_from};
+    use super::{Command, parse_from};
     use crate::workload::WorkloadMode;
 
     fn args(values: &[&str]) -> Vec<String> {
@@ -174,10 +141,10 @@ mod tests {
     }
 
     #[test]
-    fn compare_uses_stable_defaults() {
-        let command = parse_from(args(&["compare"])).unwrap();
-        let Command::Compare(options) = command else {
-            panic!("expected compare command");
+    fn measure_uses_stable_defaults() {
+        let command = parse_from(args(&["solito"])).unwrap();
+        let Command::Measure(options) = command else {
+            panic!("expected measure command");
         };
 
         assert_eq!(options.mode, WorkloadMode::Full);
@@ -187,7 +154,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_target_and_overrides() {
+    fn parses_measurement_overrides() {
         let command = parse_from(args(&[
             "solito",
             "--mode",
@@ -200,11 +167,10 @@ mod tests {
             "30",
         ]))
         .unwrap();
-        let Command::Measure { target, options } = command else {
+        let Command::Measure(options) = command else {
             panic!("expected measure command");
         };
 
-        assert_eq!(target, BenchmarkTarget::Solito);
         assert_eq!(options.mode, WorkloadMode::Incremental);
         assert_eq!(options.seconds, 15);
         assert_eq!(options.warmup, 1);
@@ -213,9 +179,9 @@ mod tests {
 
     #[test]
     fn parses_nvim_workload_mode() {
-        let command = parse_from(args(&["compare", "--mode", "nvim"])).unwrap();
-        let Command::Compare(options) = command else {
-            panic!("expected compare command");
+        let command = parse_from(args(&["solito", "--mode", "nvim"])).unwrap();
+        let Command::Measure(options) = command else {
+            panic!("expected measure command");
         };
 
         assert_eq!(options.mode, WorkloadMode::Nvim);
@@ -223,8 +189,14 @@ mod tests {
 
     #[test]
     fn rejects_zero_measurement_duration() {
-        let error = parse_from(args(&["compare", "--seconds", "0"])).unwrap_err();
+        let error = parse_from(args(&["solito", "--seconds", "0"])).unwrap_err();
 
         assert!(error.to_string().contains("greater than zero"));
+    }
+
+    #[test]
+    fn rejects_unknown_commands_and_options() {
+        assert!(parse_from(args(&["unknown"])).is_err());
+        assert!(parse_from(args(&["solito", "--unknown", "value"])).is_err());
     }
 }

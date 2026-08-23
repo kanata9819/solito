@@ -52,6 +52,4 @@ cargo run -p solito-bench --release -- solito \
   --solito C:/path/to/solito.exe
 ```
 
-An explicit `compare` command remains available for occasional Alacritty comparisons, but it is not used by `just bench`.
-
 CPU percentages follow the process convention where 100% is one fully occupied logical CPU. `full` repaints a 25-row colored terminal grid every frame; `incremental` draws the grid once and updates only the status line; `nvim` runs a real automated Neovim session.
