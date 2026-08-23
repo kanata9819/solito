@@ -2,6 +2,7 @@
 members = [
     "decodesc",
     "solito",
+    "solito-bench",
     "solito-config",
     "solito-renderer",
     "solito-terminal",

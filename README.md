@@ -12,6 +12,16 @@ Start with the Japanese [architecture and maintenance guide](docs/architecture.m
 It maps input, PTY output, resizing, rendering, and common bug symptoms to the
 first source file to inspect.
 
+### Performance benchmark
+
+Build the release binaries and measure Solito by running a real automated Neovim workload:
+
+```bash
+just bench
+```
+
+The underlying command and additional workload modes are documented in [`solito-bench/README.md`](solito-bench/README.md). The benchmark uses a runtime shell override and does not rewrite the user's persistent Solito configuration.
+
 ## Features
 
 - GPU-rendered terminal text

@@ -1,10 +1,11 @@
-use std::{error::Error, fs, path::PathBuf};
+use std::{env, error::Error, fs, path::PathBuf};
 
 use super::renderer::{RendererConfig, WindowBackdrop, sanitize_positive_f32};
 use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 
 const APP_DIR_NAME: &str = "Solito";
+const SHELL_PROGRAM_ENV: &str = "SOLITO_SHELL_PROGRAM";
 
 #[cfg(target_os = "windows")]
 const DEFAULT_SHELL_PROGRAM: &str = "pwsh";
@@ -35,7 +36,11 @@ impl AppConfig {
         }
 
         let config_text = fs::read_to_string(&paths.config_file)?;
-        let config = toml::from_str::<Self>(&config_text)?.sanitized();
+        let shell_program =
+            env::var_os(SHELL_PROGRAM_ENV).map(|program| program.to_string_lossy().into_owned());
+        let config = toml::from_str::<Self>(&config_text)?
+            .sanitized()
+            .with_shell_program(shell_program.as_deref());
 
         Ok(config)
     }
@@ -58,6 +63,16 @@ impl AppConfig {
         self.window = self.window.sanitized();
         self.font = self.font.sanitized();
         self.tracing = self.tracing.sanitized();
+
+        self
+    }
+
+    fn with_shell_program(mut self, program: Option<&str>) -> Self {
+        // Runtime overrides let tools launch a one-off shell without rewriting
+        // the user's persistent config file.
+        if let Some(program) = program.filter(|program| !program.trim().is_empty()) {
+            self.shell.program = program.to_string();
+        }
 
         self
     }
@@ -329,5 +344,31 @@ mod tests {
         .sanitized();
 
         assert_eq!(config.shell.program, "nu");
+    }
+
+    #[test]
+    fn runtime_shell_override_does_not_change_other_config() {
+        let config = toml::from_str::<AppConfig>(
+            r#"
+            [shell]
+            program = "nu"
+
+            [window]
+            width = 900.0
+            "#,
+        )
+        .unwrap()
+        .sanitized()
+        .with_shell_program(Some("C:/tools/solito-bench.exe"));
+
+        assert_eq!(config.shell.program, "C:/tools/solito-bench.exe");
+        assert_eq!(config.window.width, 900.0);
+    }
+
+    #[test]
+    fn blank_runtime_shell_override_is_ignored() {
+        let config = AppConfig::default().with_shell_program(Some("  "));
+
+        assert_eq!(config.shell.program, ShellConfig::default().program);
     }
 }
