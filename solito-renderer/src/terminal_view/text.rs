@@ -1,10 +1,10 @@
-use glyphon::{Attrs, Color, Family, Shaping};
+use glyphon::{Attrs, AttrsList, BufferLine, Color, Family, Shaping};
 use solito_terminal::ScreenCell;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use crate::{RendererConfig, terminal_view::glyph::GlyphonResources, util::color::ThemeColor};
 
-use super::TerminalView;
+use super::{TerminalView, text_damage::TextDamage};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 struct GridTextStyle {
@@ -44,17 +44,16 @@ impl TerminalView {
         width.saturating_sub(horizontal_padding).max(1)
     }
 
-    pub(super) fn mark_text_buffer_dirty(&mut self) {
-        self.text_buffer_dirty = true;
+    pub(super) fn invalidate_all_text(&mut self) {
+        self.text_damage.mark_all();
     }
 
-    pub(crate) fn rebuild_text_buffer_if_dirty(&mut self) {
-        if !self.text_buffer_dirty {
-            return;
+    pub(crate) fn update_text_buffer(&mut self) {
+        match std::mem::take(&mut self.text_damage) {
+            TextDamage::None => {}
+            TextDamage::Rows(rows) => self.update_text_rows(&rows),
+            TextDamage::All => self.set_text_to_buffer(),
         }
-
-        self.set_text_to_buffer();
-        self.text_buffer_dirty = false;
     }
 
     fn set_text_to_buffer(&mut self) {
@@ -84,6 +83,85 @@ impl TerminalView {
             Some([r, g, b, a]) => attrs.color(Color::rgba(r, g, b, a)),
             None => attrs,
         }
+    }
+
+    fn update_text_rows(&mut self, rows: &BTreeSet<usize>) {
+        if self.snapshot.lines.is_empty() {
+            self.set_text_to_buffer();
+            return;
+        }
+
+        let row_count = self.row_count();
+        self.viewport.clamp(row_count);
+        let (start, end) = self.viewport.visible_range(row_count);
+        let visible_rows = rows.range(start..end).copied().collect::<Vec<_>>();
+
+        if visible_rows.is_empty() {
+            return;
+        }
+
+        self.ensure_glyph_widths(start, end);
+
+        let font_family = self.config.font_family.clone();
+        let default_attrs = Self::text_attrs(None, font_family.as_str());
+        let cursor_text_color = Self::cursor_text_color(self.caret_color());
+        let (cursor_row, cursor_col) = if self.snapshot.cursor_visible {
+            (self.snapshot.cursor_row, self.snapshot.cursor_col)
+        } else {
+            (usize::MAX, usize::MAX)
+        };
+        let tab_bar_offset = usize::from(self.has_tab_bar());
+        let grid = GridMetrics {
+            cell_width: self.glyphs.cell_width,
+            font_size: self.config.font_size,
+            glyph_widths: &self.glyphs.glyph_widths,
+        };
+        let mut updated = false;
+
+        for absolute_row in visible_rows {
+            let buffer_row = tab_bar_offset + absolute_row - start;
+            let Some(buffer_line) = self.glyphs.text_buffer.lines.get_mut(buffer_row) else {
+                self.set_text_to_buffer();
+                return;
+            };
+            let spans = Self::text_spans_for_lines(
+                std::slice::from_ref(&self.snapshot.lines[absolute_row]),
+                absolute_row,
+                cursor_row,
+                cursor_col,
+                cursor_text_color,
+                font_family.as_str(),
+                &grid,
+            );
+
+            updated |= Self::set_buffer_line(buffer_line, spans, &default_attrs);
+        }
+
+        if updated {
+            self.glyphs
+                .text_buffer
+                .shape_until_scroll(&mut self.glyphs.font_system, false);
+        }
+    }
+
+    fn set_buffer_line<'a>(
+        buffer_line: &mut BufferLine,
+        spans: Vec<(String, Attrs<'a>)>,
+        default_attrs: &Attrs<'a>,
+    ) -> bool {
+        let mut text = String::new();
+        let mut attrs_list = AttrsList::new(default_attrs);
+
+        for (span, attrs) in spans {
+            let start = text.len();
+            text.push_str(span.as_str());
+            let end = text.len();
+            if attrs != *default_attrs {
+                attrs_list.add_span(start..end, &attrs);
+            }
+        }
+
+        buffer_line.set_text(text, buffer_line.ending(), attrs_list)
     }
 
     fn visible_text_spans<'a>(&mut self, font_family: &'a str) -> Vec<(String, Attrs<'a>)> {
@@ -436,5 +514,44 @@ mod tests {
             "B x={} expected={expected_x} cell_width={cell_width}",
             b.x
         );
+    }
+
+    #[test]
+    fn updating_one_buffer_line_preserves_other_line_layouts() {
+        let config = RendererConfig::default();
+        let mut font_system = FontSystem::new();
+        let attrs = TerminalView::text_attrs(None, config.font_family.as_str());
+        let mut buffer = Buffer::new(
+            &mut font_system,
+            Metrics::new(config.font_size, config.line_height),
+        );
+        buffer.set_size(Some(1000.0), Some(100.0));
+        buffer.set_wrap(Wrap::None);
+        buffer.set_rich_text(
+            [("unchanged\nold", attrs.clone())],
+            &attrs,
+            Shaping::Advanced,
+            None,
+        );
+        buffer.shape_until_scroll(&mut font_system, false);
+
+        assert_eq!(buffer.lines.len(), 2);
+        assert!(!buffer.lines[0].needs_reshaping());
+        assert!(!buffer.lines[1].needs_reshaping());
+
+        assert!(TerminalView::set_buffer_line(
+            &mut buffer.lines[1],
+            vec![("new".to_string(), attrs.clone())],
+            &attrs,
+        ));
+
+        assert!(!buffer.lines[0].needs_reshaping());
+        assert!(buffer.lines[1].needs_reshaping());
+
+        buffer.shape_until_scroll(&mut font_system, false);
+
+        assert_eq!(buffer.lines[0].text(), "unchanged");
+        assert_eq!(buffer.lines[1].text(), "new");
+        assert!(!buffer.lines[1].needs_reshaping());
     }
 }

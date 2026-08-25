@@ -3,6 +3,7 @@ mod copy_mode;
 mod glyph;
 mod tab_bar;
 mod text;
+mod text_damage;
 mod view;
 mod viewport;
 

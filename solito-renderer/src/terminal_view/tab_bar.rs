@@ -50,7 +50,7 @@ impl TabBarSnapshot {
 impl TerminalView {
     pub(crate) fn set_tab_bar(&mut self, tab_bar: TabBarSnapshot) {
         self.tab_bar = tab_bar;
-        self.mark_text_buffer_dirty();
+        self.invalidate_all_text();
     }
 
     pub(crate) fn tab_bar_rects(&self) -> Vec<RectSpec> {

@@ -5,7 +5,7 @@ use crate::RendererConfig;
 
 use super::{
     copy_mode::CopyModeSnapshot, glyph::GlyphonResources, tab_bar::TabBarSnapshot,
-    viewport::ViewportState,
+    text_damage::TextDamage, viewport::ViewportState,
 };
 
 pub(crate) struct TerminalView {
@@ -15,7 +15,7 @@ pub(crate) struct TerminalView {
     pub(super) tab_bar: TabBarSnapshot,
     pub(super) viewport: ViewportState,
     pub(super) copy_mode: CopyModeSnapshot,
-    pub(super) text_buffer_dirty: bool,
+    pub(super) text_damage: TextDamage,
 }
 
 impl TerminalView {
@@ -49,7 +49,7 @@ impl TerminalView {
             snapshot: ScreenSnapshot::default(),
             tab_bar: TabBarSnapshot::default(),
             copy_mode: CopyModeSnapshot::default(),
-            text_buffer_dirty: true,
+            text_damage: TextDamage::All,
         }
     }
 
@@ -77,15 +77,17 @@ impl TerminalView {
             Self::terminal_content_height(height, self.config.line_height),
             self.row_count(),
         );
-        self.mark_text_buffer_dirty();
+        self.invalidate_all_text();
     }
 
     pub(crate) fn set_snapshot(&mut self, snapshot: ScreenSnapshot) {
+        let previous_range = self.viewport.visible_range(self.row_count());
         let keep_start = if self.viewport.is_at_bottom() {
             None
         } else {
             Some(self.viewport.visible_range(self.row_count()).0)
         };
+        let damage = TextDamage::between(&self.snapshot, &snapshot);
 
         self.snapshot = snapshot;
 
@@ -95,18 +97,25 @@ impl TerminalView {
             self.viewport.clamp(self.row_count());
         }
 
-        self.mark_text_buffer_dirty();
+        if previous_range != self.viewport.visible_range(self.row_count()) {
+            self.invalidate_all_text();
+        } else {
+            self.text_damage.merge(damage);
+        }
     }
 
     pub(crate) fn set_snapshot_at_bottom(&mut self, snapshot: ScreenSnapshot) {
         self.snapshot = snapshot;
         self.viewport.reset();
-        self.mark_text_buffer_dirty();
+        self.invalidate_all_text();
     }
 
     pub(crate) fn scroll(&mut self, _x: f32, y: f32) {
+        let previous_range = self.viewport.visible_range(self.row_count());
         self.viewport.scroll(y, self.row_count());
-        self.mark_text_buffer_dirty();
+        if previous_range != self.viewport.visible_range(self.row_count()) {
+            self.invalidate_all_text();
+        }
     }
 
     pub(crate) fn visible_cols(&self, width: u32) -> usize {

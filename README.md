@@ -6,12 +6,6 @@ Solito is a small, native terminal emulator for Windows, built with Rust. It com
 
 Solito uses `winit` for its native window, `wgpu` for rendering, `glyphon` for text, and `portable-pty` for shell sessions.
 
-## Development
-
-Start with the Japanese [architecture and maintenance guide](docs/architecture.md).
-It maps input, PTY output, resizing, rendering, and common bug symptoms to the
-first source file to inspect.
-
 ### Performance benchmark
 
 Build the release binaries and measure Solito by running a real automated Neovim workload:

@@ -51,7 +51,7 @@ impl TerminalView {
         };
 
         if copy_mode_changed || viewport_changed {
-            self.mark_text_buffer_dirty();
+            self.invalidate_all_text();
         }
     }
 
