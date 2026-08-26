@@ -168,12 +168,15 @@ impl Screen {
     }
 
     pub(super) fn put_char(&mut self, c: char) {
-        if c == '\u{7f}' || c == '\u{8}' {
+        const DEL: char = '\u{7f}';
+        const BACKSPACE: char = '\u{8}';
+        if c == DEL || c == BACKSPACE {
             return;
         }
 
         let char_width = UnicodeWidthChar::width(c).unwrap_or(1).clamp(1, 2);
 
+        // If the previous character reached the right edge, wrap before printing this one.
         if self.screen_buffer.pending_wrap {
             if self.screen_buffer.auto_wrap {
                 // If the previous character reached the right edge,
@@ -184,10 +187,13 @@ impl Screen {
             }
         }
 
-        if char_width == 2 {
+        // if current charcter is full width, then status would be true
+        let is_wide = char_width == 2;
+        if is_wide {
             let current_col = self.screen_buffer.cursor.get_current_col();
             // If char width is over the buffer edge, start at next line.
-            if current_col + 1 >= self.screen_buffer.cols() {
+            let next_col = current_col + 1;
+            if next_col + 1 >= self.screen_buffer.cols() {
                 self.advance_to_next_line();
             }
         }
@@ -206,17 +212,20 @@ impl Screen {
             }
             line.truncate(cols);
         }
+
         if col == line.len() {
             line.push(ScreenCell::new(c, self.screen_buffer.style));
         } else {
             line[col] = ScreenCell::new(c, self.screen_buffer.style);
         }
 
-        if char_width == 2 {
+        if is_wide {
             let continuation_col = col + 1;
             if continuation_col == line.len() {
+                // Append it if the cell does not exist yet.
                 line.push(ScreenCell::wide_continuation(self.screen_buffer.style));
             } else {
+                // Otherwise, replace the existing next cell.
                 line[continuation_col] = ScreenCell::wide_continuation(self.screen_buffer.style);
             }
         }

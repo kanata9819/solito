@@ -172,13 +172,10 @@ impl Renderer {
 
         self.prepare_text()?;
 
-        let frame = match self.acquire_frame() {
-            Ok(frame) => frame,
-            Err(err) => {
-                tracing::error!("acquire frame failed: {err}");
-                None
-            }
-        };
+        let frame = self.acquire_frame().unwrap_or_else(|err| {
+            tracing::error!("acquire frame failed: {err}");
+            None
+        });
 
         if let Some(frame) = frame {
             let view = frame.texture.create_view(&TextureViewDescriptor::default());
