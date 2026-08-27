@@ -51,6 +51,8 @@ pub enum CsiMessage {
     SelectGraphicRendition(Vec<u16>),
     DeviceStatusReport(u16),
     SetMode {
+        /// Whether the CSI sequence uses the `?` prefix,
+        /// indicating DEC private modes rather than standard CSI modes.
         private: bool,
         modes: Vec<u16>,
     },
