@@ -193,7 +193,7 @@ impl Screen {
             let current_col = self.screen_buffer.cursor.get_current_col();
             // If char width is over the buffer edge, start at next line.
             let next_col = current_col + 1;
-            if next_col + 1 >= self.screen_buffer.cols() {
+            if next_col >= self.screen_buffer.cols() {
                 self.advance_to_next_line();
             }
         }
