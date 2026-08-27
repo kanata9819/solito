@@ -205,28 +205,38 @@ impl Screen {
         let col = self.screen_buffer.cursor.get_current_col();
         let cols = self.screen_buffer.cols();
 
-        let line = &mut self.screen_buffer.lines[row];
         if self.screen_buffer.insert_mode {
             for _ in 0..char_width {
-                line.insert(col, ScreenCell::blank(self.screen_buffer.style));
+                self.screen_buffer.insert_cell(
+                    row,
+                    col,
+                    ScreenCell::blank(self.screen_buffer.style),
+                );
             }
-            line.truncate(cols);
+            self.screen_buffer.truncate_line(row, cols);
         }
 
-        if col == line.len() {
-            line.push(ScreenCell::new(c, self.screen_buffer.style));
+        if col == self.screen_buffer.line_len(row) {
+            self.screen_buffer
+                .push_cell(row, ScreenCell::new(c, self.screen_buffer.style));
         } else {
-            line[col] = ScreenCell::new(c, self.screen_buffer.style);
+            self.screen_buffer
+                .replace_cell(row, col, ScreenCell::new(c, self.screen_buffer.style));
         }
 
         if is_wide {
             let continuation_col = col + 1;
-            if continuation_col == line.len() {
+            if continuation_col == self.screen_buffer.line_len(row) {
                 // Append it if the cell does not exist yet.
-                line.push(ScreenCell::wide_continuation(self.screen_buffer.style));
+                self.screen_buffer
+                    .push_cell(row, ScreenCell::wide_continuation(self.screen_buffer.style));
             } else {
                 // Otherwise, replace the existing next cell.
-                line[continuation_col] = ScreenCell::wide_continuation(self.screen_buffer.style);
+                self.screen_buffer.replace_cell(
+                    row,
+                    continuation_col,
+                    ScreenCell::wide_continuation(self.screen_buffer.style),
+                );
             }
         }
 
@@ -244,6 +254,7 @@ impl Screen {
             self.screen_buffer.pending_wrap = true;
         }
 
+        // for repeat writing
         self.last_printed = Some(c);
     }
 
