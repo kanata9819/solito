@@ -289,7 +289,7 @@ mod tests {
     #[test]
     fn invalid_config_values_fall_back_to_defaults() {
         let config = AppConfig {
-            shell: super::ShellConfig {
+            shell: ShellConfig {
                 program: String::new(),
             },
             window: super::WindowConfig {

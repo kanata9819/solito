@@ -52,14 +52,14 @@ impl GlyphonResources {
     }
 
     pub(super) fn measure_font_width(
-        font_system: &mut glyphon::FontSystem,
+        font_system: &mut FontSystem,
         config: &RendererConfig,
     ) -> f32 {
         Self::measure_text_width(font_system, config, "M")
     }
 
     pub(super) fn measure_text_width(
-        font_system: &mut glyphon::FontSystem,
+        font_system: &mut FontSystem,
         config: &RendererConfig,
         text: &str,
     ) -> f32 {

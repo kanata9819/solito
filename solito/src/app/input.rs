@@ -296,7 +296,7 @@ mod tests {
     #[test]
     fn ctrl_tab_switch_next_tab() {
         let command = shortcut_command(
-            &Key::Named(winit::keyboard::NamedKey::Tab),
+            &Key::Named(NamedKey::Tab),
             ModifiersState::CONTROL,
         );
 
@@ -306,7 +306,7 @@ mod tests {
     #[test]
     fn ctrl_tab_switch_previous_tab() {
         let command = shortcut_command(
-            &Key::Named(winit::keyboard::NamedKey::Tab),
+            &Key::Named(NamedKey::Tab),
             ModifiersState::SHIFT | ModifiersState::CONTROL,
         );
 

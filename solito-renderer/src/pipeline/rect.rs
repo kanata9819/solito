@@ -94,7 +94,7 @@ impl RectPipeline {
                 module: &shader,
                 entry_point: Some("vs_main"),
                 buffers: &[Some(wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<RectInstance>() as wgpu::BufferAddress,
+                    array_stride: size_of::<RectInstance>() as wgpu::BufferAddress,
                     step_mode: wgpu::VertexStepMode::Instance,
                     attributes: &RECT_INSTANCE_ATTRIBUTES,
                 })],
@@ -197,10 +197,10 @@ impl RectPipeline {
         })
     }
 
-    pub(crate) fn create_screen_uniform_buffer(device: &wgpu::Device) -> wgpu::Buffer {
+    pub(crate) fn create_screen_uniform_buffer(device: &wgpu::Device) -> Buffer {
         device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Rect Screen Uniform Buffer"),
-            size: std::mem::size_of::<[f32; 4]>() as u64,
+            size: size_of::<[f32; 4]>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         })
@@ -209,7 +209,7 @@ impl RectPipeline {
     pub(crate) fn create_instance_buffer(
         device: &wgpu::Device,
         rects: &[RectSpec],
-    ) -> Option<wgpu::Buffer> {
+    ) -> Option<Buffer> {
         if rects.is_empty() {
             return None;
         }
@@ -233,7 +233,7 @@ impl RectPipeline {
         &self,
         pass: &mut wgpu::RenderPass,
         bind_group: &wgpu::BindGroup,
-        instance_buffer: &wgpu::Buffer,
+        instance_buffer: &Buffer,
         rect_count: usize,
     ) {
         use std::ops::Range;

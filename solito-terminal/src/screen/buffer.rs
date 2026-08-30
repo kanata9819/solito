@@ -233,7 +233,7 @@ mod tests {
         assert_eq!(buf.line_len(0), 26);
 
         buf.truncate_line(0, 1);
-        assert!(buf.line_len(0) == 1);
+        assert_eq!(buf.line_len(0), 1);
         assert_eq!(buf.lines[0][0].ch, 'A');
     }
 }

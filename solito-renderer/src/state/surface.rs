@@ -179,7 +179,7 @@ impl WindowSurface {
                     hwnd,
                     DWMWA_USE_IMMERSIVE_DARK_MODE as u32,
                     &dark_mode as *const _ as *const c_void,
-                    std::mem::size_of_val(&dark_mode) as u32,
+                    size_of_val(&dark_mode) as u32,
                 )
             };
             if dark_hr < 0 {
@@ -194,7 +194,7 @@ impl WindowSurface {
                     hwnd,
                     DWMWA_SYSTEMBACKDROP_TYPE as u32,
                     &backdrop as *const _ as *const c_void,
-                    std::mem::size_of_val(&backdrop) as u32,
+                    size_of_val(&backdrop) as u32,
                 )
             };
 
@@ -287,7 +287,7 @@ impl WindowSurface {
             let mut data = WindowCompositionAttribData {
                 attrib: WCA_ACCENT_POLICY,
                 data: &mut policy as *mut _ as *mut c_void,
-                size_of_data: std::mem::size_of::<AccentPolicy>(),
+                size_of_data: size_of::<AccentPolicy>(),
             };
 
             // SAFETY: hwnd belongs to the live winit window and `data` points to

@@ -82,11 +82,11 @@ mod windows {
             // SAFETY: counters has the documented layout and remains live for the call.
             let counters = unsafe {
                 let mut counters = mem::zeroed::<PROCESS_MEMORY_COUNTERS>();
-                counters.cb = mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
+                counters.cb = size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
                 if K32GetProcessMemoryInfo(
                     self.0,
                     &mut counters,
-                    mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32,
+                    size_of::<PROCESS_MEMORY_COUNTERS>() as u32,
                 ) == 0
                 {
                     return Err(io::Error::last_os_error());
