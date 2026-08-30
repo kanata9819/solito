@@ -76,7 +76,7 @@ impl TerminalView {
             .shape_until_scroll(&mut self.glyphs.font_system, false);
     }
 
-    pub(super) fn text_attrs(color: Option<[u8; 4]>, font_family: &str) -> Attrs {
+    pub(super) fn text_attrs<'a>(color: Option<[u8; 4]>, font_family: &'a str) -> Attrs<'a> {
         let attrs = Attrs::new().family(Family::Name(font_family));
 
         match color {
