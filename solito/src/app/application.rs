@@ -10,12 +10,12 @@ mod view_sync;
 mod window_event;
 
 use solito_config::app::AppConfig;
-use solito_renderer::{Renderer, RendererConfig, TerminalSize, estimate_terminal_size};
+use solito_renderer::{Renderer, RendererConfig, TerminalSize, estimate_term_size};
 use std::{error::Error, sync::Arc};
 use tracing::error;
 use winit::{
     application::ApplicationHandler,
-    dpi::LogicalSize,
+    dpi::{LogicalSize, PhysicalSize},
     event::WindowEvent,
     event_loop::{ActiveEventLoop, EventLoopProxy},
     keyboard::ModifiersState,
@@ -41,7 +41,6 @@ pub(crate) struct SolitoApplication {
 impl SolitoApplication {
     pub(crate) fn new(config: AppConfig, event_proxy: EventLoopProxy<AppEvent>) -> Self {
         let renderer_config = config.renderer_config();
-
         Self {
             config,
             renderer_config,
@@ -66,15 +65,8 @@ impl SolitoApplication {
 
         self.window = Some(window.clone());
         let window_size = window.inner_size();
-        let estimated_size =
-            estimate_terminal_size(window_size.width, window_size.height, &self.renderer_config);
-        self.open_initial_tab(estimated_size);
-
         let mut renderer = self.create_renderer(&window)?;
-        let actual_size = renderer.terminal_size();
-        if actual_size != estimated_size {
-            self.tabs.resize_all(actual_size)?;
-        }
+        self.resize_to_actual_size(&mut renderer, window_size)?;
 
         self.tabs.drain_outputs();
         renderer.set_tab_bar(self.tab_bar_snapshot());
@@ -88,6 +80,20 @@ impl SolitoApplication {
 
         self.renderer = Some(renderer);
         self.drain_terminal_output();
+        Ok(())
+    }
+
+    fn resize_to_actual_size(
+        &mut self,
+        renderer: &mut Renderer,
+        window_size: PhysicalSize<u32>,
+    ) -> Result<(), Box<dyn Error>> {
+        let size = estimate_term_size(window_size.width, window_size.height, &self.renderer_config);
+        let actual_size = renderer.terminal_size();
+        self.open_initial_tab(size);
+        if actual_size != size {
+            self.tabs.resize_all(actual_size)?;
+        }
         Ok(())
     }
 
@@ -121,7 +127,6 @@ impl SolitoApplication {
     #[cfg(target_os = "windows")]
     fn with_platform_window_attributes(attributes: WindowAttributes) -> WindowAttributes {
         use winit::platform::windows::WindowAttributesExtWindows;
-
         attributes.with_taskbar_icon(icon::app_icon())
     }
 
@@ -153,7 +158,6 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
         event: WindowEvent,
     ) {
         let command = self.handle_window_event(event_loop, window_id, event);
-
         if let Err(err) = self.handle_command(command, event_loop) {
             error!("application command failed: {err}");
         }

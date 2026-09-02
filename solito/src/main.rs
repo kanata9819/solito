@@ -19,7 +19,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let config = AppConfig::load_or_create()?;
     init_tracing(&config);
     run_app(config)?;
-
     Ok(())
 }
 
@@ -34,6 +33,5 @@ fn run_app(config: AppConfig) -> Result<(), Box<dyn Error>> {
     let event_loop = EventLoop::<AppEvent>::with_user_event().build()?;
     let mut solito = SolitoApplication::new(config, event_loop.create_proxy());
     event_loop.run_app(&mut solito)?;
-
     Ok(())
 }
