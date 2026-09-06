@@ -8,3 +8,4 @@ license.workspace = true
 directories = "6"
 serde = { version = "1", features = ["derive"] }
 toml = "1"
+anyhow.workspace = true

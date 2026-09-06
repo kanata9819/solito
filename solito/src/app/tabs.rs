@@ -1,8 +1,8 @@
 use crate::session::runtime::{SessionInput, SessionRuntime};
 
+use anyhow::Result;
 use solito_terminal::{ScreenSnapshot, TerminalSize, TerminalState};
 use std::{
-    error::Error,
     path::Path,
     sync::mpsc::{Receiver, Sender, channel},
 };
@@ -16,7 +16,7 @@ pub(super) trait TerminalTab {
     fn snapshot(&self) -> ScreenSnapshot;
     fn title(&self) -> &str;
     fn drain_output(&mut self) -> bool;
-    fn resize(&mut self, size: TerminalSize) -> Result<(), Box<dyn Error>>;
+    fn resize(&mut self, size: TerminalSize) -> Result<()>;
 }
 
 pub(super) struct Tab {
@@ -77,7 +77,7 @@ impl TerminalTab for Tab {
         updated
     }
 
-    fn resize(&mut self, size: TerminalSize) -> Result<(), Box<dyn Error>> {
+    fn resize(&mut self, size: TerminalSize) -> Result<()> {
         self.terminal.resize(size);
         self.input_tx.send(SessionInput::resize(size))?;
 
@@ -163,7 +163,7 @@ impl<T: TerminalTab> Tabs<T> {
         active_updated
     }
 
-    pub(super) fn resize_all(&mut self, size: TerminalSize) -> Result<(), Box<dyn Error>> {
+    pub(super) fn resize_all(&mut self, size: TerminalSize) -> Result<()> {
         for tab in &mut self.tabs {
             tab.resize(size)?;
         }
@@ -219,11 +219,9 @@ fn tab_title_for_program(program: &str) -> String {
 mod tests {
     use super::{Tabs, TerminalTab, tab_title_for_program};
     use crate::session::runtime::SessionInput;
+    use anyhow::Result;
     use solito_terminal::{ScreenSnapshot, TerminalSize};
-    use std::{
-        error::Error,
-        sync::mpsc::{Receiver, Sender, channel},
-    };
+    use std::sync::mpsc::{Receiver, Sender, channel};
 
     struct FakeTab {
         input_tx: Sender<SessionInput>,
@@ -258,7 +256,7 @@ mod tests {
             false
         }
 
-        fn resize(&mut self, _size: TerminalSize) -> Result<(), Box<dyn Error>> {
+        fn resize(&mut self, _size: TerminalSize) -> Result<()> {
             Ok(())
         }
     }

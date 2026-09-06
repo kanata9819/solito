@@ -5,6 +5,9 @@ edition = "2024"
 license.workspace = true
 publish = false
 
+[dependencies]
+anyhow.workspace = true
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = [
     "Win32_Foundation",

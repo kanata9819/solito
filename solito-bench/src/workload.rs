@@ -1,3 +1,4 @@
+use anyhow::Result;
 use std::{
     env, fs,
     io::{self, Write},
@@ -58,7 +59,7 @@ pub fn requested_by_environment() -> bool {
     env::var_os(WORKLOAD_ENV).is_some_and(|value| value == "1")
 }
 
-pub fn run_from_environment() -> Result<(), Box<dyn std::error::Error>> {
+pub fn run_from_environment() -> Result<()> {
     let mode = env::var(MODE_ENV)
         .unwrap_or_else(|_| "full".to_string())
         .parse()?;

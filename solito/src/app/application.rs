@@ -9,9 +9,10 @@ mod command;
 mod view_sync;
 mod window_event;
 
+use anyhow::Result;
 use solito_config::app::AppConfig;
 use solito_renderer::{Renderer, RendererConfig, TerminalSize, estimate_term_size};
-use std::{error::Error, sync::Arc};
+use std::sync::Arc;
 use tracing::error;
 use winit::{
     application::ApplicationHandler,
@@ -24,7 +25,7 @@ use winit::{
 
 use crate::app::{copy::CopyMode, event::AppEvent, icon, tabs::AppTabs};
 
-pub(super) type AppResult<T = ()> = Result<T, Box<dyn Error>>;
+pub(super) type AppResult<T = ()> = Result<T>;
 
 pub(crate) struct SolitoApplication {
     config: AppConfig,
@@ -87,7 +88,7 @@ impl SolitoApplication {
         &mut self,
         renderer: &mut Renderer,
         window_size: PhysicalSize<u32>,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> AppResult {
         let size = estimate_term_size(window_size.width, window_size.height, &self.renderer_config);
         let actual_size = renderer.terminal_size();
         self.open_initial_tab(size);

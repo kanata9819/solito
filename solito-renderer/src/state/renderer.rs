@@ -1,4 +1,5 @@
-use std::{error::Error, sync::Arc};
+use anyhow::Result;
+use std::sync::Arc;
 use wgpu::TextureFormat;
 use winit::window::Window;
 
@@ -18,10 +19,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub async fn new(
-        window: Arc<Window>,
-        renderer_config: RendererConfig,
-    ) -> Result<Self, Box<dyn Error>> {
+    pub async fn new(window: Arc<Window>, renderer_config: RendererConfig) -> Result<Self> {
         let size = window.inner_size();
         let instance = GpuContext::create_instance();
         let surface = instance.create_surface(window.clone())?;

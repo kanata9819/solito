@@ -1,4 +1,4 @@
-use std::error::Error;
+use anyhow::Result;
 
 use wgpu::{Adapter, Device, Instance, Queue, Surface};
 
@@ -20,10 +20,7 @@ impl GpuContext {
         })
     }
 
-    pub(super) async fn new(
-        instance: Instance,
-        surface: &Surface<'_>,
-    ) -> Result<Self, Box<dyn Error>> {
+    pub(super) async fn new(instance: Instance, surface: &Surface<'_>) -> Result<Self> {
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),

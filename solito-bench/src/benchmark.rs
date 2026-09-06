@@ -1,12 +1,12 @@
 use std::{
-    env,
-    error::Error,
-    fs, io,
+    env, fs, io,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     thread,
     time::{Duration, Instant},
 };
+
+use anyhow::Result;
 
 use crate::{
     cli::BenchmarkOptions,
@@ -16,7 +16,7 @@ use crate::{
 
 const SOLITO_SHELL_ENV: &str = "SOLITO_SHELL_PROGRAM";
 
-pub fn measure(options: &BenchmarkOptions) -> Result<(), Box<dyn Error>> {
+pub fn measure(options: &BenchmarkOptions) -> Result<()> {
     print_header(options);
 
     let workload = env::current_exe()?;

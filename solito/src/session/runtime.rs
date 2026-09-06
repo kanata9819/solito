@@ -2,9 +2,9 @@
 //!
 //! This module never interprets terminal output; `solito-terminal` owns that job.
 
+use anyhow::Result;
 use portable_pty::{Child, CommandBuilder, MasterPty, PtyPair, PtySize, SlavePty};
 use solito_terminal::TerminalSize;
-use std::error::Error;
 use std::io::{Read, Write};
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread::{self, JoinHandle};
@@ -50,7 +50,7 @@ impl SessionRuntime {
         event_proxy: EventLoopProxy<AppEvent>,
         size: TerminalSize,
         shell_program: &str,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Self> {
         let pty_pair = Self::pty_pair(size)?;
         let child = Self::spawn_command(&pty_pair.slave, shell_program)?;
 
@@ -63,7 +63,7 @@ impl SessionRuntime {
         })
     }
 
-    pub(crate) fn run_session(mut self) -> Result<(), Box<dyn Error>> {
+    pub(crate) fn run_session(mut self) -> Result<()> {
         let reader = self.master.try_clone_reader()?;
         let writer = self.master.take_writer()?;
 
@@ -78,7 +78,7 @@ impl SessionRuntime {
         Ok(())
     }
 
-    fn pty_pair(size: TerminalSize) -> Result<PtyPair, Box<dyn Error>> {
+    fn pty_pair(size: TerminalSize) -> Result<PtyPair> {
         Ok(portable_pty::native_pty_system().openpty(PtySize {
             rows: clamp_pty_size(size.rows),
             cols: clamp_pty_size(size.cols),
@@ -87,7 +87,7 @@ impl SessionRuntime {
         })?)
     }
 
-    fn spawn_command(slave: &PtySlave, shell_program: &str) -> Result<PtyChild, Box<dyn Error>> {
+    fn spawn_command(slave: &PtySlave, shell_program: &str) -> Result<PtyChild> {
         let cmd = CommandBuilder::new(shell_program);
         Ok(slave.spawn_command(cmd)?)
     }

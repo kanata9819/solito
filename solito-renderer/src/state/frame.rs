@@ -1,8 +1,8 @@
 //! One rendered frame: prepare text, draw rectangles and glyphs, then present.
 
+use anyhow::Result;
 use glyphon::{Color, Resolution, TextArea, TextBounds};
 use solito_terminal::ScreenSnapshot;
-use std::error::Error;
 use wgpu::{
     CommandEncoder, CommandEncoderDescriptor, SurfaceTexture, TextureView, TextureViewDescriptor,
 };
@@ -12,7 +12,7 @@ use super::renderer::Renderer;
 use crate::{pass, pipeline::rect, terminal_view::TerminalView, util::color::ThemeColor};
 
 impl Renderer {
-    fn prepare_text(&mut self) -> Result<(), Box<dyn Error>> {
+    fn prepare_text(&mut self) -> Result<()> {
         // Several state updates can arrive before one redraw. Shape their
         // final text state once, immediately before glyph preparation.
         self.terminal_view.update_text_buffer();
@@ -44,11 +44,7 @@ impl Renderer {
         Ok(())
     }
 
-    fn draw_to_view(
-        &mut self,
-        encoder: &mut CommandEncoder,
-        view: &TextureView,
-    ) -> Result<(), Box<dyn Error>> {
+    fn draw_to_view(&mut self, encoder: &mut CommandEncoder, view: &TextureView) -> Result<()> {
         self.update_rect_screen_uniform();
 
         let mut rects = self.terminal_view.tab_bar_rects();
@@ -99,7 +95,7 @@ impl Renderer {
         Ok(())
     }
 
-    fn acquire_frame(&mut self) -> Result<Option<SurfaceTexture>, Box<dyn Error>> {
+    fn acquire_frame(&mut self) -> Result<Option<SurfaceTexture>> {
         for _ in 0..2 {
             match self.window_surface.surface.get_current_texture() {
                 wgpu::CurrentSurfaceTexture::Success(frame) => return Ok(Some(frame)),
@@ -161,7 +157,7 @@ impl Renderer {
     }
 
     /// Draw and present one frame.
-    pub fn draw_frame(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn draw_frame(&mut self) -> Result<()> {
         self.terminal_view.glyphs.viewport.update(
             &self.gpu.queue,
             Resolution {

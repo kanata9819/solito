@@ -4,15 +4,14 @@ mod app;
 mod panic;
 mod session;
 
-use std::error::Error;
-
+use anyhow::Result;
 use solito_config::app::AppConfig;
 use tracing_subscriber::EnvFilter;
 use winit::event_loop::EventLoop;
 
 use crate::app::{application::SolitoApplication, event::AppEvent};
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<()> {
     if cfg!(windows) {
         panic::attach_handler();
     }
@@ -29,7 +28,7 @@ fn init_tracing(config: &AppConfig) {
         .init();
 }
 
-fn run_app(config: AppConfig) -> Result<(), Box<dyn Error>> {
+fn run_app(config: AppConfig) -> Result<()> {
     let event_loop = EventLoop::<AppEvent>::with_user_event().build()?;
     let mut solito = SolitoApplication::new(config, event_loop.create_proxy());
     event_loop.run_app(&mut solito)?;

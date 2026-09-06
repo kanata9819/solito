@@ -3,9 +3,9 @@ mod cli;
 mod process_metrics;
 mod workload;
 
-use std::error::Error;
+use anyhow::Result;
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<()> {
     if workload::requested_by_environment() {
         return workload::run_from_environment();
     }

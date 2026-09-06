@@ -1,6 +1,7 @@
-use std::{env, error::Error, fs, path::PathBuf};
+use std::{env, fs, path::PathBuf};
 
 use super::renderer::{RendererConfig, WindowBackdrop, sanitize_positive_f32};
+use anyhow::{Context, Result};
 use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 
@@ -26,7 +27,7 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
-    pub fn load_or_create() -> Result<Self, Box<dyn Error>> {
+    pub fn load_or_create() -> Result<Self> {
         let paths = AppPaths::resolve()?;
         paths.ensure_config_dir()?;
 
@@ -198,8 +199,8 @@ struct AppPaths {
 }
 
 impl AppPaths {
-    fn resolve() -> Result<Self, Box<dyn Error>> {
-        let base_dirs = BaseDirs::new().ok_or("failed to resolve user directories for config")?;
+    fn resolve() -> Result<Self> {
+        let base_dirs = BaseDirs::new().context("failed to resolve user directories for config")?;
         let config_dir = base_dirs.data_local_dir().join(APP_DIR_NAME);
         let config_file = config_dir.join("config.toml");
 
@@ -209,7 +210,7 @@ impl AppPaths {
         })
     }
 
-    fn ensure_config_dir(&self) -> Result<(), Box<dyn Error>> {
+    fn ensure_config_dir(&self) -> Result<()> {
         fs::create_dir_all(&self.config_dir)?;
         Ok(())
     }
