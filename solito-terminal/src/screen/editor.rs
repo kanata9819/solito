@@ -159,7 +159,7 @@ impl Screen {
 
     pub(super) fn apply_execute(&mut self, byte: u8) {
         match byte {
-            b'\n' => self.advance_to_next_line(),
+            b'\n' => self.index(),
             b'\r' => self.carriage_return(),
             0x08 | 0x7f => self.backspace(),
             b'\t' => self.tab(),
