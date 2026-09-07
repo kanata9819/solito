@@ -20,7 +20,7 @@ impl SolitoApplication {
         }
     }
 
-    pub(super) fn handle_command(
+    pub(super) fn handle_keyboard_command(
         &mut self,
         command: AppCommand,
         event_loop: &ActiveEventLoop,
@@ -80,21 +80,6 @@ impl SolitoApplication {
                 }
             }
             AppCommand::PasteFromClipboard => self.paste_from_clipboard()?,
-            AppCommand::Resize {
-                window_size,
-                terminal_size,
-            } => {
-                self.tabs.resize_all(terminal_size)?;
-
-                if let (Some(renderer), Some(snapshot)) =
-                    (&mut self.renderer, self.tabs.active_snapshot())
-                {
-                    let copy_mode = self.copy_mode.renderer_snapshot(&snapshot);
-                    renderer.resize(window_size, snapshot);
-                    renderer.set_copy_mode(copy_mode);
-                    self.needs_redraw = true;
-                }
-            }
         }
 
         Ok(())

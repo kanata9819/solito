@@ -1,6 +1,4 @@
-use solito_terminal::TerminalSize;
 use winit::{
-    dpi::PhysicalSize,
     event::ElementState,
     keyboard::{Key, ModifiersState, NamedKey, SmolStr},
 };
@@ -19,10 +17,6 @@ pub(super) enum AppCommand {
     PreviousTab,
     CopySelection,
     PasteFromClipboard,
-    Resize {
-        window_size: PhysicalSize<u32>,
-        terminal_size: TerminalSize,
-    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -293,10 +287,7 @@ mod tests {
 
     #[test]
     fn ctrl_tab_switch_next_tab() {
-        let command = shortcut_command(
-            &Key::Named(NamedKey::Tab),
-            ModifiersState::CONTROL,
-        );
+        let command = shortcut_command(&Key::Named(NamedKey::Tab), ModifiersState::CONTROL);
 
         assert!(matches!(command, Some(AppCommand::NextTab)));
     }

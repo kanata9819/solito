@@ -1,7 +1,9 @@
+use crate::terminal_view::{CopyModeSnapshot, TabBarSnapshot};
 use anyhow::Result;
+use solito_terminal::{ScreenSnapshot, TerminalSize};
 use std::sync::Arc;
 use wgpu::TextureFormat;
-use winit::window::Window;
+use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
     RendererConfig,
@@ -41,6 +43,36 @@ impl Renderer {
             render_resources,
             terminal_view,
         })
+    }
+
+    pub fn set_copy_mode(&mut self, snapshot: CopyModeSnapshot) {
+        self.terminal_view.set_copy_mode(snapshot);
+    }
+
+    pub fn set_tab_bar(&mut self, snapshot: TabBarSnapshot) {
+        self.terminal_view.set_tab_bar(snapshot);
+    }
+
+    pub fn set_terminal_snapshot(&mut self, snapshot: ScreenSnapshot) {
+        self.terminal_view.set_snapshot(snapshot);
+    }
+
+    pub fn set_terminal_snapshot_at_bottom(&mut self, snapshot: ScreenSnapshot) {
+        self.terminal_view.set_snapshot_at_bottom(snapshot);
+    }
+
+    pub fn terminal_size(&self) -> TerminalSize {
+        let width = self.window_surface.config.width;
+        let height = self.window_surface.config.height;
+
+        self.terminal_size_for(PhysicalSize::new(width, height))
+    }
+
+    pub fn terminal_size_for(&self, window_size: PhysicalSize<u32>) -> TerminalSize {
+        TerminalSize::new(
+            self.terminal_view.visible_cols(window_size.width),
+            self.terminal_view.visible_rows(window_size.height),
+        )
     }
 
     pub(crate) fn update_rect_screen_uniform(&mut self) {
