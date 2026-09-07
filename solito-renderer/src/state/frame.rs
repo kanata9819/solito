@@ -45,7 +45,10 @@ impl Renderer {
     fn draw_to_view(&mut self, encoder: &mut CommandEncoder, view: &TextureView) -> Result<()> {
         self.update_rect_screen_uniform();
 
-        let mut rects = self.terminal_view.tab_bar_rects();
+        let mut rects = self
+            .terminal_view
+            .background_rects(self.window_surface.config.format.is_srgb());
+        rects.extend(self.terminal_view.tab_bar_rects());
         rects.extend(self.terminal_view.copy_mode_rects());
 
         // Copy mode draws its own cursor over the scrollback. Hiding the shell

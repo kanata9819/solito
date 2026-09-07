@@ -6,6 +6,7 @@ const FAINT_OFF: u16 = 22;
 const FOREGROUND_DEFAULT: u16 = 39;
 const FOREGROUND_EXTENDED: u16 = 38;
 const BACKGROUND_EXTENDED: u16 = 48;
+const BACKGROUND_DEFAULT: u16 = 49;
 const UNDERLINE_COLOR_EXTENDED: u16 = 58;
 const FOREGROUND_LOW_START: u16 = 30;
 const FOREGROUND_LOW_END: u16 = 37;
@@ -30,12 +31,19 @@ pub(super) fn apply(style: &mut CellStyle, params: &[u16]) {
                     code - FOREGROUND_HIGH_START + FOREGROUND_BRIGHT_OFFSET,
                 )));
             }
-            FOREGROUND_DEFAULT => style.fg_rgba = None,
-            FOREGROUND_EXTENDED => {
-                index += apply_extended_foreground(style, &params[index..]);
+            40..=47 => style.bg_rgba = Some(ansi_16_color(usize::from(code - 40))),
+            100..=107 => style.bg_rgba = Some(ansi_16_color(usize::from(code - 100 + 8))),
+            BACKGROUND_DEFAULT => style.bg_rgba = None,
+            BACKGROUND_EXTENDED => {
+                index += apply_extended_color(&mut style.bg_rgba, &params[index..]);
                 continue;
             }
-            BACKGROUND_EXTENDED | UNDERLINE_COLOR_EXTENDED => {
+            FOREGROUND_DEFAULT => style.fg_rgba = None,
+            FOREGROUND_EXTENDED => {
+                index += apply_extended_color(&mut style.fg_rgba, &params[index..]);
+                continue;
+            }
+            UNDERLINE_COLOR_EXTENDED => {
                 index += extended_color_param_count(&params[index..]);
                 continue;
             }
@@ -54,17 +62,17 @@ fn extended_color_param_count(params: &[u16]) -> usize {
     }
 }
 
-fn apply_extended_foreground(style: &mut CellStyle, params: &[u16]) -> usize {
+fn apply_extended_color(color: &mut Option<[u8; 4]>, params: &[u16]) -> usize {
     match params.get(1).copied() {
         Some(5) => {
             if let Some(index) = params.get(2).copied() {
-                style.fg_rgba = Some(ansi_256_color(usize::from(index)));
+                *color = Some(ansi_256_color(usize::from(index)));
             }
             3
         }
         Some(2) => {
             let channel = |index| params.get(index).copied().unwrap_or(0).min(255) as u8;
-            style.fg_rgba = Some([channel(2), channel(3), channel(4), 255]);
+            *color = Some([channel(2), channel(3), channel(4), 255]);
             5
         }
         _ => 1,

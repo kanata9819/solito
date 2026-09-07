@@ -24,3 +24,33 @@ pub fn rgba_to_f32([r, g, b, a]: [u8; 4]) -> [f32; 4] {
         f32::from(a) / 255.0,
     ]
 }
+
+/// Convert terminal sRGB colors to linear RGB for an sRGB render target.
+/// Alpha represents coverage and must not undergo gamma conversion.
+pub fn srgb_to_linear_rgba(color: [u8; 4]) -> [f32; 4] {
+    let [r, g, b, a] = rgba_to_f32(color);
+    let linear = |channel: f32| {
+        if channel <= 0.04045 {
+            channel / 12.92
+        } else {
+            ((channel + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    [linear(r), linear(g), linear(b), a]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::srgb_to_linear_rgba;
+
+    #[test]
+    fn dark_background_round_trips_through_srgb_target() {
+        let [r, g, b, a] = srgb_to_linear_rgba([30, 30, 30, 128]);
+        assert!((r - 0.012983).abs() < 0.000001);
+        assert_eq!(r, g);
+        assert_eq!(g, b);
+        let encoded = 1.055 * r.powf(1.0 / 2.4) - 0.055;
+        assert!((encoded * 255.0 - 30.0).abs() < 0.001);
+        assert_eq!(a, 128.0 / 255.0);
+    }
+}

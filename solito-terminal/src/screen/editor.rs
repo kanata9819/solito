@@ -38,7 +38,43 @@ impl Screen {
         self.screen_buffer.style = CellStyle::default();
     }
 
+    fn erase_colored_range(&mut self, row: usize, mut start: usize, mut end: usize) {
+        let blank = ScreenCell::blank(self.screen_buffer.style);
+        while self.screen_buffer.lines.len() <= row {
+            self.screen_buffer.lines.push(Vec::new());
+        }
+        let line = &mut self.screen_buffer.lines[row];
+        if start >= end {
+            return;
+        }
+        if line
+            .get(start)
+            .is_some_and(|cell| cell.is_wide_continuation)
+        {
+            start = start.saturating_sub(1);
+        }
+        if line.get(end).is_some_and(|cell| cell.is_wide_continuation) {
+            end += 1;
+        }
+        // Untouched gaps are not part of the erased range.
+        line.resize(line.len().max(end), ScreenCell::blank(CellStyle::default()));
+        line[start..end].fill(blank);
+    }
+
     fn erase_line(&mut self, mode: EraseMode) {
+        // Colored erasure must keep blank cells so their backgrounds can be drawn.
+        if self.screen_buffer.style.bg_rgba.is_some() {
+            let row = self.screen_buffer.cursor.get_current_row();
+            let cols = self.screen_buffer.cols();
+            let col = self.screen_buffer.cursor.get_current_col().min(cols);
+            let (start, end) = match mode {
+                EraseMode::ToStart => (0, col.saturating_add(1).min(cols)),
+                EraseMode::All => (0, cols),
+                EraseMode::ToEnd => (col, cols),
+            };
+            self.erase_colored_range(row, start, end);
+            return;
+        }
         self.screen_buffer.ensure_cursor_line();
         let row = self.screen_buffer.cursor.get_current_row();
         let col = self.screen_buffer.cursor.get_current_col();
@@ -486,6 +522,25 @@ impl Screen {
     }
 
     fn erase_display(&mut self, mode: EraseMode) {
+        if self.screen_buffer.style.bg_rgba.is_some() {
+            let top = self.screen_buffer.get_viewport_top();
+            let bottom = top + self.screen_buffer.rows();
+            let cursor_row = self.screen_buffer.cursor.get_current_row();
+            let cols = self.screen_buffer.cols();
+            let col = self.screen_buffer.cursor.get_current_col().min(cols);
+            for row in top..bottom {
+                let (start, end) = match mode {
+                    EraseMode::All => (0, cols),
+                    EraseMode::ToStart if row < cursor_row => (0, cols),
+                    EraseMode::ToStart if row == cursor_row => (0, col.saturating_add(1).min(cols)),
+                    EraseMode::ToEnd if row == cursor_row => (col, cols),
+                    EraseMode::ToEnd if row > cursor_row => (0, cols),
+                    _ => continue,
+                };
+                self.erase_colored_range(row, start, end);
+            }
+            return;
+        }
         match mode {
             EraseMode::ToStart => self.erase_display_before_cursor(),
             EraseMode::All => self.clear_screen(),
@@ -548,6 +603,13 @@ impl Screen {
     }
 
     fn erase_characters(&mut self, amount: usize) {
+        if self.screen_buffer.style.bg_rgba.is_some() {
+            let row = self.screen_buffer.cursor.get_current_row();
+            let cols = self.screen_buffer.cols();
+            let col = self.screen_buffer.cursor.get_current_col().min(cols);
+            self.erase_colored_range(row, col, col.saturating_add(amount).min(cols));
+            return;
+        }
         self.screen_buffer.ensure_cursor_line();
 
         let row = self.screen_buffer.cursor.get_current_row();

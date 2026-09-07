@@ -46,6 +46,73 @@ mod tests {
     }
 
     #[test]
+    fn popup_background_does_not_color_untouched_gap() {
+        let mut state = terminal(30, 4);
+        // A short line is followed by a popup drawn farther to the right.
+        state.apply_terminal_output(b"left\x1b[K\x1b[48;2;30;30;30m\x1b[1;20HX");
+        let snapshot = state.snapshot();
+        assert!(
+            snapshot.lines[0][4..19]
+                .iter()
+                .all(|cell| cell.background_rgba().is_none())
+        );
+        assert_eq!(
+            snapshot.lines[0][19].background_rgba(),
+            Some([30, 30, 30, 255])
+        );
+        assert_eq!(line_text(&snapshot.lines[0]), "left               X");
+    }
+
+    #[test]
+    fn background_colors_and_resets_reach_the_snapshot() {
+        let mut state = terminal(20, 4);
+        state.apply_terminal_output(
+            b"\x1b[44mA\x1b[104mB\x1b[48;5;196mC\x1b[48;2;12;34;56mD\x1b[49mE\x1b[44mF\x1b[0mG",
+        );
+        let snapshot = state.snapshot();
+        let colors: Vec<_> = snapshot.lines[0]
+            .iter()
+            .map(ScreenCell::background_rgba)
+            .collect();
+        assert_eq!(
+            colors,
+            vec![
+                Some([0, 55, 218, 255]),
+                Some([59, 120, 255, 255]),
+                Some([255, 0, 0, 255]),
+                Some([12, 34, 56, 255]),
+                None,
+                Some([0, 55, 218, 255]),
+                None
+            ]
+        );
+    }
+
+    #[test]
+    fn background_erasure_fills_empty_cells_without_moving_cursor() {
+        for sequence in [b"\x1b[3X".as_slice(), b"\x1b[K", b"\x1b[J"] {
+            let mut state = terminal(5, 3);
+            state.apply_terminal_output(b"\x1b[2;3H\x1b[48;2;12;34;56m");
+            state.apply_terminal_output(sequence);
+            let snapshot = state.snapshot();
+            assert_eq!((snapshot.cursor_row, snapshot.cursor_col), (1, 2));
+            assert!(snapshot.lines[1][2..5].iter().all(|cell|
+                cell.ch == ' ' && cell.background_rgba() == Some([12,34,56,255])));
+        }
+    }
+
+    #[test]
+    fn overwriting_selection_restores_default_background() {
+        let mut state = terminal(5, 3);
+        state.apply_terminal_output(b"\x1b[44mhello\r\x1b[49mhello");
+        assert!(
+            state.snapshot().lines[0]
+                .iter()
+                .all(|cell| cell.background_rgba().is_none())
+        );
+    }
+
+    #[test]
     fn applies_cursor_position_and_overwrite() {
         let mut state = terminal(10, 4);
 

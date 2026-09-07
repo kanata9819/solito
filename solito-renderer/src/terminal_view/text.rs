@@ -2,7 +2,10 @@ use glyphon::{Attrs, AttrsList, BufferLine, Color, Family, Shaping};
 use solito_terminal::ScreenCell;
 use std::collections::{BTreeSet, HashMap};
 
-use crate::{RendererConfig, terminal_view::glyph::GlyphonResources, util::color::ThemeColor};
+use crate::{
+    RendererConfig, pipeline::rect::RectSpec, terminal_view::glyph::GlyphonResources,
+    util::color::ThemeColor, util::color::rgba_to_f32,
+};
 
 use super::{TerminalView, text_damage::TextDamage};
 
@@ -19,6 +22,58 @@ struct GridMetrics<'a> {
 }
 
 impl TerminalView {
+    pub(crate) fn background_rects(&self, srgb_target: bool) -> Vec<RectSpec> {
+        let (start, end) = self.viewport.visible_range(self.row_count());
+        let mut rects = Vec::new();
+        for row in start..end {
+            let Some(line) = self.snapshot.lines.get(row) else {
+                continue;
+            };
+            rects.extend(Self::background_rects_for_line(
+                line,
+                Self::terminal_row_y(row - start, self.config.line_height, self.has_tab_bar()),
+                self.glyphs.cell_width,
+                self.config.line_height,
+                srgb_target,
+            ));
+        }
+        rects
+    }
+
+    fn background_rects_for_line(
+        line: &[ScreenCell],
+        y: f32,
+        cell_width: f32,
+        line_height: f32,
+        srgb_target: bool,
+    ) -> Vec<RectSpec> {
+        let mut rects = Vec::new();
+        let mut col = 0;
+        while col < line.len() {
+            let color = line[col].background_rgba();
+            let start = col;
+            col += 1;
+            // Adjacent cells of the same color share one rectangle, including spaces.
+            while col < line.len() && line[col].background_rgba() == color {
+                col += 1;
+            }
+            if let Some(color) = color {
+                rects.push(RectSpec::new(
+                    Self::PADDING_X + start as f32 * cell_width,
+                    y,
+                    (col - start) as f32 * cell_width,
+                    line_height,
+                    if srgb_target {
+                        crate::util::color::srgb_to_linear_rgba(color)
+                    } else {
+                        rgba_to_f32(color)
+                    },
+                ));
+            }
+        }
+        rects
+    }
+
     pub(super) fn set_text_buffer_size(
         glyphs: &mut GlyphonResources,
         width: u32,
@@ -359,6 +414,36 @@ mod tests {
 
     fn color([r, g, b, a]: [u8; 4]) -> Color {
         Color::rgba(r, g, b, a)
+    }
+
+    #[test]
+    fn background_rectangles_cover_spaces_and_wide_cells() {
+        let mut state =
+            solito_terminal::TerminalState::new(solito_terminal::TerminalSize::new(20, 3));
+        state.apply_terminal_output("x\x1b[48;2;12;34;56m あ\x1b[49mz".as_bytes());
+        let snapshot = state.snapshot();
+        let rects =
+            TerminalView::background_rects_for_line(&snapshot.lines[0], 40.0, 10.0, 20.0, true);
+        assert_eq!(rects.len(), 1);
+        assert_eq!(
+            (rects[0].x, rects[0].y, rects[0].width, rects[0].height),
+            (20.0, 40.0, 30.0, 20.0)
+        );
+        assert_eq!(
+            rects[0].color,
+            crate::util::color::srgb_to_linear_rgba([12, 34, 56, 255])
+        );
+        state.apply_terminal_output(b"\r\x1b[49m     ");
+        assert!(
+            TerminalView::background_rects_for_line(
+                &state.snapshot().lines[0],
+                40.0,
+                10.0,
+                20.0,
+                true
+            )
+            .is_empty()
+        );
     }
 
     #[test]

@@ -5,6 +5,7 @@ use crate::TerminalSize;
 pub(super) struct CellStyle {
     pub(super) faint: bool,
     pub(super) fg_rgba: Option<[u8; 4]>,
+    pub(super) bg_rgba: Option<[u8; 4]>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -36,6 +37,10 @@ impl ScreenCell {
             is_wide_continuation: true,
             ..Self::blank(style)
         }
+    }
+
+    pub fn background_rgba(&self) -> Option<[u8; 4]> {
+        self.style.bg_rgba
     }
 
     pub fn foreground_rgba(&self) -> Option<[u8; 4]> {
@@ -135,7 +140,9 @@ impl ScreenBuffer {
         let line = &mut self.lines[self.cursor.get_current_row()];
 
         while line.len() < self.cursor.get_current_col() {
-            line.push(ScreenCell::blank(self.style));
+            // Moving to a column does not paint the cells skipped along the way.
+            // Only explicitly printed or erased cells receive the active style.
+            line.push(ScreenCell::blank(CellStyle::default()));
         }
     }
 
