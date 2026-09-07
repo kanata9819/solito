@@ -270,13 +270,6 @@ impl Screen {
         }
 
         self.screen_buffer.cursor.move_left();
-        let col = self.screen_buffer.cursor.get_current_col();
-        let row = self.screen_buffer.cursor.get_current_row();
-        let line = &mut self.screen_buffer.lines[row];
-
-        if col < line.len() {
-            line.remove(col);
-        }
     }
 
     fn tab(&mut self) {

@@ -4,6 +4,12 @@ set windows-shell := ["cmd.exe", "/C"]
 r:
     cargo run -p solito
 
+b:
+    cargo build
+
+br:
+    cargo build --release
+
 # Measure Solito with a real automated Neovim session.
 bench seconds="10":
     cargo build --release -p solito -p solito-bench
