@@ -28,25 +28,19 @@ impl Screen {
         }
     }
 
-    fn clear_screen(&mut self) {
-        // Reset screen contents and move the cursor back to top-left.
-        self.screen_buffer.lines.clear();
-        self.screen_buffer.lines.push(Vec::new());
-        self.screen_buffer.cursor.reset_row();
-        self.screen_buffer.cursor.reset_col();
-        self.screen_buffer.pending_wrap = false;
-        self.screen_buffer.style = CellStyle::default();
-    }
-
-    fn erase_colored_range(&mut self, row: usize, mut start: usize, mut end: usize) {
-        let blank = ScreenCell::blank(self.screen_buffer.style);
+    /// Erase cells without moving the cursor or changing the active drawing style.
+    fn erase_cells(&mut self, row: usize, mut start: usize, mut end: usize) {
+        let cols = self.screen_buffer.cols();
+        start = start.min(cols);
+        end = end.min(cols);
+        if start >= end {
+            return;
+        }
         while self.screen_buffer.lines.len() <= row {
             self.screen_buffer.lines.push(Vec::new());
         }
         let line = &mut self.screen_buffer.lines[row];
-        if start >= end {
-            return;
-        }
+        // Erasing either half of a wide character clears both cells.
         if line
             .get(start)
             .is_some_and(|cell| cell.is_wide_continuation)
@@ -56,50 +50,51 @@ impl Screen {
         if line.get(end).is_some_and(|cell| cell.is_wide_continuation) {
             end += 1;
         }
-        // Untouched gaps are not part of the erased range.
-        line.resize(line.len().max(end), ScreenCell::blank(CellStyle::default()));
-        line[start..end].fill(blank);
+        let blank = ScreenCell::blank(CellStyle {
+            bg_rgba: self.screen_buffer.style.bg_rgba,
+            ..CellStyle::default()
+        });
+        if blank.background_rgba().is_some() {
+            // Missing cells are default blanks, not part of the colored erase.
+            line.resize(line.len().max(end), ScreenCell::blank(CellStyle::default()));
+        } else {
+            // Default blanks beyond the stored text need no allocation.
+            end = end.min(line.len());
+        }
+        if start < end {
+            line[start..end].fill(blank);
+        }
+    }
+
+    fn erase_line_range(&mut self, row: usize, start: usize, end: usize) {
+        self.erase_cells(row, start, end);
+        // Keep the sparse representation: trailing default blanks are implicit.
+        let Some(line) = self.screen_buffer.lines.get_mut(row) else {
+            return;
+        };
+        let blank = ScreenCell::blank(CellStyle::default());
+        while line.last() == Some(&blank) {
+            line.pop();
+        }
     }
 
     fn erase_line(&mut self, mode: EraseMode) {
-        // Colored erasure must keep blank cells so their backgrounds can be drawn.
-        if self.screen_buffer.style.bg_rgba.is_some() {
-            let row = self.screen_buffer.cursor.get_current_row();
-            let cols = self.screen_buffer.cols();
-            let col = self.screen_buffer.cursor.get_current_col().min(cols);
-            let (start, end) = match mode {
-                EraseMode::ToStart => (0, col.saturating_add(1).min(cols)),
-                EraseMode::All => (0, cols),
-                EraseMode::ToEnd => (col, cols),
-            };
-            self.erase_colored_range(row, start, end);
-            return;
-        }
-        self.screen_buffer.ensure_cursor_line();
         let row = self.screen_buffer.cursor.get_current_row();
         let col = self.screen_buffer.cursor.get_current_col();
-        let line = &mut self.screen_buffer.lines[row];
-
-        match mode {
-            EraseMode::ToStart => {
-                let end = col.saturating_add(1).min(line.len());
-                for cell in line.iter_mut().take(end) {
-                    *cell = ScreenCell::blank(CellStyle::default());
-                }
-            }
-            EraseMode::All => line.clear(),
-            EraseMode::ToEnd => {
-                if col < line.len() {
-                    line.truncate(col);
-                }
-            }
-        }
+        let cols = self.screen_buffer.cols();
+        let (start, end) = match mode {
+            EraseMode::ToStart => (0, col.saturating_add(1)),
+            EraseMode::All => (0, cols),
+            EraseMode::ToEnd => (col, cols),
+        };
+        self.erase_line_range(row, start, end);
     }
 
     pub(super) fn move_cursor_to(&mut self, position: CursorPosition) {
         self.screen_buffer.cursor.move_to(CursorPosition {
-            row: position.row + self.screen_buffer.get_viewport_top(),
-            col: position.col,
+            row: position.row.min(self.screen_buffer.rows() - 1)
+                + self.screen_buffer.get_viewport_top(),
+            col: position.col.min(self.screen_buffer.cols() - 1),
         });
         self.screen_buffer.pending_wrap = false;
     }
@@ -183,10 +178,7 @@ impl Screen {
             EscMessage::SaveCursor => self.save_cursor_position(),
             EscMessage::RestoreCursor => self.restore_cursor_position(),
             EscMessage::Index => self.index(),
-            EscMessage::NextLine => {
-                self.index();
-                self.carriage_return();
-            }
+            EscMessage::NextLine => self.advance_to_next_line(),
             EscMessage::ReverseIndex => self.reverse_index(),
             EscMessage::Reset => self.reset(),
             EscMessage::Unknown { .. } => {}
@@ -195,10 +187,10 @@ impl Screen {
 
     pub(super) fn apply_execute(&mut self, byte: u8) {
         match byte {
-            b'\n' => self.index(),
+            b'\n' | 0x0b | 0x0c => self.index(),
             b'\r' => self.carriage_return(),
-            0x08 | 0x7f => self.backspace(),
-            b'\t' => self.tab(),
+            0x08 => self.backspace(),
+            b'\t' => self.tab_forward(1),
             _ => {}
         }
     }
@@ -308,12 +300,6 @@ impl Screen {
         self.screen_buffer.cursor.move_left();
     }
 
-    fn tab(&mut self) {
-        // Move to the next tab stop on an 8-column boundary.
-        let next_tab = ((self.screen_buffer.cursor.get_current_col() / 8) + 1) * 8;
-        self.move_cursor_to_col(next_tab.min(self.screen_buffer.cols().saturating_sub(1)));
-    }
-
     pub(crate) fn snapshot(&self) -> ScreenSnapshot {
         self.screen_buffer.snapshot()
     }
@@ -331,6 +317,7 @@ impl Screen {
                 .cursor
                 .get_current_row()
                 .saturating_sub(amount)
+                .max(self.screen_buffer.get_viewport_top())
         };
 
         self.screen_buffer.cursor.move_to_row(next_row);
@@ -346,7 +333,12 @@ impl Screen {
                 .saturating_add(amount)
                 .min(bottom)
         } else {
-            self.screen_buffer.cursor.get_current_row() + amount
+            let bottom = self.screen_buffer.get_viewport_top() + self.screen_buffer.rows() - 1;
+            self.screen_buffer
+                .cursor
+                .get_current_row()
+                .saturating_add(amount)
+                .min(bottom)
         };
         self.screen_buffer.cursor.move_to_row(next_row);
         self.screen_buffer.pending_wrap = false;
@@ -522,69 +514,22 @@ impl Screen {
     }
 
     fn erase_display(&mut self, mode: EraseMode) {
-        if self.screen_buffer.style.bg_rgba.is_some() {
-            let top = self.screen_buffer.get_viewport_top();
-            let bottom = top + self.screen_buffer.rows();
-            let cursor_row = self.screen_buffer.cursor.get_current_row();
-            let cols = self.screen_buffer.cols();
-            let col = self.screen_buffer.cursor.get_current_col().min(cols);
-            for row in top..bottom {
-                let (start, end) = match mode {
-                    EraseMode::All => (0, cols),
-                    EraseMode::ToStart if row < cursor_row => (0, cols),
-                    EraseMode::ToStart if row == cursor_row => (0, col.saturating_add(1).min(cols)),
-                    EraseMode::ToEnd if row == cursor_row => (col, cols),
-                    EraseMode::ToEnd if row > cursor_row => (0, cols),
-                    _ => continue,
-                };
-                self.erase_colored_range(row, start, end);
-            }
-            return;
-        }
-        match mode {
-            EraseMode::ToStart => self.erase_display_before_cursor(),
-            EraseMode::All => self.clear_screen(),
-            EraseMode::ToEnd => self.erase_display_after_cursor(),
-        }
-    }
-
-    fn erase_display_before_cursor(&mut self) {
+        // ED addresses the visible screen; scrollback and terminal state survive.
+        let top = self.screen_buffer.get_viewport_top();
+        let bottom = top + self.screen_buffer.rows();
         let cursor_row = self.screen_buffer.cursor.get_current_row();
-        let cursor_col = self.screen_buffer.cursor.get_current_col();
-        let last_row = cursor_row.min(self.screen_buffer.lines.len().saturating_sub(1));
-
-        for row in 0..=last_row {
-            // On the cursor row, erase up to the cursor position.
-            // In the rows above, erase to the end of the line by filling spaces.
-            let end = if row == cursor_row {
-                cursor_col
-                    .saturating_add(1)
-                    .min(self.screen_buffer.lines[row].len())
-            } else {
-                self.screen_buffer.lines[row].len()
+        let col = self.screen_buffer.cursor.get_current_col();
+        let cols = self.screen_buffer.cols();
+        for row in top..bottom {
+            let (start, end) = match mode {
+                EraseMode::All => (0, cols),
+                EraseMode::ToStart if row < cursor_row => (0, cols),
+                EraseMode::ToStart if row == cursor_row => (0, col.saturating_add(1)),
+                EraseMode::ToEnd if row == cursor_row => (col, cols),
+                EraseMode::ToEnd if row > cursor_row => (0, cols),
+                _ => continue,
             };
-
-            for ch in self.screen_buffer.lines[row].iter_mut().take(end) {
-                *ch = ScreenCell::blank(CellStyle::default());
-            }
-        }
-    }
-
-    fn erase_display_after_cursor(&mut self) {
-        self.screen_buffer.ensure_cursor_line();
-
-        let cursor_row = self.screen_buffer.cursor.get_current_row();
-        let cursor_col = self.screen_buffer.cursor.get_current_col();
-
-        // Fully clear lines below the cursor.
-        for row in cursor_row + 1..self.screen_buffer.lines.len() {
-            self.screen_buffer.lines[row].clear();
-        }
-
-        // On the cursor row, delete content to the right of the cursor.
-        let line = &mut self.screen_buffer.lines[cursor_row];
-        if cursor_col < line.len() {
-            line.truncate(cursor_col);
+            self.erase_line_range(row, start, end);
         }
     }
 
@@ -603,37 +548,9 @@ impl Screen {
     }
 
     fn erase_characters(&mut self, amount: usize) {
-        if self.screen_buffer.style.bg_rgba.is_some() {
-            let row = self.screen_buffer.cursor.get_current_row();
-            let cols = self.screen_buffer.cols();
-            let col = self.screen_buffer.cursor.get_current_col().min(cols);
-            self.erase_colored_range(row, col, col.saturating_add(amount).min(cols));
-            return;
-        }
-        self.screen_buffer.ensure_cursor_line();
-
         let row = self.screen_buffer.cursor.get_current_row();
         let col = self.screen_buffer.cursor.get_current_col();
-        let cols = self.screen_buffer.cols();
-        let line = &mut self.screen_buffer.lines[row];
-
-        if amount == 0 || col >= cols || col >= line.len() {
-            return;
-        }
-
-        let mut start = col;
-        let mut end = col.saturating_add(amount).min(cols).min(line.len());
-
-        if line[start].is_wide_continuation {
-            start = start.saturating_sub(1);
-        }
-        if line.get(end).is_some_and(|cell| cell.is_wide_continuation) {
-            end += 1;
-        }
-
-        for cell in &mut line[start..end] {
-            *cell = ScreenCell::blank(CellStyle::default());
-        }
+        self.erase_cells(row, col, col.saturating_add(amount));
     }
 
     fn save_cursor_position(&mut self) {
@@ -654,21 +571,9 @@ impl Screen {
     }
 
     fn advance_to_next_line(&mut self) {
-        // Newline moves to the next line head and expands lines if required.
-        let cursor_row = self.screen_buffer.cursor.get_current_row();
-        if self.screen_buffer.scroll_region_active {
-            let (top, bottom) = self.scroll_region_bounds();
-            if (top..=bottom).contains(&cursor_row) && cursor_row == bottom {
-                self.scroll_up(1);
-            } else {
-                self.screen_buffer.cursor.move_down();
-            }
-        } else {
-            self.screen_buffer.cursor.move_down();
-        }
-        self.screen_buffer.cursor.reset_col();
-        self.screen_buffer.pending_wrap = false;
-        self.screen_buffer.ensure_cursor_line();
+        // Wrapping combines vertical movement with a return to column zero.
+        self.index();
+        self.carriage_return();
     }
 
     fn index(&mut self) {

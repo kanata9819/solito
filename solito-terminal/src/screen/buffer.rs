@@ -103,12 +103,14 @@ impl ScreenBuffer {
             .scroll_region
             .1
             .clamp(self.scroll_region.0, size.rows.saturating_sub(1));
-        self.tab_stops.resize_with(size.cols, || false);
-        for (col, stop) in self.tab_stops.iter_mut().enumerate() {
-            if col % 8 == 0 && !*stop {
-                *stop = true;
-            }
+        // Preserve existing stops, including ones explicitly cleared by the application.
+        let old_cols = self.tab_stops.len();
+        self.tab_stops.resize(size.cols, false);
+        for col in old_cols..size.cols {
+            self.tab_stops[col] = col % 8 == 0;
         }
+        self.cursor
+            .move_to_col(self.cursor.get_current_col().min(size.cols - 1));
     }
 
     pub(super) fn snapshot(&self) -> ScreenSnapshot {

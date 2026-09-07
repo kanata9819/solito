@@ -46,6 +46,79 @@ mod tests {
     }
 
     #[test]
+    fn cursor_movement_stays_inside_visible_screen() {
+        let mut state = terminal(8, 3);
+        state.apply_terminal_output(b"history\r\nA\r\nB\r\nC");
+        state.apply_terminal_output(b"\x1b[999A");
+        assert_eq!(state.snapshot().cursor_row, 1);
+        state.apply_terminal_output(b"\x1b[999B\x1b[999C");
+        assert_eq!(
+            (state.snapshot().cursor_row, state.snapshot().cursor_col),
+            (3, 7)
+        );
+        state.apply_terminal_output(b"\x1b[999;999HZ");
+        let snapshot = state.snapshot();
+        assert_eq!((snapshot.cursor_row, snapshot.cursor_col), (3, 7));
+        assert_eq!(snapshot.lines[3][7].ch, 'Z');
+    }
+
+    #[test]
+    fn erasing_display_preserves_cursor_and_drawing_style() {
+        for background in [b"".as_slice(), b"\x1b[44m"] {
+            let mut state = terminal(8, 4);
+            state.apply_terminal_output(b"old\x1b[31m\x1b[3;4H");
+            state.apply_terminal_output(background);
+            state.apply_terminal_output(b"\x1b[2J");
+            let snapshot = state.snapshot();
+            assert_eq!((snapshot.cursor_row, snapshot.cursor_col), (2, 3));
+            state.apply_terminal_output(b"X");
+            assert_eq!(
+                state.snapshot().lines[2][3].foreground_rgba(),
+                Some([197, 15, 31, 255])
+            );
+        }
+    }
+
+    #[test]
+    fn erasing_visible_display_preserves_scrollback() {
+        let mut state = terminal(8, 2);
+        state.apply_terminal_output(b"history\r\none\r\ntwo\x1b[2J");
+        let snapshot = state.snapshot();
+        assert_eq!(line_text(&snapshot.lines[0]), "history");
+        assert!(
+            snapshot.lines[1..]
+                .iter()
+                .all(|line| line.iter().all(|cell| cell.ch == ' '))
+        );
+    }
+
+    #[test]
+    fn line_erase_clears_both_halves_of_wide_character() {
+        let mut state = terminal(8, 2);
+        state.apply_terminal_output("AあB\x1b[1;3H\x1b[K".as_bytes());
+        assert_eq!(line_text(&state.snapshot().lines[0]), "A");
+    }
+
+    #[test]
+    fn tab_uses_configured_stops_and_resize_preserves_cleared_stops() {
+        let mut state = terminal(20, 3);
+        state.apply_terminal_output(b"\x1b[3g\t");
+        assert_eq!(state.snapshot().cursor_col, 19);
+        state.resize(TerminalSize::new(24, 3));
+        state.apply_terminal_output(b"\r\t");
+        assert_eq!(state.snapshot().cursor_col, 23);
+    }
+
+    #[test]
+    fn line_feed_preserves_column_but_wrap_returns_to_start() {
+        let mut state = terminal(4, 4);
+        state.apply_terminal_output(b"ab\nZ");
+        assert_eq!(line_text(&state.snapshot().lines[1]), "  Z");
+        state.apply_terminal_output(b"XY");
+        assert_eq!(line_text(&state.snapshot().lines[2]), "Y");
+    }
+
+    #[test]
     fn popup_background_does_not_color_untouched_gap() {
         let mut state = terminal(30, 4);
         // A short line is followed by a popup drawn farther to the right.

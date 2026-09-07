@@ -32,10 +32,6 @@ impl Cursor {
         self.cursor_col = 0;
     }
 
-    pub(super) fn reset_row(&mut self) {
-        self.cursor_row = 0;
-    }
-
     pub(super) fn move_to(&mut self, position: CursorPosition) {
         self.cursor_row = position.row;
         self.cursor_col = position.col;
