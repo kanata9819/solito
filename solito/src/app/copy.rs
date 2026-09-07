@@ -1,5 +1,3 @@
-//! Copy-mode state. Movement and text extraction are pure helper modules.
-
 mod movement;
 mod selection;
 

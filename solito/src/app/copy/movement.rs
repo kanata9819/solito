@@ -1,5 +1,3 @@
-//! Pure cursor movement rules for copy mode.
-
 use super::CopyModeMove;
 use solito_renderer::CopyModePosition;
 use solito_terminal::ScreenSnapshot;

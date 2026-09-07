@@ -1,5 +1,3 @@
-//! Window surface creation and platform-specific backdrop setup.
-
 use std::sync::Arc;
 use wgpu::{Surface, SurfaceConfiguration};
 use winit::{dpi::PhysicalSize, window::Window};

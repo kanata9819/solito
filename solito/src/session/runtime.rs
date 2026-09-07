@@ -1,7 +1,3 @@
-//! PTY process lifecycle and byte transport.
-//!
-//! This module never interprets terminal output; `solito-terminal` owns that job.
-
 use anyhow::Result;
 use portable_pty::{Child, CommandBuilder, MasterPty, PtyPair, PtySize, SlavePty};
 use solito_terminal::TerminalSize;

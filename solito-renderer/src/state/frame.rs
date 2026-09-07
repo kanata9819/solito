@@ -1,5 +1,3 @@
-//! One rendered frame: prepare text, draw rectangles and glyphs, then present.
-
 use anyhow::Result;
 use glyphon::{Color, Resolution, TextArea, TextBounds};
 use solito_terminal::ScreenSnapshot;

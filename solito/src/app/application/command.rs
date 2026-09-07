@@ -1,5 +1,3 @@
-//! Execute application commands after input has been translated.
-
 use super::{AppResult, SolitoApplication};
 use crate::{
     app::input::{AppCommand, CopyModeCommand},

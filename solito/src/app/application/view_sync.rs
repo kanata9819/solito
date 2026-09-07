@@ -1,5 +1,3 @@
-//! Keep renderer snapshots and window chrome in sync with application state.
-
 use super::SolitoApplication;
 use solito_renderer::TabBarSnapshot;
 use solito_terminal::ScreenSnapshot;

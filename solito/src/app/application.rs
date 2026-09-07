@@ -1,10 +1,3 @@
-//! Application lifecycle and top-level ownership.
-//!
-//! Follow behavior into the child modules:
-//! - `window_event`: winit event -> application command
-//! - `command`: command -> application state change
-//! - `view_sync`: application state -> renderer snapshot
-
 mod command;
 mod view_sync;
 mod window_event;

@@ -1,7 +1,3 @@
-//! GPU rendering for immutable terminal snapshots.
-//!
-//! This crate does not parse PTY bytes or ANSI escape sequences.
-
 mod state;
 mod terminal_view;
 mod util;

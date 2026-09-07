@@ -1,7 +1,3 @@
-//! Terminal emulation without windowing or GPU concerns.
-//!
-//! PTY bytes enter through [`TerminalState`] and leave as a [`ScreenSnapshot`].
-
 mod screen;
 mod size;
 mod state;

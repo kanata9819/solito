@@ -1,5 +1,3 @@
-//! Translate keyboard input into side-effect-free application commands.
-
 use solito_terminal::TerminalSize;
 use winit::{
     dpi::PhysicalSize,

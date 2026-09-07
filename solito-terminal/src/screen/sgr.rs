@@ -1,5 +1,3 @@
-//! Apply ANSI Select Graphic Rendition (SGR) parameters to a cell style.
-
 use super::buffer::CellStyle;
 
 const RESET: u16 = 0;

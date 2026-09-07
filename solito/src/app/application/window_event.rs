@@ -1,5 +1,3 @@
-//! Convert winit window events into application commands or renderer actions.
-
 use super::SolitoApplication;
 use crate::app::input::{self, AppCommand};
 use tracing::error;

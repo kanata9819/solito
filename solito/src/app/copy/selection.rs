@@ -1,5 +1,3 @@
-//! Convert a copy-mode selection into clipboard text.
-
 use solito_renderer::{CopyModeSelection, CopyModeSelectionKind};
 use solito_terminal::{ScreenCell, ScreenSnapshot};
 
