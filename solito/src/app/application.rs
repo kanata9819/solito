@@ -77,7 +77,6 @@ impl SolitoApplication {
 
         renderer.draw_frame()?;
         window.set_visible(true);
-        renderer.draw_frame()?;
 
         self.renderer = Some(renderer);
         self.drain_terminal_output();
