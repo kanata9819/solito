@@ -1,4 +1,4 @@
-use super::buffer::{CellStyle, ScreenBuffer, ScreenCell, ScreenSnapshot};
+use super::buffer::{CellStyle, ScreenBuffer, ScreenCell, ScreenLine, ScreenSnapshot};
 use super::cursor::CursorPosition;
 use super::sgr;
 use crate::TerminalSize;
@@ -21,6 +21,20 @@ impl Screen {
         }
     }
 
+    pub(crate) fn limit_history(&mut self) {
+        // Keep at most 10,000 history rows per terminal, plus the visible screen.
+        const HISTORY_ROWS: usize = 10_000;
+        let limit = if self.primary_screen.is_some() {
+            0
+        } else {
+            HISTORY_ROWS
+        };
+        self.screen_buffer.limit_history(limit);
+        if let Some(primary) = &mut self.primary_screen {
+            primary.limit_history(HISTORY_ROWS);
+        }
+    }
+
     pub(crate) fn resize(&mut self, size: TerminalSize) {
         self.screen_buffer.resize(size);
         if let Some(primary_screen) = &mut self.primary_screen {
@@ -37,7 +51,7 @@ impl Screen {
             return;
         }
         while self.screen_buffer.lines.len() <= row {
-            self.screen_buffer.lines.push(Vec::new());
+            self.screen_buffer.lines.push(ScreenLine::default());
         }
         let line = &mut self.screen_buffer.lines[row];
         // Erasing either half of a wide character clears both cells.
@@ -56,7 +70,8 @@ impl Screen {
         });
         if blank.background_rgba().is_some() {
             // Missing cells are default blanks, not part of the colored erase.
-            line.resize(line.len().max(end), ScreenCell::blank(CellStyle::default()));
+            let length = line.len().max(end);
+            line.resize(length, ScreenCell::blank(CellStyle::default()));
         } else {
             // Default blanks beyond the stored text need no allocation.
             end = end.min(line.len());
@@ -392,7 +407,7 @@ impl Screen {
         let top = viewport_top + top;
         let bottom = viewport_top + bottom;
         while self.screen_buffer.lines.len() <= bottom {
-            self.screen_buffer.lines.push(Vec::new());
+            self.screen_buffer.lines.push(ScreenLine::default());
         }
         (top, bottom)
     }
@@ -413,7 +428,9 @@ impl Screen {
         let (top, bottom) = self.scroll_region_bounds();
         for _ in 0..amount.min(bottom - top + 1) {
             self.screen_buffer.lines.remove(top);
-            self.screen_buffer.lines.insert(bottom, Vec::new());
+            self.screen_buffer
+                .lines
+                .insert(bottom, ScreenLine::default());
         }
         self.screen_buffer.pending_wrap = false;
     }
@@ -422,7 +439,7 @@ impl Screen {
         let (top, bottom) = self.scroll_region_bounds();
         for _ in 0..amount.min(bottom - top + 1) {
             self.screen_buffer.lines.remove(bottom);
-            self.screen_buffer.lines.insert(top, Vec::new());
+            self.screen_buffer.lines.insert(top, ScreenLine::default());
         }
         self.screen_buffer.pending_wrap = false;
     }
@@ -448,7 +465,7 @@ impl Screen {
             return;
         }
         for _ in 0..amount.min(bottom - row + 1) {
-            self.screen_buffer.lines.insert(row, Vec::new());
+            self.screen_buffer.lines.insert(row, ScreenLine::default());
             self.screen_buffer.lines.remove(bottom + 1);
         }
         self.screen_buffer.pending_wrap = false;
@@ -462,7 +479,9 @@ impl Screen {
         }
         for _ in 0..amount.min(bottom - row + 1) {
             self.screen_buffer.lines.remove(row);
-            self.screen_buffer.lines.insert(bottom, Vec::new());
+            self.screen_buffer
+                .lines
+                .insert(bottom, ScreenLine::default());
         }
         self.screen_buffer.pending_wrap = false;
     }

@@ -69,10 +69,10 @@ impl TextDamage {
 #[cfg(test)]
 mod tests {
     use super::TextDamage;
-    use solito_terminal::{ScreenCell, ScreenSnapshot};
+    use solito_terminal::{ScreenCell, ScreenLine, ScreenSnapshot};
     use std::collections::BTreeSet;
 
-    fn line(text: &str) -> Vec<ScreenCell> {
+    fn line(text: &str) -> ScreenLine {
         text.chars()
             .map(|ch| {
                 let mut cell = ScreenCell::default();

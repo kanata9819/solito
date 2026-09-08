@@ -1,5 +1,6 @@
 use glyphon::{Attrs, AttrsList, BufferLine, Color, Family, Shaping};
 use solito_terminal::ScreenCell;
+use solito_terminal::ScreenLine;
 use std::collections::{BTreeSet, HashMap};
 
 use crate::{
@@ -299,7 +300,7 @@ impl TerminalView {
     }
 
     fn text_spans_for_lines<'a>(
-        lines: &[Vec<ScreenCell>],
+        lines: &[ScreenLine],
         first_row: usize,
         cursor_row: usize,
         cursor_col: usize,
@@ -465,7 +466,7 @@ mod tests {
         let glyph_widths = HashMap::from([('A', 10.0)]);
 
         let spans = TerminalView::text_spans_for_lines(
-            &[vec![cell]],
+            &[vec![cell].into()],
             0,
             0,
             0,
@@ -505,7 +506,7 @@ mod tests {
         let glyph_widths = HashMap::from([('A', 10.0), ('あ', 10.0), (' ', 10.0), ('B', 10.0)]);
 
         let spans = TerminalView::text_spans_for_lines(
-            &[vec![ascii_a, wide, continuation, ascii_b]],
+            &[vec![ascii_a, wide, continuation, ascii_b].into()],
             0,
             usize::MAX,
             usize::MAX,
@@ -552,7 +553,7 @@ mod tests {
         ascii_b.ch = 'B';
 
         let spans = TerminalView::text_spans_for_lines(
-            &[vec![ascii_a, wide, continuation, ascii_b]],
+            &[vec![ascii_a, wide, continuation, ascii_b].into()],
             0,
             usize::MAX,
             usize::MAX,

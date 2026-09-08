@@ -26,6 +26,7 @@ pub(super) enum CopyModeMove {
 #[derive(Default)]
 pub(super) struct CopyMode {
     snapshot: CopyModeSnapshot,
+    history_start: usize,
 }
 
 impl CopyMode {
@@ -34,6 +35,7 @@ impl CopyMode {
     }
 
     pub(super) fn enter(&mut self, screen: &ScreenSnapshot) {
+        self.history_start = screen.history_start;
         self.snapshot = CopyModeSnapshot {
             active: true,
             cursor: movement::clamp_position(
@@ -95,6 +97,17 @@ impl CopyMode {
             return CopyModeSnapshot::default();
         }
 
+        let removed = screen.history_start.saturating_sub(self.history_start);
+        self.history_start = screen.history_start;
+        self.snapshot.cursor.row = self.snapshot.cursor.row.saturating_sub(removed);
+        if let Some(selection) = self.snapshot.selection.as_mut() {
+            if selection.anchor.row < removed || selection.cursor.row < removed {
+                // Do not silently copy unrelated text after selected history expires.
+                self.snapshot.selection = None;
+            } else {
+                selection.anchor.row -= removed;
+            }
+        }
         self.snapshot.cursor = movement::clamp_position(screen, self.snapshot.cursor);
 
         if let Some(selection) = self.snapshot.selection.as_mut() {
@@ -130,7 +143,23 @@ mod tests {
             cursor_col,
             cursor_color: None,
             cursor_visible: true,
+            history_start: 0,
         }
+    }
+
+    #[test]
+    fn selection_follows_retained_history_and_expires_when_removed() {
+        let mut original = screen(&["old", "keep", "last"], 1, 0);
+        let mut mode = CopyMode::default();
+        mode.enter(&original);
+        mode.toggle_cell_selection();
+        original.lines.remove(0);
+        original.history_start = 1;
+        assert_eq!(mode.renderer_snapshot(&original).cursor.row, 0);
+        assert_eq!(mode.selected_text(&original), Some("k".to_string()));
+        original.lines.remove(0);
+        original.history_start = 2;
+        assert!(mode.renderer_snapshot(&original).selection.is_none());
     }
 
     #[test]

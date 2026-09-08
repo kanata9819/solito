@@ -17,11 +17,15 @@ impl TerminalState {
     }
 
     pub fn apply_terminal_output(&mut self, bytes: &[u8]) {
-        self.parser.advance(&mut self.screen, bytes);
+        for chunk in bytes.chunks(16 * 1024) {
+            self.parser.advance(&mut self.screen, chunk);
+            self.screen.limit_history();
+        }
     }
 
     pub fn resize(&mut self, size: TerminalSize) {
         self.screen.resize(size);
+        self.screen.limit_history();
     }
 
     pub fn snapshot(&self) -> ScreenSnapshot {
@@ -43,6 +47,50 @@ mod tests {
             .filter(|cell| !cell.is_wide_continuation)
             .map(|cell| cell.ch)
             .collect()
+    }
+
+    #[test]
+    fn snapshots_share_unchanged_rows_and_keep_old_text() {
+        let mut state = terminal(12, 3);
+        state.apply_terminal_output(b"first\r\nsecond");
+        let before = state.snapshot();
+        let same = state.snapshot();
+        assert!(before.lines[0].shares_storage_with(&same.lines[0]));
+        state.apply_terminal_output(b"\x1b[2;1HX");
+        let after = state.snapshot();
+        assert!(before.lines[0].shares_storage_with(&after.lines[0]));
+        assert!(!before.lines[1].shares_storage_with(&after.lines[1]));
+        assert_eq!(line_text(&before.lines[1]), "second");
+        assert_eq!(line_text(&after.lines[1]), "Xecond");
+    }
+
+    #[test]
+    fn history_is_bounded_and_saved_cursor_tracks_retained_rows() {
+        let mut state = terminal(12, 3);
+        for _ in 0..10_002 {
+            state.apply_terminal_output(b"row\r\n");
+        }
+        state.apply_terminal_output(b"\x1b7");
+        let before = state.snapshot();
+        state.apply_terminal_output(b"new\r\nnew\r\n\x1b8");
+        let after = state.snapshot();
+        assert_eq!(after.lines.len(), 10_003);
+        assert_eq!(after.history_start, 2);
+        assert_eq!(after.cursor_row, before.cursor_row - 2);
+        assert_eq!(before.history_start, 0);
+        assert!(before.lines[2].shares_storage_with(&after.lines[0]));
+    }
+
+    #[test]
+    fn alternate_screen_does_not_accumulate_history() {
+        let mut state = terminal(12, 3);
+        state.apply_terminal_output(b"main\x1b[?1049h");
+        for _ in 0..50 {
+            state.apply_terminal_output(b"alt\r\n");
+        }
+        assert_eq!(state.snapshot().lines.len(), 3);
+        state.apply_terminal_output(b"\x1b[?1049l");
+        assert_eq!(line_text(&state.snapshot().lines[0]), "main");
     }
 
     #[test]

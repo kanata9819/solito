@@ -48,9 +48,50 @@ impl ScreenCell {
     }
 }
 
+/// A shared row. Snapshots clone the Arc; writing copies only a shared row.
+#[derive(Clone, Debug, Default)]
+pub struct ScreenLine(std::sync::Arc<Vec<ScreenCell>>);
+
+impl ScreenLine {
+    pub fn shares_storage_with(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl std::ops::Deref for ScreenLine {
+    type Target = Vec<ScreenCell>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for ScreenLine {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        std::sync::Arc::make_mut(&mut self.0)
+    }
+}
+
+impl PartialEq for ScreenLine {
+    fn eq(&self, other: &Self) -> bool {
+        self.shares_storage_with(other) || self.0 == other.0
+    }
+}
+impl Eq for ScreenLine {}
+impl From<Vec<ScreenCell>> for ScreenLine {
+    fn from(cells: Vec<ScreenCell>) -> Self {
+        Self(std::sync::Arc::new(cells))
+    }
+}
+impl FromIterator<ScreenCell> for ScreenLine {
+    fn from_iter<T: IntoIterator<Item = ScreenCell>>(iter: T) -> Self {
+        Self::from(iter.into_iter().collect::<Vec<_>>())
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct ScreenSnapshot {
-    pub lines: Vec<Vec<ScreenCell>>,
+    pub lines: Vec<ScreenLine>,
+    pub history_start: usize,
     pub cursor_row: usize,
     pub cursor_col: usize,
     pub cursor_color: Option<[u8; 4]>,
@@ -61,7 +102,8 @@ pub struct ScreenSnapshot {
 pub(super) struct ScreenBuffer {
     cols: usize,
     rows: usize,
-    pub(super) lines: Vec<Vec<ScreenCell>>,
+    pub(super) lines: Vec<ScreenLine>,
+    history_start: usize,
     pub(super) cursor: Cursor,
     pub(super) pending_wrap: bool,
     pub(super) style: CellStyle,
@@ -80,7 +122,8 @@ impl ScreenBuffer {
         Self {
             cols: size.cols,
             rows: size.rows,
-            lines: vec![Vec::new()],
+            lines: vec![ScreenLine::default()],
+            history_start: 0,
             cursor: Cursor::default(),
             pending_wrap: false,
             style: CellStyle::default(),
@@ -113,9 +156,23 @@ impl ScreenBuffer {
             .move_to_col(self.cursor.get_current_col().min(size.cols - 1));
     }
 
+    pub(super) fn limit_history(&mut self, history_limit: usize) {
+        let remove = self
+            .lines
+            .len()
+            .saturating_sub(self.rows.saturating_add(history_limit));
+        if remove == 0 {
+            return;
+        }
+        self.lines.drain(..remove);
+        self.history_start += remove;
+        self.cursor.discard_rows(remove);
+    }
+
     pub(super) fn snapshot(&self) -> ScreenSnapshot {
         ScreenSnapshot {
             lines: self.lines.clone(),
+            history_start: self.history_start,
             cursor_row: self.cursor.get_current_row(),
             cursor_col: self.cursor.get_current_col(),
             cursor_color: self.cursor_color,
@@ -133,7 +190,7 @@ impl ScreenBuffer {
 
     pub(super) fn ensure_cursor_line(&mut self) {
         while self.lines.len() <= self.cursor.get_current_row() {
-            self.lines.push(Vec::new());
+            self.lines.push(ScreenLine::default());
         }
     }
 

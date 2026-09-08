@@ -1,5 +1,6 @@
 use solito_renderer::{CopyModeSelection, CopyModeSelectionKind};
-use solito_terminal::{ScreenCell, ScreenSnapshot};
+use solito_terminal::ScreenLine;
+use solito_terminal::ScreenSnapshot;
 
 pub(super) fn selected_text(
     selection: CopyModeSelection,
@@ -29,7 +30,7 @@ fn selected_cells(selection: CopyModeSelection, screen: &ScreenSnapshot) -> Vec<
 
     (start.row..=end.row)
         .map(|row| {
-            let line_len = screen.lines.get(row).map_or(0, Vec::len);
+            let line_len = screen.lines.get(row).map_or(0, |line| line.len());
             let start_col = if row == start.row { start.col } else { 0 };
             let end_col = if row == end.row {
                 end.col.saturating_add(1).min(line_len)
@@ -42,7 +43,7 @@ fn selected_cells(selection: CopyModeSelection, screen: &ScreenSnapshot) -> Vec<
         .collect()
 }
 
-fn line_text(line: Option<&Vec<ScreenCell>>, start_col: usize, end_col: usize) -> String {
+fn line_text(line: Option<&ScreenLine>, start_col: usize, end_col: usize) -> String {
     let Some(line) = line else {
         return String::new();
     };

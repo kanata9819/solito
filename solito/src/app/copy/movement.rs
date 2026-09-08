@@ -153,7 +153,7 @@ fn page_rows(screen: &ScreenSnapshot) -> usize {
 }
 
 fn line_len(screen: &ScreenSnapshot, row: usize) -> usize {
-    screen.lines.get(row).map_or(0, Vec::len)
+    screen.lines.get(row).map_or(0, |line| line.len())
 }
 
 fn last_col(screen: &ScreenSnapshot, row: usize) -> usize {

@@ -2,12 +2,11 @@ use anyhow::Result;
 use portable_pty::{Child, CommandBuilder, MasterPty, PtyPair, PtySize, SlavePty};
 use solito_terminal::TerminalSize;
 use std::io::{Read, Write};
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::{Receiver, SyncSender};
 use std::thread::{self, JoinHandle};
 use tracing::{debug, error, info};
-use winit::event_loop::EventLoopProxy;
 
-use crate::app::event::AppEvent;
+use crate::app::event::OutputNotifier;
 
 type PtyReader = Box<dyn Read + Send>;
 type PtyWriter = Box<dyn Write + Send>;
@@ -19,8 +18,8 @@ pub(crate) struct SessionRuntime {
     child: PtyChild,
     input_rx: Receiver<SessionInput>,
     master: PtyMaster,
-    output_tx: Sender<Vec<u8>>,
-    event_proxy: EventLoopProxy<AppEvent>,
+    output_tx: SyncSender<Vec<u8>>,
+    output_notifier: OutputNotifier,
 }
 
 #[derive(Debug)]
@@ -42,8 +41,8 @@ impl SessionInput {
 impl SessionRuntime {
     pub(crate) fn new(
         input_rx: Receiver<SessionInput>,
-        output_tx: Sender<Vec<u8>>,
-        event_proxy: EventLoopProxy<AppEvent>,
+        output_tx: SyncSender<Vec<u8>>,
+        output_notifier: OutputNotifier,
         size: TerminalSize,
         shell_program: &str,
     ) -> Result<Self> {
@@ -55,7 +54,7 @@ impl SessionRuntime {
             input_rx,
             master: pty_pair.master,
             output_tx,
-            event_proxy,
+            output_notifier,
         })
     }
 
@@ -64,7 +63,7 @@ impl SessionRuntime {
         let writer = self.master.take_writer()?;
 
         // Thread to read output from the PTY.
-        Self::spawn_reading_thread(self.output_tx, self.event_proxy, reader);
+        Self::spawn_reading_thread(self.output_tx, self.output_notifier, reader);
         // Thread to write input and resize events into the PTY.
         Self::spawn_input_thread(self.input_rx, writer, self.master);
 
@@ -89,12 +88,12 @@ impl SessionRuntime {
     }
 
     fn spawn_reading_thread(
-        output_tx: Sender<Vec<u8>>,
-        event_proxy: EventLoopProxy<AppEvent>,
+        output_tx: SyncSender<Vec<u8>>,
+        output_notifier: OutputNotifier,
         mut reader: PtyReader,
     ) -> JoinHandle<()> {
         thread::spawn(move || {
-            let mut buffer: [u8; 1024] = [0u8; 1024];
+            let mut buffer: [u8; 16 * 1024] = [0u8; 16 * 1024];
 
             loop {
                 match reader.read(&mut buffer) {
@@ -107,10 +106,7 @@ impl SessionRuntime {
                             break;
                         }
                         // PTY output is the wake-up signal; idle terminals stay asleep.
-                        if event_proxy
-                            .send_event(AppEvent::TerminalOutputReady)
-                            .is_err()
-                        {
+                        if !output_notifier.notify() {
                             break;
                         }
                     }

@@ -1,4 +1,4 @@
-use solito_terminal::ScreenCell;
+use solito_terminal::ScreenLine;
 
 use crate::{pipeline::rect::RectSpec, terminal_view::TerminalView, util::color::ThemeColor};
 
@@ -80,7 +80,7 @@ impl TerminalView {
 
     fn copy_mode_rects_for(
         copy_mode: &CopyModeSnapshot,
-        lines: &[Vec<ScreenCell>],
+        lines: &[ScreenLine],
         visible_start: usize,
         visible_end: usize,
         cell_width: f32,
@@ -129,7 +129,7 @@ impl TerminalView {
     fn selected_cols_for_row(
         selection: CopyModeSelection,
         row: usize,
-        lines: &[Vec<ScreenCell>],
+        lines: &[ScreenLine],
     ) -> Option<(usize, usize)> {
         match selection.kind {
             CopyModeSelectionKind::Line => {

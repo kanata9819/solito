@@ -67,25 +67,16 @@ impl Renderer {
             }
         }
 
-        let rect_instance_buffer =
-            rect::RectPipeline::create_instance_buffer(&self.gpu.device, &rects);
-
-        let rect_bind_group = self
-            .render_resources
+        self.render_resources
             .rect_pipeline
-            .rect_bind_group(&self.gpu.device, &self.render_resources.uniform_buffer);
+            .upload_rects(&self.gpu.device, &self.gpu.queue, &rects);
 
         let mut render_pass =
             pass::begin_render_pass(encoder, view, self.window_surface.clear_color);
 
-        if let Some(rect_instance_buffer) = rect_instance_buffer.as_ref() {
-            self.render_resources.rect_pipeline.draw_rects(
-                &mut render_pass,
-                &rect_bind_group,
-                rect_instance_buffer,
-                rects.len(),
-            );
-        }
+        self.render_resources
+            .rect_pipeline
+            .draw_rects(&mut render_pass);
 
         self.terminal_view.glyphs.text_renderer.render(
             &self.terminal_view.glyphs.atlas,

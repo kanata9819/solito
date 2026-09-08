@@ -12,6 +12,13 @@ pub(super) struct CursorPosition {
 }
 
 impl Cursor {
+    pub(super) fn discard_rows(&mut self, count: usize) {
+        self.cursor_row = self.cursor_row.saturating_sub(count);
+        if let Some(saved) = &mut self.saved_cursor {
+            saved.row = saved.row.saturating_sub(count);
+        }
+    }
+
     pub(super) fn get_current_row(&self) -> usize {
         self.cursor_row
     }

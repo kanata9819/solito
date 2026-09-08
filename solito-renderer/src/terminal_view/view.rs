@@ -1,5 +1,6 @@
 use glyphon::FontSystem;
-use solito_terminal::{ScreenCell, ScreenSnapshot, TerminalSize};
+use solito_terminal::ScreenLine;
+use solito_terminal::{ScreenSnapshot, TerminalSize};
 
 use crate::RendererConfig;
 
@@ -87,6 +88,10 @@ impl TerminalView {
         } else {
             Some(self.viewport.visible_range(self.row_count()).0)
         };
+        let removed = snapshot
+            .history_start
+            .saturating_sub(self.snapshot.history_start);
+        let keep_start = keep_start.map(|start| start.saturating_sub(removed));
         let damage = TextDamage::between(&self.snapshot, &snapshot);
 
         self.snapshot = snapshot;
@@ -97,7 +102,7 @@ impl TerminalView {
             self.viewport.clamp(self.row_count());
         }
 
-        if previous_range != self.viewport.visible_range(self.row_count()) {
+        if removed > 0 || previous_range != self.viewport.visible_range(self.row_count()) {
             self.invalidate_all_text();
         } else {
             self.text_damage.merge(damage);
@@ -137,7 +142,7 @@ impl TerminalView {
         }
     }
 
-    pub(super) fn display_col_count(lines: &[Vec<ScreenCell>], row: usize) -> usize {
+    pub(super) fn display_col_count(lines: &[ScreenLine], row: usize) -> usize {
         lines.get(row).map_or(1, |line| line.len().max(1))
     }
 

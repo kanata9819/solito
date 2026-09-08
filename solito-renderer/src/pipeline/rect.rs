@@ -1,11 +1,13 @@
 use bytemuck::{Pod, Zeroable};
 use wgpu::Buffer;
-use wgpu::util::DeviceExt;
 use wgpu::wgt::SurfaceConfiguration;
 
 pub(crate) struct RectPipeline {
     pipeline: wgpu::RenderPipeline,
-    layout: wgpu::BindGroupLayout,
+    bind_group: wgpu::BindGroup,
+    instance_buffer: Option<Buffer>,
+    instance_capacity: usize,
+    instances: Vec<RectInstance>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -136,9 +138,20 @@ impl RectPipeline {
             height: window_height,
         });
 
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Rect Bind Group"),
+            layout: &bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform_buffer.as_entire_binding(),
+            }],
+        });
         Self {
             pipeline: render_pipeline,
-            layout: bind_group_layout,
+            bind_group,
+            instance_buffer: None,
+            instance_capacity: 0,
+            instances: Vec::new(),
         }
     }
 }
@@ -152,21 +165,6 @@ pub(crate) struct ScreenUniform<'a> {
 }
 
 impl RectPipeline {
-    pub(crate) fn rect_bind_group(
-        &self,
-        device: &wgpu::Device,
-        uniform_buffer: &Buffer,
-    ) -> wgpu::BindGroup {
-        device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Rect Bind Group"),
-            layout: &self.layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
-            }],
-        })
-    }
-
     pub(crate) fn update_screen_uniform(uniform: ScreenUniform) {
         let (screen_w, screen_h): (f32, f32) = (uniform.width as f32, uniform.height as f32);
         let screen_uniform: [f32; 4] = [
@@ -206,42 +204,48 @@ impl RectPipeline {
         })
     }
 
-    pub(crate) fn create_instance_buffer(
+    pub(crate) fn upload_rects(
+        &mut self,
         device: &wgpu::Device,
+        queue: &wgpu::Queue,
         rects: &[RectSpec],
-    ) -> Option<Buffer> {
+    ) {
+        self.instances.clear();
+        self.instances
+            .extend(rects.iter().copied().map(RectInstance::from));
         if rects.is_empty() {
-            return None;
+            return;
         }
-
-        let instances = rects
-            .iter()
-            .copied()
-            .map(RectInstance::from)
-            .collect::<Vec<_>>();
-
-        Some(
-            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        // Grow geometrically; ordinary frames reuse the same GPU allocation.
+        if rects.len() > self.instance_capacity {
+            self.instance_capacity = rects.len().next_power_of_two();
+            self.instance_buffer = Some(device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("Rect Instance Buffer"),
-                contents: bytemuck::cast_slice(&instances),
-                usage: wgpu::BufferUsages::VERTEX,
-            }),
-        )
+                size: (self.instance_capacity * size_of::<RectInstance>()) as u64,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }));
+        }
+        queue.write_buffer(
+            self.instance_buffer.as_ref().unwrap(),
+            0,
+            bytemuck::cast_slice(&self.instances),
+        );
     }
 
-    pub(crate) fn draw_rects(
-        &self,
-        pass: &mut wgpu::RenderPass,
-        bind_group: &wgpu::BindGroup,
-        instance_buffer: &Buffer,
-        rect_count: usize,
-    ) {
+    pub(crate) fn draw_rects(&self, pass: &mut wgpu::RenderPass) {
         use std::ops::Range;
         const VERTICES_COUNT: Range<u32> = 0..6;
 
+        if self.instances.is_empty() {
+            return;
+        }
+        let Some(instance_buffer) = &self.instance_buffer else {
+            return;
+        };
         pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, bind_group, &[]);
+        pass.set_bind_group(0, &self.bind_group, &[]);
         pass.set_vertex_buffer(0, instance_buffer.slice(..));
-        pass.draw(VERTICES_COUNT, 0..rect_count as u32);
+        pass.draw(VERTICES_COUNT, 0..self.instances.len() as u32);
     }
 }

@@ -4,12 +4,12 @@ use anyhow::Result;
 use solito_terminal::{ScreenSnapshot, TerminalSize, TerminalState};
 use std::{
     path::Path,
-    sync::mpsc::{Receiver, Sender, channel},
+    sync::mpsc::{Receiver, Sender, channel, sync_channel},
 };
 use tracing::error;
 use winit::event_loop::EventLoopProxy;
 
-use crate::app::event::AppEvent;
+use crate::app::event::{AppEvent, OutputNotifier};
 
 pub(super) trait TerminalTab {
     fn input_tx(&self) -> &Sender<SessionInput>;
@@ -24,6 +24,7 @@ pub(super) struct Tab {
     input_tx: Sender<SessionInput>,
     output_rx: Receiver<Vec<u8>>,
     title: String,
+    output_notifier: OutputNotifier,
 }
 
 impl Tab {
@@ -33,12 +34,15 @@ impl Tab {
         event_proxy: EventLoopProxy<AppEvent>,
     ) -> Self {
         let (input_tx, input_rx) = channel::<SessionInput>();
-        let (output_tx, output_rx) = channel::<Vec<u8>>();
+        // At most 64 chunks of 16 KiB can wait for the UI (about 1 MiB per tab).
+        let (output_tx, output_rx) = sync_channel::<Vec<u8>>(64);
         let title = tab_title_for_program(&shell_program);
 
+        let output_notifier = OutputNotifier::new(event_proxy);
+        let runtime_notifier = output_notifier.clone();
         std::thread::spawn(move || {
             let result =
-                SessionRuntime::new(input_rx, output_tx, event_proxy, size, &shell_program)
+                SessionRuntime::new(input_rx, output_tx, runtime_notifier, size, &shell_program)
                     .and_then(SessionRuntime::run_session);
             if let Err(err) = result {
                 error!("terminal session failed: {err}");
@@ -50,6 +54,7 @@ impl Tab {
             input_tx,
             output_rx,
             title,
+            output_notifier,
         }
     }
 }
@@ -68,11 +73,18 @@ impl TerminalTab for Tab {
     }
 
     fn drain_output(&mut self) -> bool {
+        self.output_notifier.begin_drain();
         let mut updated = false;
-        while let Ok(output) = self.output_rx.try_recv() {
+        // Bound each event so continuous output cannot monopolize the UI thread.
+        for _ in 0..16 {
+            let Ok(output) = self.output_rx.try_recv() else {
+                return updated;
+            };
             self.terminal.apply_terminal_output(&output);
             updated = true;
         }
+        // Continue later even if the producer has stopped after filling the queue.
+        self.output_notifier.notify();
 
         updated
     }
