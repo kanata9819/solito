@@ -4,6 +4,7 @@ members = [
     "solito",
     "solito-bench",
     "solito-config",
+    "solito-icon",
     "solito-renderer",
     "solito-terminal",
 ]

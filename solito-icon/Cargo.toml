@@ -1,0 +1,11 @@
+[package]
+name = "solito-icon"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+resvg = { version = "0.48.1", default-features = false }
+ico = "0.5"

@@ -10,6 +10,10 @@ b:
 br:
     cargo build --release
 
+ico:
+    cargo run -p solito-icon
+    cargo build --release -p solito
+
 # Measure Solito with a real automated Neovim session.
 bench seconds="10":
     cargo build --release -p solito -p solito-bench
