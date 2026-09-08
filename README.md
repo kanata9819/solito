@@ -1,31 +1,41 @@
-# Solito Terminal Emulator
+# Solito
 
-Solito is a small, native terminal emulator for Windows, built with Rust. It combines a GPU-rendered interface with PTY-backed shell sessions and uses the platform's familiar shell by default (`pwsh` on Windows, `bash` on Linux, and `zsh` on macOS).
+Solito is a terminal emulator I'm building in Rust, mainly for Windows. It's a learning project: I wanted to understand what happens between typing a key and seeing a character on screen.
 
 ![Solito running Nushell](docs/images/solito-terminal.jpg)
 
-Solito uses `winit` for its native window, `wgpu` for rendering, `glyphon` for text, and `portable-pty` for shell sessions.
+It has tabs, a keyboard copy mode, and settings for the font and window backdrop. Rendering runs on the GPU, with `winit` handling the window, `wgpu` and `glyphon` drawing the screen, and `portable-pty` connecting to the shell.
 
-### Performance benchmark
+There's still work to do on terminal compatibility. Neovim has been particularly good at finding bugs.
 
-Build the release binaries and measure Solito by running a real automated Neovim workload:
+## Running it
 
-```bash
+```sh
+cargo run --release -p solito
+```
+
+## Benchmarks
+
+With `just` installed, this builds Solito and runs an automated Neovim session to measure CPU and memory use:
+
+```sh
 just bench
 ```
 
-The underlying command and additional workload modes are documented in [`solito-bench/README.md`](solito-bench/README.md). The benchmark uses a runtime shell override and does not rewrite the user's persistent Solito configuration.
+See [solito-bench](solito-bench/README.md) for the plain Cargo commands and other workloads. The benchmark picks its own shell for the run; your saved configuration stays as it is.
 
-## Features
+## Changing the icon
 
-- GPU-rendered terminal text
-- PTY-backed shell sessions
-- Multiple tabs with terminal-style shortcuts
-- Keyboard copy mode
-- Configurable font and window backdrop
+Edit [`solito/assets/solito-icon.svg`](solito/assets/solito-icon.svg), then run:
 
-since 2026/04/15
+```sh
+just ico
+```
+
+That regenerates the icon files and builds Solito with them.
+
+Started on April 15, 2026.
 
 ## License
 
-MIT licensed. See `LICENSE`.
+MIT. See [LICENSE](LICENSE).
