@@ -133,6 +133,12 @@ impl<T> Tabs<T> {
 }
 
 impl Tabs<Tab> {
+    pub(super) fn active_mouse_mode(&self) -> solito_terminal::MouseMode {
+        self.active_tab()
+            .map(|tab| tab.terminal.mouse_mode())
+            .unwrap_or_default()
+    }
+
     pub(super) fn open(
         &mut self,
         size: TerminalSize,

@@ -129,6 +129,36 @@ impl TerminalView {
         ((content_width as f32 / self.glyphs.cell_width).floor() as usize).max(1)
     }
 
+    pub(crate) fn cell_at(&self, x: f64, y: f64, size: TerminalSize) -> Option<(usize, usize)> {
+        let top = Self::terminal_row_y(0, self.config.line_height, self.has_tab_bar());
+        Self::cell_at_position(
+            x,
+            y,
+            top,
+            self.glyphs.cell_width,
+            self.config.line_height,
+            size,
+        )
+    }
+
+    fn cell_at_position(
+        x: f64,
+        y: f64,
+        top: f32,
+        width: f32,
+        height: f32,
+        size: TerminalSize,
+    ) -> Option<(usize, usize)> {
+        let x = x - f64::from(Self::PADDING_X);
+        let y = y - f64::from(top);
+        if !x.is_finite() || !y.is_finite() || x < 0.0 || y < 0.0 {
+            return None;
+        }
+        let col = (x / f64::from(width)) as usize;
+        let row = (y / f64::from(height)) as usize;
+        (col < size.cols && row < size.rows).then_some((col, row))
+    }
+
     pub(crate) fn visible_rows(&self, height: u32) -> usize {
         let content_height = Self::terminal_content_height(height, self.config.line_height);
         ((content_height as f32 / self.config.line_height).floor() as usize).max(1)
@@ -153,6 +183,25 @@ impl TerminalView {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn mouse_cells_exclude_padding_and_tab_bar() {
+        let cell = |x, y| {
+            super::TerminalView::cell_at_position(
+                x,
+                y,
+                40.0,
+                10.0,
+                30.0,
+                solito_terminal::TerminalSize::new(80, 24),
+            )
+        };
+        assert_eq!(cell(10.0, 40.0), Some((0, 0)));
+        assert_eq!(cell(29.9, 70.0), Some((1, 1)));
+        assert_eq!(cell(9.0, 40.0), None);
+        assert_eq!(cell(10.0, 39.0), None);
+        assert_eq!(cell(810.0, 40.0), None);
+        assert_eq!(cell(10.0, 760.0), None);
+    }
     use super::TerminalView;
     use crate::util::color::ThemeColor;
     use crate::{RendererConfig, util};

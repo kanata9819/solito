@@ -1,4 +1,5 @@
 mod command;
+mod mouse;
 
 use anyhow::Result;
 use solito_config::app::AppConfig;
@@ -27,6 +28,7 @@ pub(crate) struct SolitoApplication {
     tabs: AppTabs,
     copy_mode: CopyMode,
     modifiers: ModifiersState,
+    mouse: mouse::MouseInputState,
     event_proxy: EventLoopProxy<AppEvent>,
     // State updates set this flag; about_to_wait requests a redraw; RedrawRequested draws.
     needs_redraw: bool,
@@ -43,6 +45,7 @@ impl SolitoApplication {
             tabs: AppTabs::new(),
             copy_mode: CopyMode::default(),
             modifiers: ModifiersState::default(),
+            mouse: Default::default(),
             event_proxy,
             needs_redraw: false,
         }
@@ -137,6 +140,9 @@ impl SolitoApplication {
     }
 
     fn show_active_terminal_at_bottom(&mut self) {
+        let position = self.mouse.position;
+        self.mouse = Default::default();
+        self.mouse.position = position;
         if let (Some(renderer), Some(snapshot)) = (&mut self.renderer, self.tabs.active_snapshot())
         {
             let copy_mode = self.copy_mode.renderer_snapshot(&snapshot);
@@ -276,6 +282,9 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
+                if self.report_mouse_wheel(delta) {
+                    return;
+                }
                 let Some(renderer) = &mut self.renderer else {
                     return;
                 };
@@ -289,6 +298,12 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                 }
                 self.needs_redraw = true;
             }
+            WindowEvent::CursorMoved { position, .. } => self.report_mouse_motion(position),
+            WindowEvent::MouseInput { state, button, .. } => {
+                self.report_mouse_button(state, button)
+            }
+            WindowEvent::CursorLeft { .. } => self.mouse.position = None,
+            WindowEvent::Focused(false) => self.mouse = Default::default(),
             _ => {
                 tracing::debug!("unhandled event: {event:?}");
             }

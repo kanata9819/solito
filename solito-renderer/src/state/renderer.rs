@@ -68,6 +68,10 @@ impl Renderer {
         self.terminal_size_for(PhysicalSize::new(width, height))
     }
 
+    pub fn terminal_cell_at(&self, x: f64, y: f64) -> Option<(usize, usize)> {
+        self.terminal_view.cell_at(x, y, self.terminal_size())
+    }
+
     pub fn terminal_size_for(&self, window_size: PhysicalSize<u32>) -> TerminalSize {
         TerminalSize::new(
             self.terminal_view.visible_cols(window_size.width),

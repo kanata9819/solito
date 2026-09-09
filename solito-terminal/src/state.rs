@@ -9,6 +9,10 @@ pub struct TerminalState {
 }
 
 impl TerminalState {
+    pub fn mouse_mode(&self) -> crate::MouseMode {
+        self.screen.mouse_mode
+    }
+
     pub fn new(size: TerminalSize) -> Self {
         Self {
             parser: Parser::new(),

@@ -6,6 +6,7 @@ use decodesc::{CsiMessage, EraseMode, EscMessage, OscMessage, TabClearMode};
 use unicode_width::UnicodeWidthChar;
 
 pub(crate) struct Screen {
+    pub(crate) mouse_mode: crate::MouseMode,
     screen_buffer: ScreenBuffer,
     primary_screen: Option<ScreenBuffer>,
     last_printed: Option<char>,
@@ -15,6 +16,7 @@ impl Screen {
     pub(crate) fn new(size: TerminalSize) -> Self {
         let screen_buffer = ScreenBuffer::new(size);
         Self {
+            mouse_mode: Default::default(),
             screen_buffer,
             primary_screen: None,
             last_printed: None,
@@ -631,6 +633,7 @@ impl Screen {
     }
 
     fn reset(&mut self) {
+        self.mouse_mode = Default::default();
         let size = TerminalSize::new(self.screen_buffer.cols(), self.screen_buffer.rows());
         self.screen_buffer = ScreenBuffer::new(size);
         self.primary_screen = None;
@@ -640,6 +643,7 @@ impl Screen {
     fn set_modes(&mut self, private: bool, modes: &[u16]) {
         for mode in modes {
             if private {
+                self.mouse_mode.set(*mode, true);
                 match mode {
                     6 => self.screen_buffer.origin_mode = true,
                     7 => self.screen_buffer.auto_wrap = true,
@@ -658,6 +662,7 @@ impl Screen {
     fn reset_modes(&mut self, private: bool, modes: &[u16]) {
         for mode in modes {
             if private {
+                self.mouse_mode.set(*mode, false);
                 match mode {
                     6 => self.screen_buffer.origin_mode = false,
                     7 => self.screen_buffer.auto_wrap = false,
