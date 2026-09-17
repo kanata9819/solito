@@ -1,5 +1,6 @@
 use solito_terminal::ScreenSnapshot;
 use std::collections::BTreeSet;
+use std::ops::Range;
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(super) enum TextDamage {
@@ -10,11 +11,14 @@ pub(super) enum TextDamage {
 }
 
 impl TextDamage {
-    pub(super) fn between(previous: &ScreenSnapshot, next: &ScreenSnapshot) -> Self {
+    pub(super) fn between(
+        previous: &ScreenSnapshot,
+        next: &ScreenSnapshot,
+        visible: Range<usize>,
+    ) -> Self {
         let mut damage = Self::None;
-        let row_count = previous.lines.len().max(next.lines.len());
 
-        for row in 0..row_count {
+        for row in visible.clone() {
             if previous.lines.get(row) != next.lines.get(row) {
                 damage.add_row(row);
             }
@@ -26,10 +30,10 @@ impl TextDamage {
             || previous.cursor_visible != next.cursor_visible;
 
         if cursor_changed {
-            if previous.cursor_visible {
+            if previous.cursor_visible && visible.contains(&previous.cursor_row) {
                 damage.add_row(previous.cursor_row);
             }
-            if next.cursor_visible {
+            if next.cursor_visible && visible.contains(&next.cursor_row) {
                 damage.add_row(next.cursor_row);
             }
         }
@@ -85,18 +89,18 @@ mod tests {
     #[test]
     fn detects_only_changed_rows() {
         let previous = ScreenSnapshot {
-            lines: vec![line("same"), line("old"), line("same")],
+            lines: vec![line("same"), line("old"), line("same")].into(),
             cursor_visible: false,
             ..ScreenSnapshot::default()
         };
         let next = ScreenSnapshot {
-            lines: vec![line("same"), line("new"), line("same")],
+            lines: vec![line("same"), line("new"), line("same")].into(),
             cursor_visible: false,
             ..ScreenSnapshot::default()
         };
 
         assert_eq!(
-            TextDamage::between(&previous, &next),
+            TextDamage::between(&previous, &next, 0..3),
             TextDamage::Rows(BTreeSet::from([1]))
         );
     }
@@ -104,7 +108,7 @@ mod tests {
     #[test]
     fn cursor_movement_damages_old_and_new_rows() {
         let previous = ScreenSnapshot {
-            lines: vec![line("a"), line("b"), line("c")],
+            lines: vec![line("a"), line("b"), line("c")].into(),
             cursor_row: 0,
             cursor_visible: true,
             ..ScreenSnapshot::default()
@@ -117,7 +121,7 @@ mod tests {
         };
 
         assert_eq!(
-            TextDamage::between(&previous, &next),
+            TextDamage::between(&previous, &next, 0..3),
             TextDamage::Rows(BTreeSet::from([0, 2]))
         );
     }
@@ -125,7 +129,7 @@ mod tests {
     #[test]
     fn hidden_cursor_movement_does_not_damage_text() {
         let previous = ScreenSnapshot {
-            lines: vec![line("a"), line("b")],
+            lines: vec![line("a"), line("b")].into(),
             cursor_row: 0,
             cursor_visible: false,
             ..ScreenSnapshot::default()
@@ -137,7 +141,30 @@ mod tests {
             ..ScreenSnapshot::default()
         };
 
-        assert_eq!(TextDamage::between(&previous, &next), TextDamage::None);
+        assert_eq!(
+            TextDamage::between(&previous, &next, 0..2),
+            TextDamage::None
+        );
+    }
+
+    #[test]
+    fn offscreen_changes_do_not_damage_visible_text() {
+        let previous = ScreenSnapshot {
+            lines: vec![line("history"), line("visible"), line("prompt")].into(),
+            cursor_visible: true,
+            ..ScreenSnapshot::default()
+        };
+        let mut next = previous.clone();
+        next.lines[0] = line("changed");
+        next.cursor_col = 1;
+        assert_eq!(
+            TextDamage::between(&previous, &next, 1..3),
+            TextDamage::None
+        );
+        assert_eq!(
+            TextDamage::between(&previous, &next, 0..1),
+            TextDamage::Rows(BTreeSet::from([0]))
+        );
     }
 
     #[test]

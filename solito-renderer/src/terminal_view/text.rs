@@ -30,13 +30,14 @@ impl TerminalView {
             let Some(line) = self.snapshot.lines.get(row) else {
                 continue;
             };
-            rects.extend(Self::background_rects_for_line(
+            Self::background_rects_for_line(
                 line,
                 Self::terminal_row_y(row - start, self.config.line_height, self.has_tab_bar()),
                 self.glyphs.cell_width,
                 self.config.line_height,
                 srgb_target,
-            ));
+                &mut rects,
+            );
         }
         rects
     }
@@ -47,8 +48,8 @@ impl TerminalView {
         cell_width: f32,
         line_height: f32,
         srgb_target: bool,
-    ) -> Vec<RectSpec> {
-        let mut rects = Vec::new();
+        rects: &mut Vec<RectSpec>,
+    ) {
         let mut col = 0;
         while col < line.len() {
             let color = line[col].background_rgba();
@@ -72,7 +73,6 @@ impl TerminalView {
                 ));
             }
         }
-        rects
     }
 
     pub(super) fn set_text_buffer_size(
@@ -114,22 +114,58 @@ impl TerminalView {
 
     fn set_text_to_buffer(&mut self) {
         let font_family = self.config.font_family.clone();
-        let spans = self.visible_text_spans(font_family.as_str());
         let attrs = Self::text_attrs(None, font_family.as_str());
-
-        self.glyphs.text_buffer.set_rich_text(
-            spans
-                .iter()
-                .map(|(text, attrs)| (text.as_str(), attrs.clone())),
-            &attrs,
-            Shaping::Advanced,
-            None,
-        );
-        // cosmic-text 0.19 no longer shapes implicitly when text is replaced.
-        // Glyphon can only prepare glyphs after the buffer has layout runs.
+        let (start, end) = self.viewport.visible_range(self.row_count());
+        let has_tab_bar = self.has_tab_bar();
+        let offset = usize::from(has_tab_bar);
+        let count = offset + end - start;
+        let origin = self.snapshot.history_start + start;
+        let lines = &mut self.glyphs.text_buffer.lines;
+        if lines.len() == count
+            && let Some((previous, previous_tab_bar)) = self.text_origin
+            && previous_tab_bar == has_tab_bar
+        {
+            Self::reuse_scrolled_lines(&mut lines[offset..], previous, origin);
+        }
+        lines.resize_with(count, || {
+            BufferLine::new(
+                "",
+                Default::default(),
+                AttrsList::new(&attrs),
+                Shaping::Advanced,
+            )
+        });
+        self.text_origin = Some((origin, has_tab_bar));
+        if has_tab_bar {
+            let spans =
+                Self::tab_bar_spans_for(&self.tab_bar, &font_family, self.glyphs.cell_width);
+            Self::set_buffer_line(&mut self.glyphs.text_buffer.lines[0], spans, &attrs);
+        }
+        if self.snapshot.lines.is_empty() {
+            Self::set_buffer_line(
+                &mut self.glyphs.text_buffer.lines[offset],
+                Vec::new(),
+                &attrs,
+            );
+        } else {
+            self.update_text_rows(&(start..end).collect());
+        }
         self.glyphs
             .text_buffer
             .shape_until_scroll(&mut self.glyphs.font_system, false);
+    }
+
+    fn reuse_scrolled_lines(lines: &mut [BufferLine], previous: usize, next: usize) {
+        let distance = previous.abs_diff(next);
+        if distance == 0 || distance >= lines.len() {
+            return;
+        }
+        // Keep the shaped glyphs attached to rows that remain on screen.
+        if next > previous {
+            lines.rotate_left(distance);
+        } else {
+            lines.rotate_right(distance);
+        }
     }
 
     pub(super) fn text_attrs<'a>(color: Option<[u8; 4]>, font_family: &'a str) -> Attrs<'a> {
@@ -150,13 +186,13 @@ impl TerminalView {
         let row_count = self.row_count();
         self.viewport.clamp(row_count);
         let (start, end) = self.viewport.visible_range(row_count);
-        let visible_rows = rows.range(start..end).copied().collect::<Vec<_>>();
+        let visible_rows = rows.range(start..end);
 
-        if visible_rows.is_empty() {
+        if visible_rows.clone().next().is_none() {
             return;
         }
 
-        self.ensure_glyph_widths(start, end);
+        self.ensure_glyph_widths(visible_rows.clone().copied());
 
         let font_family = self.config.font_family.clone();
         let default_attrs = Self::text_attrs(None, font_family.as_str());
@@ -174,7 +210,7 @@ impl TerminalView {
         };
         let mut updated = false;
 
-        for absolute_row in visible_rows {
+        for &absolute_row in visible_rows {
             let buffer_row = tab_bar_offset + absolute_row - start;
             let Some(buffer_line) = self.glyphs.text_buffer.lines.get_mut(buffer_row) else {
                 self.set_text_to_buffer();
@@ -220,65 +256,18 @@ impl TerminalView {
         buffer_line.set_text(text, buffer_line.ending(), attrs_list)
     }
 
-    fn visible_text_spans<'a>(&mut self, font_family: &'a str) -> Vec<(String, Attrs<'a>)> {
-        let cell_width = self.glyphs.cell_width;
-        let mut spans = Self::tab_bar_spans_for(&self.tab_bar, font_family, cell_width);
-        let has_tab_bar = !spans.is_empty();
-
-        if self.snapshot.lines.is_empty() {
-            return spans;
-        }
-
-        let row_count = self.row_count();
-        self.viewport.clamp(row_count);
-        let (start, end) = self.viewport.visible_range(row_count);
-
-        if has_tab_bar {
-            spans.push(("\n".to_string(), Self::text_attrs(None, font_family)));
-        }
-
-        self.ensure_glyph_widths(start, end);
-        let (cursor_row, cursor_col) = if self.snapshot.cursor_visible {
-            (self.snapshot.cursor_row, self.snapshot.cursor_col)
-        } else {
-            (usize::MAX, usize::MAX)
-        };
-        spans.extend(Self::text_spans_for_lines(
-            &self.snapshot.lines[start..end],
-            start,
-            cursor_row,
-            cursor_col,
-            Self::cursor_text_color(self.caret_color()),
-            font_family,
-            &GridMetrics {
-                cell_width,
-                font_size: self.config.font_size,
-                glyph_widths: &self.glyphs.glyph_widths,
-            },
-        ));
-
-        spans
-    }
-
-    fn ensure_glyph_widths(&mut self, start: usize, end: usize) {
-        let chars = self.snapshot.lines[start..end]
-            .iter()
-            .flat_map(|line| line.iter().map(|cell| cell.ch))
-            .collect::<Vec<_>>();
-
-        for ch in chars {
-            if self.glyphs.glyph_widths.contains_key(&ch) {
-                continue;
+    fn ensure_glyph_widths(&mut self, rows: impl Iterator<Item = usize>) {
+        for row in rows {
+            for cell in self.snapshot.lines[row].iter() {
+                self.glyphs.glyph_widths.entry(cell.ch).or_insert_with(|| {
+                    let mut encoded = [0; 4];
+                    GlyphonResources::measure_text_width(
+                        &mut self.glyphs.font_system,
+                        &self.config,
+                        cell.ch.encode_utf8(&mut encoded),
+                    )
+                });
             }
-
-            let mut encoded: [u8; 4] = [0; 4];
-            let text = ch.encode_utf8(&mut encoded);
-            let width = GlyphonResources::measure_text_width(
-                &mut self.glyphs.font_system,
-                &self.config,
-                text,
-            );
-            self.glyphs.glyph_widths.insert(ch, width);
         }
     }
 
@@ -423,8 +412,15 @@ mod tests {
             solito_terminal::TerminalState::new(solito_terminal::TerminalSize::new(20, 3));
         state.apply_terminal_output("x\x1b[48;2;12;34;56m あ\x1b[49mz".as_bytes());
         let snapshot = state.snapshot();
-        let rects =
-            TerminalView::background_rects_for_line(&snapshot.lines[0], 40.0, 10.0, 20.0, true);
+        let mut rects = Vec::new();
+        TerminalView::background_rects_for_line(
+            &snapshot.lines[0],
+            40.0,
+            10.0,
+            20.0,
+            true,
+            &mut rects,
+        );
         assert_eq!(rects.len(), 1);
         assert_eq!(
             (rects[0].x, rects[0].y, rects[0].width, rects[0].height),
@@ -435,16 +431,16 @@ mod tests {
             crate::util::color::srgb_to_linear_rgba([12, 34, 56, 255])
         );
         state.apply_terminal_output(b"\r\x1b[49m     ");
-        assert!(
-            TerminalView::background_rects_for_line(
-                &state.snapshot().lines[0],
-                40.0,
-                10.0,
-                20.0,
-                true
-            )
-            .is_empty()
+        rects.clear();
+        TerminalView::background_rects_for_line(
+            &state.snapshot().lines[0],
+            40.0,
+            10.0,
+            20.0,
+            true,
+            &mut rects,
         );
+        assert!(rects.is_empty());
     }
 
     #[test]
@@ -600,6 +596,33 @@ mod tests {
             "B x={} expected={expected_x} cell_width={cell_width}",
             b.x
         );
+    }
+
+    #[test]
+    fn scrolling_keeps_layouts_of_rows_that_remain_visible() {
+        let config = RendererConfig::default();
+        let mut fonts = FontSystem::new();
+        let attrs = TerminalView::text_attrs(None, &config.font_family);
+        let mut buffer = Buffer::new(
+            &mut fonts,
+            Metrics::new(config.font_size, config.line_height),
+        );
+        buffer.set_size(Some(1000.0), Some(200.0));
+        buffer.set_text("first\nsecond\nthird", &attrs, Shaping::Advanced, None);
+        buffer.shape_until_scroll(&mut fonts, false);
+        TerminalView::reuse_scrolled_lines(&mut buffer.lines, 10, 11);
+        assert_eq!(buffer.lines[0].text(), "second");
+        assert_eq!(buffer.lines[1].text(), "third");
+        assert!(!buffer.lines[0].needs_reshaping());
+        assert!(!buffer.lines[1].needs_reshaping());
+        assert!(!TerminalView::set_buffer_line(
+            &mut buffer.lines[0],
+            vec![("second".into(), attrs.clone())],
+            &attrs
+        ));
+        TerminalView::reuse_scrolled_lines(&mut buffer.lines, 11, 10);
+        assert_eq!(buffer.lines[0].text(), "first");
+        assert!(!buffer.lines[0].needs_reshaping());
     }
 
     #[test]

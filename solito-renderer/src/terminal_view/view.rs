@@ -1,5 +1,5 @@
 use glyphon::FontSystem;
-use solito_terminal::ScreenLine;
+use solito_terminal::ScreenLines;
 use solito_terminal::{ScreenSnapshot, TerminalSize};
 
 use crate::RendererConfig;
@@ -17,6 +17,7 @@ pub(crate) struct TerminalView {
     pub(super) viewport: ViewportState,
     pub(super) copy_mode: CopyModeSnapshot,
     pub(super) text_damage: TextDamage,
+    pub(super) text_origin: Option<(usize, bool)>,
 }
 
 impl TerminalView {
@@ -51,6 +52,7 @@ impl TerminalView {
             tab_bar: TabBarSnapshot::default(),
             copy_mode: CopyModeSnapshot::default(),
             text_damage: TextDamage::All,
+            text_origin: None,
         }
     }
 
@@ -92,27 +94,35 @@ impl TerminalView {
             .history_start
             .saturating_sub(self.snapshot.history_start);
         let keep_start = keep_start.map(|start| start.saturating_sub(removed));
-        let damage = TextDamage::between(&self.snapshot, &snapshot);
-
-        self.snapshot = snapshot;
-
         if let Some(start) = keep_start {
-            self.viewport.scroll_to_start(start, self.row_count());
+            self.viewport
+                .scroll_to_start(start, snapshot.lines.len().max(1));
         } else {
-            self.viewport.clamp(self.row_count());
+            self.viewport.clamp(snapshot.lines.len().max(1));
         }
 
-        if removed > 0 || previous_range != self.viewport.visible_range(self.row_count()) {
+        let next_range = self.viewport.visible_range(snapshot.lines.len().max(1));
+        if removed > 0 || previous_range != next_range {
             self.invalidate_all_text();
-        } else {
+        } else if self.text_damage != TextDamage::All {
+            let damage = TextDamage::between(&self.snapshot, &snapshot, next_range.0..next_range.1);
             self.text_damage.merge(damage);
         }
+        self.snapshot = snapshot;
     }
 
     pub(crate) fn set_snapshot_at_bottom(&mut self, snapshot: ScreenSnapshot) {
-        self.snapshot = snapshot;
+        self.set_snapshot(snapshot);
+        self.scroll_to_bottom();
+    }
+
+    pub(crate) fn scroll_to_bottom(&mut self) -> bool {
+        let changed = !self.viewport.is_at_bottom();
         self.viewport.reset();
-        self.invalidate_all_text();
+        if changed {
+            self.invalidate_all_text();
+        }
+        changed
     }
 
     pub(crate) fn scroll(&mut self, _x: f32, y: f32) {
@@ -172,7 +182,7 @@ impl TerminalView {
         }
     }
 
-    pub(super) fn display_col_count(lines: &[ScreenLine], row: usize) -> usize {
+    pub(super) fn display_col_count(lines: &ScreenLines, row: usize) -> usize {
         lines.get(row).map_or(1, |line| line.len().max(1))
     }
 

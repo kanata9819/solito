@@ -69,6 +69,18 @@ mod tests {
     }
 
     #[test]
+    fn identical_repaint_keeps_shared_row_storage() {
+        let mut state = terminal(12, 3);
+        state.apply_terminal_output("abcあ".as_bytes());
+        let before = state.snapshot();
+        state.apply_terminal_output("\rabcあ".as_bytes());
+        let after = state.snapshot();
+        assert!(before.lines[0].shares_storage_with(&after.lines[0]));
+        state.apply_terminal_output(b"\r\x1b[31ma");
+        assert!(!after.lines[0].shares_storage_with(&state.snapshot().lines[0]));
+    }
+
+    #[test]
     fn history_is_bounded_and_saved_cursor_tracks_retained_rows() {
         let mut state = terminal(12, 3);
         for _ in 0..10_002 {
@@ -138,8 +150,10 @@ mod tests {
         let snapshot = state.snapshot();
         assert_eq!(line_text(&snapshot.lines[0]), "history");
         assert!(
-            snapshot.lines[1..]
+            snapshot
+                .lines
                 .iter()
+                .skip(1)
                 .all(|line| line.iter().all(|cell| cell.ch == ' '))
         );
     }

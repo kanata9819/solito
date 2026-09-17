@@ -32,6 +32,7 @@ pub(crate) struct SolitoApplication {
     event_proxy: EventLoopProxy<AppEvent>,
     // State updates set this flag; about_to_wait requests a redraw; RedrawRequested draws.
     needs_redraw: bool,
+    terminal_dirty: bool,
 }
 
 impl SolitoApplication {
@@ -48,6 +49,7 @@ impl SolitoApplication {
             mouse: Default::default(),
             event_proxy,
             needs_redraw: false,
+            terminal_dirty: false,
         }
     }
 
@@ -125,11 +127,13 @@ impl SolitoApplication {
     }
     fn drain_terminal_output(&mut self) {
         if self.tabs.drain_outputs() {
-            self.refresh_active_terminal();
+            self.terminal_dirty = true;
+            self.needs_redraw = true;
         }
     }
 
     fn refresh_active_terminal(&mut self) {
+        self.terminal_dirty = false;
         if let (Some(renderer), Some(snapshot)) = (&mut self.renderer, self.tabs.active_snapshot())
         {
             let copy_mode = self.copy_mode.renderer_snapshot(&snapshot);
@@ -140,6 +144,7 @@ impl SolitoApplication {
     }
 
     fn show_active_terminal_at_bottom(&mut self) {
+        self.terminal_dirty = false;
         let position = self.mouse.position;
         self.mouse = Default::default();
         self.mouse.position = position;
@@ -149,6 +154,12 @@ impl SolitoApplication {
             renderer.set_terminal_snapshot_at_bottom(snapshot);
             renderer.set_copy_mode(copy_mode);
             self.needs_redraw = true;
+        }
+    }
+
+    fn scroll_terminal_to_bottom(&mut self) {
+        if let Some(renderer) = &mut self.renderer {
+            self.needs_redraw |= renderer.scroll_to_bottom();
         }
     }
 
@@ -229,6 +240,10 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                 }
             }
             WindowEvent::RedrawRequested => {
+                // Collapse all PTY notifications since the last frame into one snapshot.
+                if self.terminal_dirty {
+                    self.refresh_active_terminal();
+                }
                 self.needs_redraw = false;
                 if let Some(renderer) = &mut self.renderer
                     && let Err(err) = renderer.draw_frame()

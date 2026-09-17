@@ -75,7 +75,6 @@ pub fn decode_csi(params: &Params, intermediates: &[u8], ignore: bool, action: c
     let amount = param(params, 0, 1);
     let standard = !ignore && intermediates.is_empty();
     let private = !ignore && intermediates == b"?";
-    let modes = params_to_vec(params);
 
     match (standard, private, action) {
         (true, _, 'A') => CsiMessage::CursorUp(amount),
@@ -113,23 +112,23 @@ pub fn decode_csi(params: &Params, intermediates: &[u8], ignore: bool, action: c
         (true, _, 'n') => CsiMessage::DeviceStatusReport(param(params, 0, 0)),
         (true, _, 's') => CsiMessage::SaveCursor,
         (true, _, 'u') => CsiMessage::RestoreCursor,
-        (_, true, 'h') if modes == [25] => CsiMessage::ShowCursor,
-        (_, true, 'l') if modes == [25] => CsiMessage::HideCursor,
+        (_, true, 'h') if params.iter().eq([&[25][..]]) => CsiMessage::ShowCursor,
+        (_, true, 'l') if params.iter().eq([&[25][..]]) => CsiMessage::HideCursor,
         (true, _, 'h') => CsiMessage::SetMode {
             private: false,
-            modes,
+            modes: params_to_vec(params),
         },
         (true, _, 'l') => CsiMessage::ResetMode {
             private: false,
-            modes,
+            modes: params_to_vec(params),
         },
         (_, true, 'h') => CsiMessage::SetMode {
             private: true,
-            modes,
+            modes: params_to_vec(params),
         },
         (_, true, 'l') => CsiMessage::ResetMode {
             private: true,
-            modes,
+            modes: params_to_vec(params),
         },
         _ => CsiMessage::Unknown {
             params: params_to_vec(params),

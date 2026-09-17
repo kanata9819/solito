@@ -30,7 +30,7 @@ impl SolitoApplication {
             AppCommand::SendTerminalInput(bytes) => {
                 if let Some(input_tx) = self.tabs.active_input_tx() {
                     input_tx.send(SessionInput::write(bytes))?;
-                    self.show_active_terminal_at_bottom();
+                    self.scroll_terminal_to_bottom();
                 }
             }
             AppCommand::EnterCopyMode => {
@@ -137,7 +137,7 @@ impl SolitoApplication {
 
         if !text.is_empty() {
             input_tx.send(SessionInput::write(text.into_bytes()))?;
-            self.show_active_terminal_at_bottom();
+            self.scroll_terminal_to_bottom();
         }
 
         Ok(())

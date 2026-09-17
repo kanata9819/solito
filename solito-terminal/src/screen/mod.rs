@@ -1,6 +1,7 @@
 pub(super) mod buffer;
 mod cursor;
 mod editor;
+pub(crate) mod lines;
 mod performer;
 mod sgr;
 

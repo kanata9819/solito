@@ -43,8 +43,6 @@ impl Renderer {
     }
 
     fn draw_to_view(&mut self, encoder: &mut CommandEncoder, view: &TextureView) -> Result<()> {
-        self.update_rect_screen_uniform();
-
         let mut rects = self
             .terminal_view
             .background_rects(self.window_surface.config.format.is_srgb());

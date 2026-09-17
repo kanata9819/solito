@@ -1,4 +1,5 @@
 use super::cursor::Cursor;
+use super::lines::ScreenLines;
 use crate::TerminalSize;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -90,7 +91,7 @@ impl FromIterator<ScreenCell> for ScreenLine {
 
 #[derive(Clone, Debug, Default)]
 pub struct ScreenSnapshot {
-    pub lines: Vec<ScreenLine>,
+    pub lines: ScreenLines,
     pub history_start: usize,
     pub cursor_row: usize,
     pub cursor_col: usize,
@@ -102,7 +103,7 @@ pub struct ScreenSnapshot {
 pub(super) struct ScreenBuffer {
     cols: usize,
     rows: usize,
-    pub(super) lines: Vec<ScreenLine>,
+    pub(super) lines: ScreenLines,
     history_start: usize,
     pub(super) cursor: Cursor,
     pub(super) pending_wrap: bool,
@@ -122,7 +123,7 @@ impl ScreenBuffer {
         Self {
             cols: size.cols,
             rows: size.rows,
-            lines: vec![ScreenLine::default()],
+            lines: vec![ScreenLine::default()].into(),
             history_start: 0,
             cursor: Cursor::default(),
             pending_wrap: false,
@@ -164,7 +165,7 @@ impl ScreenBuffer {
         if remove == 0 {
             return;
         }
-        self.lines.drain(..remove);
+        self.lines.discard_prefix(remove);
         self.history_start += remove;
         self.cursor.discard_rows(remove);
     }
@@ -190,116 +191,26 @@ impl ScreenBuffer {
 
     pub(super) fn ensure_cursor_line(&mut self) {
         while self.lines.len() <= self.cursor.get_current_row() {
-            self.lines.push(ScreenLine::default());
+            self.lines.push_back(ScreenLine::default());
         }
     }
 
     pub(super) fn ensure_cursor_col(&mut self) {
         self.ensure_cursor_line();
-        let line = &mut self.lines[self.cursor.get_current_row()];
-
-        while line.len() < self.cursor.get_current_col() {
+        let row = self.cursor.get_current_row();
+        let col = self.cursor.get_current_col();
+        if self.lines[row].len() < col {
             // Moving to a column does not paint the cells skipped along the way.
             // Only explicitly printed or erased cells receive the active style.
-            line.push(ScreenCell::blank(CellStyle::default()));
+            self.lines[row].resize(col, ScreenCell::blank(CellStyle::default()));
         }
     }
 
     pub(super) fn get_viewport_top(&self) -> usize {
         self.lines.len().saturating_sub(self.rows)
     }
-
-    pub(super) fn insert_cell(&mut self, row: usize, col: usize, cell: ScreenCell) {
-        self.lines[row].insert(col, cell);
-    }
-
-    pub(super) fn replace_cell(&mut self, row: usize, col: usize, cell: ScreenCell) {
-        self.lines[row][col] = cell;
-    }
-
-    pub(super) fn push_cell(&mut self, row: usize, cell: ScreenCell) {
-        self.lines[row].push(cell);
-    }
-
-    pub(super) fn line_len(&self, row: usize) -> usize {
-        self.lines[row].len()
-    }
-
-    pub(super) fn truncate_line(&mut self, row: usize, cells_to_keep: usize) {
-        self.lines[row].truncate(cells_to_keep);
-    }
 }
 
 fn default_tab_stops(cols: usize) -> Vec<bool> {
     (0..cols).map(|col| col % 8 == 0).collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    fn init_buffer() -> ScreenBuffer {
-        let mut buffer = ScreenBuffer::new(terminal_size());
-        for ch in 'A'..='Z' {
-            buffer.lines[0].push(cell(ch));
-        }
-        buffer
-    }
-
-    fn terminal_size() -> TerminalSize {
-        TerminalSize {
-            cols: 120,
-            rows: 80,
-        }
-    }
-
-    fn cell(c: char) -> ScreenCell {
-        ScreenCell::new(c, CellStyle::default())
-    }
-
-    #[test]
-    fn insert_cell_to_buffer() {
-        let mut buf = init_buffer();
-        assert_eq!(buf.lines[0][0].ch, 'A');
-
-        buf.insert_cell(0, 0, cell('a'));
-        assert_eq!(buf.lines[0][0].ch, 'a');
-        assert_eq!(buf.lines[0][1].ch, 'A');
-        assert_eq!(buf.lines[0][buf.line_len(0) - 1].ch, 'Z');
-        assert_eq!(buf.lines[0].len(), 27);
-    }
-
-    #[test]
-    fn replace_cell_for_buffer() {
-        let mut buf = init_buffer();
-        assert_eq!(buf.lines[0][0].ch, 'A');
-        assert_eq!(buf.lines[0].len(), 26);
-
-        buf.replace_cell(0, 0, cell('a'));
-        assert_eq!(buf.lines[0][0].ch, 'a');
-        assert_eq!(buf.lines[0].len(), 26);
-        assert_eq!(buf.lines[0][1].ch, 'B');
-    }
-
-    #[test]
-    fn push_cell_to_buffer() {
-        let mut buf = init_buffer();
-        assert_eq!(buf.lines[0][0].ch, 'A');
-        assert_eq!(buf.lines[0].len(), 26);
-        assert_eq!(buf.lines[0][buf.line_len(0) - 1].ch, 'Z');
-
-        buf.push_cell(0, cell('a'));
-        assert_eq!(buf.lines[0][0].ch, 'A');
-        assert_eq!(buf.lines[0].len(), 27);
-        assert_eq!(buf.lines[0][buf.line_len(0) - 1].ch, 'a');
-    }
-
-    #[test]
-    fn truncate_buffer() {
-        let mut buf = init_buffer();
-        assert_eq!(buf.line_len(0), 26);
-
-        buf.truncate_line(0, 1);
-        assert_eq!(buf.line_len(0), 1);
-        assert_eq!(buf.lines[0][0].ch, 'A');
-    }
 }

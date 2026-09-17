@@ -61,6 +61,10 @@ impl Renderer {
         self.terminal_view.set_snapshot_at_bottom(snapshot);
     }
 
+    pub fn scroll_to_bottom(&mut self) -> bool {
+        self.terminal_view.scroll_to_bottom()
+    }
+
     pub fn terminal_size(&self) -> TerminalSize {
         let width = self.window_surface.config.width;
         let height = self.window_surface.config.height;

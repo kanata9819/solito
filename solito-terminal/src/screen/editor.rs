@@ -53,7 +53,7 @@ impl Screen {
             return;
         }
         while self.screen_buffer.lines.len() <= row {
-            self.screen_buffer.lines.push(ScreenLine::default());
+            self.screen_buffer.lines.push_back(ScreenLine::default());
         }
         let line = &mut self.screen_buffer.lines[row];
         // Erasing either half of a wide character clears both cells.
@@ -90,8 +90,12 @@ impl Screen {
             return;
         };
         let blank = ScreenCell::blank(CellStyle::default());
-        while line.last() == Some(&blank) {
-            line.pop();
+        let keep = line
+            .iter()
+            .rposition(|cell| *cell != blank)
+            .map_or(0, |col| col + 1);
+        if keep < line.len() {
+            line.truncate(keep);
         }
     }
 
@@ -243,45 +247,36 @@ impl Screen {
             }
         }
 
-        // Fill with spaces up to the cursor position to allow overwriting at arbitrary positions.
-        self.screen_buffer.ensure_cursor_col();
-
+        self.screen_buffer.ensure_cursor_line();
         let row = self.screen_buffer.cursor.get_current_row();
         let col = self.screen_buffer.cursor.get_current_col();
         let cols = self.screen_buffer.cols();
-
-        if self.screen_buffer.insert_mode {
-            for _ in 0..char_width {
-                self.screen_buffer.insert_cell(
-                    row,
-                    col,
-                    ScreenCell::blank(self.screen_buffer.style),
-                );
+        let style = self.screen_buffer.style;
+        let cell = ScreenCell::new(c, style);
+        let continuation = ScreenCell::wide_continuation(style);
+        let line = &mut self.screen_buffer.lines[row];
+        let unchanged = !self.screen_buffer.insert_mode
+            && line.get(col) == Some(&cell)
+            && (!is_wide || line.get(col + 1) == Some(&continuation));
+        if !unchanged {
+            // Borrow the cell vector once: COW ownership checks are per write, not per cell operation.
+            let cells: &mut Vec<ScreenCell> = line;
+            if cells.len() < col {
+                cells.resize(col, ScreenCell::blank(CellStyle::default()));
             }
-            self.screen_buffer.truncate_line(row, cols);
-        }
-
-        if col == self.screen_buffer.line_len(row) {
-            self.screen_buffer
-                .push_cell(row, ScreenCell::new(c, self.screen_buffer.style));
-        } else {
-            self.screen_buffer
-                .replace_cell(row, col, ScreenCell::new(c, self.screen_buffer.style));
-        }
-
-        if is_wide {
-            let continuation_col = col + 1;
-            if continuation_col == self.screen_buffer.line_len(row) {
-                // Append it if the cell does not exist yet.
-                self.screen_buffer
-                    .push_cell(row, ScreenCell::wide_continuation(self.screen_buffer.style));
-            } else {
-                // Otherwise, replace the existing next cell.
-                self.screen_buffer.replace_cell(
-                    row,
-                    continuation_col,
-                    ScreenCell::wide_continuation(self.screen_buffer.style),
-                );
+            if self.screen_buffer.insert_mode {
+                for _ in 0..char_width {
+                    cells.insert(col, ScreenCell::blank(style));
+                }
+                cells.truncate(cols);
+            }
+            cells.resize(
+                cells.len().max(col + char_width),
+                ScreenCell::blank(CellStyle::default()),
+            );
+            cells[col] = cell;
+            if is_wide {
+                cells[col + 1] = continuation;
             }
         }
 
@@ -409,7 +404,7 @@ impl Screen {
         let top = viewport_top + top;
         let bottom = viewport_top + bottom;
         while self.screen_buffer.lines.len() <= bottom {
-            self.screen_buffer.lines.push(ScreenLine::default());
+            self.screen_buffer.lines.push_back(ScreenLine::default());
         }
         (top, bottom)
     }
@@ -452,10 +447,11 @@ impl Screen {
         let col = self.screen_buffer.cursor.get_current_col();
         let cols = self.screen_buffer.cols();
         let blank = ScreenCell::blank(self.screen_buffer.style);
-        let line = &mut self.screen_buffer.lines[row];
-        for _ in 0..amount.min(cols.saturating_sub(col)) {
-            line.insert(col, blank);
-        }
+        let line: &mut Vec<ScreenCell> = &mut self.screen_buffer.lines[row];
+        line.splice(
+            col..col,
+            std::iter::repeat_n(blank, amount.min(cols.saturating_sub(col))),
+        );
         line.truncate(cols);
         self.screen_buffer.pending_wrap = false;
     }
@@ -561,10 +557,9 @@ impl Screen {
         let col = self.screen_buffer.cursor.get_current_col();
         let line = &mut self.screen_buffer.lines[row];
 
-        for _ in 0..amount {
-            if col < line.len() {
-                line.remove(col);
-            }
+        let end = col.saturating_add(amount).min(line.len());
+        if col < end {
+            line.drain(col..end);
         }
     }
 

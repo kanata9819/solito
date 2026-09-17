@@ -1,4 +1,4 @@
-use solito_terminal::ScreenLine;
+use solito_terminal::ScreenLines;
 
 use crate::{pipeline::rect::RectSpec, terminal_view::TerminalView, util::color::ThemeColor};
 
@@ -39,7 +39,6 @@ impl TerminalView {
     const COPY_MODE_CURSOR_COLOR: [f32; 4] = ThemeColor::YELLOW_400_ALPHA;
 
     pub(crate) fn set_copy_mode(&mut self, copy_mode: CopyModeSnapshot) {
-        let copy_mode_changed = self.copy_mode != copy_mode;
         self.copy_mode = copy_mode;
 
         let viewport_changed = if self.copy_mode.active {
@@ -50,7 +49,8 @@ impl TerminalView {
             false
         };
 
-        if copy_mode_changed || viewport_changed {
+        // Selection and copy cursor are rectangles; they do not reshape shell text.
+        if viewport_changed {
             self.invalidate_all_text();
         }
     }
@@ -80,7 +80,7 @@ impl TerminalView {
 
     fn copy_mode_rects_for(
         copy_mode: &CopyModeSnapshot,
-        lines: &[ScreenLine],
+        lines: &ScreenLines,
         visible_start: usize,
         visible_end: usize,
         cell_width: f32,
@@ -129,7 +129,7 @@ impl TerminalView {
     fn selected_cols_for_row(
         selection: CopyModeSelection,
         row: usize,
-        lines: &[ScreenLine],
+        lines: &ScreenLines,
     ) -> Option<(usize, usize)> {
         match selection.kind {
             CopyModeSelectionKind::Line => {
