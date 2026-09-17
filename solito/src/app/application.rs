@@ -10,7 +10,7 @@ use tracing::error;
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
-    event::{KeyEvent, WindowEvent},
+    event::{ElementState, KeyEvent, WindowEvent},
     event_loop::{ActiveEventLoop, EventLoopProxy},
     keyboard::ModifiersState,
     window::{Window, WindowAttributes, WindowId},
@@ -262,6 +262,12 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                     },
                 ..
             } => {
+                if key_state == ElementState::Pressed {
+                    if let Some(window) = &self.window {
+                        window.set_cursor_visible(false);
+                    }
+                }
+
                 // Only keyboard input is translated into commands by input.rs before execution.
                 let command = input::handle_key(
                     text,
@@ -312,7 +318,12 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                 }
                 self.needs_redraw = true;
             }
-            WindowEvent::CursorMoved { position, .. } => self.report_mouse_motion(position),
+            WindowEvent::CursorMoved { position, .. } => {
+                if let Some(window) = &self.window {
+                    window.set_cursor_visible(true);
+                }
+                self.report_mouse_motion(position)
+            }
             WindowEvent::MouseInput { state, button, .. } => {
                 self.report_mouse_button(state, button)
             }

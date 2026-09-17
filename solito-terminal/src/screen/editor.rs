@@ -258,6 +258,7 @@ impl Screen {
         let unchanged = !self.screen_buffer.insert_mode
             && line.get(col) == Some(&cell)
             && (!is_wide || line.get(col + 1) == Some(&continuation));
+
         if !unchanged {
             // Borrow the cell vector once: COW ownership checks are per write, not per cell operation.
             let cells: &mut Vec<ScreenCell> = line;
