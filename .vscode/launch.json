@@ -5,73 +5,15 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug executable 'solito'",
-            "type": "lldb",
+            "name": "Debug solito",
+            "type": "cppvsdbg",
             "request": "launch",
-            "cargo": {
-                "args": [
-                    "run",
-                    "--bin=solito",
-                    "--package=solito"
-                ]
-            },
-            "args": []
+            "program": "${workspaceFolder}\\target\\debug\\solito.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": false,
+            "externalConsole": false,
+            "preLaunchTask": "cargo build solito"
         },
-        {
-            "name": "Debug unit tests in library 'decodesc'",
-            "type": "lldb",
-            "request": "launch",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--package=decodesc"
-                ]
-            }
-        },
-        {
-            "name": "Debug unit tests in executable 'solito'",
-            "type": "lldb",
-            "request": "launch",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--bin=solito",
-                    "--package=solito"
-                ]
-            }
-        },
-        {
-            "name": "Debug unit tests in library 'solito_config'",
-            "type": "lldb",
-            "request": "launch",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--package=solito-config"
-                ]
-            }
-        },
-        {
-            "name": "Debug unit tests in library 'solito_renderer'",
-            "type": "lldb",
-            "request": "launch",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--package=solito-renderer"
-                ]
-            }
-        },
-        {
-            "name": "Debug unit tests in library 'solito_terminal'",
-            "type": "lldb",
-            "request": "launch",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--package=solito-terminal"
-                ]
-            }
-        }
     ]
 }

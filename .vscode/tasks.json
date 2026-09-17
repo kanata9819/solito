@@ -1,0 +1,21 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "cargo build solito",
+            "type": "process",
+            "command": "cargo",
+            "args": [
+                "build",
+                "--bin",
+                "solito",
+                "--package",
+                "solito"
+            ],
+            "group": "build",
+            "problemMatcher": [
+                "$rustc"
+            ]
+        }
+    ]
+}
