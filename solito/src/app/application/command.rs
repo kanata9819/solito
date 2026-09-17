@@ -30,6 +30,7 @@ impl SolitoApplication {
             AppCommand::SendTerminalInput(bytes) => {
                 if let Some(input_tx) = self.tabs.active_input_tx() {
                     input_tx.send(SessionInput::write(bytes))?;
+                    self.show_active_terminal_at_bottom();
                 }
             }
             AppCommand::EnterCopyMode => {
@@ -123,7 +124,7 @@ impl SolitoApplication {
         Ok(())
     }
 
-    fn paste_from_clipboard(&self) -> AppResult {
+    fn paste_from_clipboard(&mut self) -> AppResult {
         let Some(input_tx) = self.tabs.active_input_tx() else {
             return Ok(());
         };
@@ -136,6 +137,7 @@ impl SolitoApplication {
 
         if !text.is_empty() {
             input_tx.send(SessionInput::write(text.into_bytes()))?;
+            self.show_active_terminal_at_bottom();
         }
 
         Ok(())
