@@ -220,11 +220,10 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
     ) {
         match event {
             WindowEvent::CloseRequested => {
-                if self
-                    .window
-                    .as_ref()
-                    .is_some_and(|window| window.id() == window_id)
+                if let Some(window) = &self.window
+                    && window.id() == window_id
                 {
+                    window.set_visible(false);
                     self.window = None;
                     event_loop.exit();
                 }
