@@ -328,7 +328,12 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                 self.report_mouse_button(state, button)
             }
             WindowEvent::CursorLeft { .. } => self.mouse.position = None,
-            WindowEvent::Focused(false) => self.mouse = Default::default(),
+            WindowEvent::Focused(false) => {
+                if let Some(window) = &self.window {
+                    window.set_cursor_visible(true);
+                }
+                self.mouse = Default::default()
+            }
             _ => {
                 tracing::debug!("unhandled event: {event:?}");
             }
