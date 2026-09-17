@@ -110,6 +110,7 @@ pub struct WindowConfig {
     pub height: f32,
     pub(crate) backdrop: WindowBackdrop,
     pub(crate) acrylic_tint: [u8; 4],
+    pub hide_cursor: bool,
 }
 
 impl WindowConfig {
@@ -131,6 +132,7 @@ impl Default for WindowConfig {
             height: 650.0,
             backdrop: WindowBackdrop::Acrylic,
             acrylic_tint: [r, g, b, a],
+            hide_cursor: false,
         }
     }
 }
@@ -298,6 +300,7 @@ mod tests {
                 height: f32::NAN,
                 backdrop: WindowBackdrop::Acrylic,
                 acrylic_tint: [18, 18, 18, 190],
+                hide_cursor: false,
             },
             font: super::FontConfig {
                 family: " ".to_string(),

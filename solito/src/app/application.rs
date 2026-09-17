@@ -262,7 +262,7 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                     },
                 ..
             } => {
-                if key_state == ElementState::Pressed {
+                if self.config.window.hide_cursor && key_state == ElementState::Pressed {
                     if let Some(window) = &self.window {
                         window.set_cursor_visible(false);
                     }
@@ -319,7 +319,9 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                 self.needs_redraw = true;
             }
             WindowEvent::CursorMoved { position, .. } => {
-                if let Some(window) = &self.window {
+                if self.config.window.hide_cursor
+                    && let Some(window) = &self.window
+                {
                     window.set_cursor_visible(true);
                 }
                 self.report_mouse_motion(position)
@@ -329,7 +331,9 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
             }
             WindowEvent::CursorLeft { .. } => self.mouse.position = None,
             WindowEvent::Focused(false) => {
-                if let Some(window) = &self.window {
+                if self.config.window.hide_cursor
+                    && let Some(window) = &self.window
+                {
                     window.set_cursor_visible(true);
                 }
                 self.mouse = Default::default()
