@@ -20,3 +20,6 @@ windows-sys = { version = "0.61.2", features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 winit.workspace = true
+
+[dev-dependencies]
+pollster = "1.0.1"

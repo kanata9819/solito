@@ -53,3 +53,45 @@ cargo run -p solito-bench --release -- solito \
 ```
 
 CPU percentages follow the process convention where 100% is one fully occupied logical CPU. `full` repaints a 25-row colored terminal grid every frame; `incremental` draws the grid once and updates only the status line; `nvim` runs a real automated Neovim session.
+
+## Terminal CPU benchmark
+
+```bash
+cargo run --release --offline -p solito-terminal --example throughput
+```
+
+This excludes the renderer, GPU, and PTY. Each result is the median of five samples;
+snapshot workloads keep the previous snapshot alive to exercise copy-on-write.
+For a before/after comparison, use the same example in both source trees and
+separate Cargo target directories so artifacts from different revisions cannot mix.
+
+Measured on the same Windows machine, before (`bfb0308`) versus the optimized code:
+
+| Workload | Iterations | Before | After | Speedup |
+| --- | ---: | ---: | ---: | ---: |
+| Full repaint + snapshot | 2,000 | 111.62 ms | 103.25 ms | 1.08x |
+| Scroll at history limit | 30,000 | 62.80 ms | 46.35 ms | 1.35x |
+| Edit + snapshot with 10k history | 10,000 | 464.45 ms | 10.74 ms | 43.24x |
+| Cursor control | 500,000 | 135.11 ms | 30.91 ms | 4.37x |
+
+These are component timings, not whole-application frame-rate improvements.
+
+The full application was also compared on 2026-09-19: three runs per version,
+60 updates/second, 5-second warmup and 20-second samples, in before/after,
+after/before, before/after order. Average CPU samples were 18.67%, 11.33%,
+20.00% before and 12.27%, 11.09%, 20.23% after. The overlapping ranges and
+large run-to-run variation do not establish an application-wide CPU improvement
+or a consistent regression. Configuration was unchanged (1000x600, Cascadia
+Mono 17, line height 20, no backdrop).
+
+Validation commands:
+
+```bash
+cargo test --workspace --offline
+cargo test -p solito-renderer --offline gpu_text_updates -- --ignored
+cargo test -p solito --offline --test nvim_mouse -- --ignored
+```
+
+The explicit ignored tests require a GPU adapter and native Neovim/PTY,
+respectively. They check layout/invalidation and input integration; they do not
+replace visual inspection of the window.

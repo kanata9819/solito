@@ -104,12 +104,13 @@ impl TerminalView {
         self.text_damage.mark_all();
     }
 
-    pub(crate) fn update_text_buffer(&mut self) {
+    pub(crate) fn update_text_buffer(&mut self) -> bool {
         match std::mem::take(&mut self.text_damage) {
-            TextDamage::None => {}
+            TextDamage::None => return false,
             TextDamage::Rows(rows) => self.update_text_rows(&rows),
             TextDamage::All => self.set_text_to_buffer(),
         }
+        true
     }
 
     fn set_text_to_buffer(&mut self) {

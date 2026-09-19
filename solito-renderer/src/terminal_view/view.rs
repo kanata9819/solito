@@ -194,6 +194,70 @@ impl TerminalView {
 #[cfg(test)]
 mod tests {
     #[test]
+    #[ignore = "requires a GPU adapter"]
+    fn gpu_text_updates_cover_scrolling_tabs_selection_and_empty_screen() {
+        use super::super::{CopyModePosition, CopyModeSnapshot, TabBarSnapshot};
+        use solito_terminal::{ScreenSnapshot, TerminalSize, TerminalState};
+
+        let instance = wgpu::Instance::default();
+        let adapter = pollster::block_on(instance.request_adapter(&Default::default())).unwrap();
+        let (device, queue) =
+            pollster::block_on(adapter.request_device(&Default::default())).unwrap();
+        let config = RendererConfig::default();
+        let mut view = TerminalView::new(
+            &device,
+            &queue,
+            wgpu::TextureFormat::Bgra8UnormSrgb,
+            winit::dpi::PhysicalSize::new(800, 120),
+            config,
+        );
+        // Three terminal rows plus the reserved tab row.
+        let mut terminal = TerminalState::new(TerminalSize::new(80, 3));
+        terminal.apply_terminal_output("first\r\nsecond\r\n日本語\r\nlast".as_bytes());
+        view.set_snapshot(terminal.snapshot());
+        assert!(view.update_text_buffer());
+        assert!(!view.update_text_buffer());
+        assert_eq!(view.glyphs.text_buffer.lines[0].text(), "second");
+        assert_eq!(view.glyphs.text_buffer.lines[2].text(), "last");
+        view.set_snapshot(terminal.snapshot());
+        assert!(!view.update_text_buffer());
+        view.resize(900, 120, terminal.snapshot());
+        assert!(
+            view.update_text_buffer(),
+            "resizing must prepare glyphs again"
+        );
+        assert!(!view.update_text_buffer());
+
+        view.scroll(0.0, 1.0);
+        assert!(view.update_text_buffer());
+        assert_eq!(view.glyphs.text_buffer.lines[0].text(), "first");
+        assert!(view.scroll_to_bottom());
+        assert!(view.update_text_buffer());
+        assert!(!view.scroll_to_bottom());
+        assert!(!view.update_text_buffer());
+
+        view.set_copy_mode(CopyModeSnapshot {
+            active: true,
+            cursor: CopyModePosition::new(2, 0),
+            selection: None,
+        });
+        assert!(
+            !view.update_text_buffer(),
+            "copy cursor only updates rectangles"
+        );
+        view.set_copy_mode(CopyModeSnapshot::default());
+        view.set_tab_bar(TabBarSnapshot::new(vec!["one".into(), "two".into()], 1));
+        assert!(view.update_text_buffer());
+        assert!(view.glyphs.text_buffer.lines[0].text().contains("two"));
+        assert_eq!(view.glyphs.text_buffer.lines[1].text(), "second");
+        view.set_tab_bar(TabBarSnapshot::default());
+        view.set_snapshot_at_bottom(ScreenSnapshot::default());
+        assert!(view.update_text_buffer());
+        assert_eq!(view.glyphs.text_buffer.lines.len(), 1);
+        assert_eq!(view.glyphs.text_buffer.lines[0].text(), "");
+    }
+
+    #[test]
     fn mouse_cells_exclude_padding_and_tab_bar() {
         let cell = |x, y| {
             super::TerminalView::cell_at_position(

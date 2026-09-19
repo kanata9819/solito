@@ -14,6 +14,7 @@ enum LineBlock {
 }
 
 impl LineBlock {
+    #[inline]
     fn lines(&self) -> &Vec<ScreenLine> {
         match self {
             Self::Editing(lines) => lines,
@@ -21,17 +22,23 @@ impl LineBlock {
         }
     }
 
+    #[inline]
     fn lines_mut(&mut self) -> &mut Vec<ScreenLine> {
         if matches!(self, Self::History(_)) {
-            let Self::History(lines) = std::mem::replace(self, Self::Editing(Vec::new())) else {
-                unreachable!()
-            };
-            *self = Self::Editing(Arc::unwrap_or_clone(lines));
+            self.thaw();
         }
         let Self::Editing(lines) = self else {
             unreachable!()
         };
         lines
+    }
+
+    #[cold]
+    fn thaw(&mut self) {
+        let Self::History(lines) = std::mem::replace(self, Self::Editing(Vec::new())) else {
+            unreachable!()
+        };
+        *self = Self::Editing(Arc::unwrap_or_clone(lines));
     }
 
     fn freeze(&mut self) {
@@ -59,6 +66,7 @@ impl ScreenLines {
         self.len == 0
     }
 
+    #[inline]
     pub fn get(&self, row: usize) -> Option<&ScreenLine> {
         if row >= self.len {
             return None;
@@ -70,6 +78,7 @@ impl ScreenLines {
             .get(slot % ROWS_PER_BLOCK)
     }
 
+    #[inline]
     pub fn get_mut(&mut self, row: usize) -> Option<&mut ScreenLine> {
         if row >= self.len {
             return None;
@@ -85,7 +94,7 @@ impl ScreenLines {
     }
 
     pub(super) fn push_back(&mut self, line: ScreenLine) {
-        if (self.head + self.len) % ROWS_PER_BLOCK == 0 {
+        if (self.head + self.len).is_multiple_of(ROWS_PER_BLOCK) {
             if let Some(block) = self.blocks.back_mut() {
                 block.freeze();
             }

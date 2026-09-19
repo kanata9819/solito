@@ -13,7 +13,9 @@ impl Renderer {
     fn prepare_text(&mut self) -> Result<()> {
         // Several state updates can arrive before one redraw. Shape their
         // final text state once, immediately before glyph preparation.
-        self.terminal_view.update_text_buffer();
+        if !self.terminal_view.update_text_buffer() {
+            return Ok(());
+        }
 
         let [default_r, default_g, default_b, _] = ThemeColor::WHITE;
 

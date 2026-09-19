@@ -2287,6 +2287,7 @@ dependencies = [
  "anyhow",
  "bytemuck",
  "glyphon",
+ "pollster",
  "solito-config",
  "solito-terminal",
  "tracing",
