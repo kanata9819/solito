@@ -95,3 +95,22 @@ cargo test -p solito --offline --test nvim_mouse -- --ignored
 The explicit ignored tests require a GPU adapter and native Neovim/PTY,
 respectively. They check layout/invalidation and input integration; they do not
 replace visual inspection of the window.
+
+## Startup time (Windows)
+
+```powershell
+./solito-bench/startup.ps1 -Executable ./target/release/solito.exe -Runs 5
+```
+
+Measures process launch to the visible `Solito` window, after its first draw.
+The script uses `cmd.exe` through the existing shell environment override, leaves
+the configuration file unchanged, and terminates only the processes it starts.
+It excludes shell prompt readiness and does not flush OS or driver caches.
+
+On 2026-09-20, five release launches on the same machine gave a median of
+1,061.00 ms before and 621.80 ms after (41.4% less startup time).
+The changes remove duplicate font discovery, overlap font discovery with GPU
+initialization, and use DirectX 12 on Windows instead of initializing Vulkan too.
+Other platforms retain the previous backend selection. For driver compatibility
+testing on Windows, set `$env:WGPU_BACKEND = 'vulkan'` before launching Solito;
+remove the variable to restore the default.

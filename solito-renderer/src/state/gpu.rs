@@ -11,8 +11,14 @@ pub(super) struct GpuContext {
 
 impl GpuContext {
     pub(super) fn create_instance() -> Instance {
+        // Avoid initializing Vulkan as well as DXGI on Windows. Keep wgpu's override.
+        let backends = if cfg!(target_os = "windows") {
+            wgpu::Backends::DX12
+        } else {
+            wgpu::Backends::PRIMARY
+        };
         Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY,
+            backends: backends.with_env(),
             flags: Default::default(),
             memory_budget_thresholds: Default::default(),
             backend_options: Default::default(),

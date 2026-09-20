@@ -1,4 +1,3 @@
-use glyphon::FontSystem;
 use solito_terminal::ScreenLines;
 use solito_terminal::{ScreenSnapshot, TerminalSize};
 
@@ -30,9 +29,10 @@ impl TerminalView {
         swapchain: wgpu::TextureFormat,
         physical_size: winit::dpi::PhysicalSize<u32>,
         config: RendererConfig,
+        font_system: glyphon::FontSystem,
     ) -> Self {
         let config = config.sanitized();
-        let mut glyphs = GlyphonResources::new(device, queue, swapchain, &config);
+        let mut glyphs = GlyphonResources::new(device, queue, swapchain, &config, font_system);
 
         Self::set_text_buffer_size(
             &mut glyphs,
@@ -54,23 +54,6 @@ impl TerminalView {
             text_damage: TextDamage::All,
             text_origin: None,
         }
-    }
-
-    pub(crate) fn estimate_terminal_size(
-        width: u32,
-        height: u32,
-        config: &RendererConfig,
-    ) -> TerminalSize {
-        let config = config.clone().sanitized();
-        let mut font_system = FontSystem::new();
-        let cell_width = GlyphonResources::measure_font_width(&mut font_system, &config).max(1.0);
-        let content_width = Self::terminal_content_width(width);
-        let content_height = Self::terminal_content_height(height, config.line_height);
-
-        TerminalSize::new(
-            ((content_width as f32 / cell_width).floor() as usize).max(1),
-            ((content_height as f32 / config.line_height).floor() as usize).max(1),
-        )
     }
 
     pub(crate) fn resize(&mut self, width: u32, height: u32, snapshot: ScreenSnapshot) {
@@ -199,7 +182,8 @@ mod tests {
         use super::super::{CopyModePosition, CopyModeSnapshot, TabBarSnapshot};
         use solito_terminal::{ScreenSnapshot, TerminalSize, TerminalState};
 
-        let instance = wgpu::Instance::default();
+        let instance =
+            wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
         let adapter = pollster::block_on(instance.request_adapter(&Default::default())).unwrap();
         let (device, queue) =
             pollster::block_on(adapter.request_device(&Default::default())).unwrap();
@@ -210,6 +194,7 @@ mod tests {
             wgpu::TextureFormat::Bgra8UnormSrgb,
             winit::dpi::PhysicalSize::new(800, 120),
             config,
+            glyphon::FontSystem::new(),
         );
         // Three terminal rows plus the reserved tab row.
         let mut terminal = TerminalState::new(TerminalSize::new(80, 3));

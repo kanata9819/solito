@@ -3,7 +3,7 @@ mod mouse;
 
 use anyhow::Result;
 use solito_config::app::AppConfig;
-use solito_renderer::{Renderer, RendererConfig, TabBarSnapshot, TerminalSize, estimate_term_size};
+use solito_renderer::{Renderer, RendererConfig, TabBarSnapshot, TerminalSize};
 use solito_terminal::ScreenSnapshot;
 use std::sync::Arc;
 use tracing::error;
@@ -65,14 +65,8 @@ impl SolitoApplication {
         self.window = Some(window.clone());
         let window_size = window.inner_size();
         let mut renderer = self.create_renderer(&window)?;
-        // Start the shell with an estimated size, then adjust it using the actual font metrics.
-        let estimated_size =
-            estimate_term_size(window_size.width, window_size.height, &self.renderer_config);
-        self.open_initial_tab(estimated_size);
-        let actual_size = renderer.terminal_size();
-        if actual_size != estimated_size {
-            self.tabs.resize_all(actual_size)?;
-        }
+        // The renderer already measured the font; reuse its exact grid size.
+        self.open_initial_tab(renderer.terminal_size());
 
         self.tabs.drain_outputs();
         renderer.set_tab_bar(self.tab_bar_snapshot());

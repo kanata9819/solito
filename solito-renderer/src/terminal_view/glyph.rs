@@ -24,8 +24,8 @@ impl GlyphonResources {
         queue: &wgpu::Queue,
         swapchain: wgpu::TextureFormat,
         config: &RendererConfig,
+        mut font_system: FontSystem,
     ) -> Self {
-        let mut font_system = FontSystem::new();
         let swash_cache = SwashCache::new();
         let cache = Cache::new(device);
         let viewport = Viewport::new(device, &cache);

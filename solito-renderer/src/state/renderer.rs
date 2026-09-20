@@ -22,6 +22,8 @@ pub struct Renderer {
 
 impl Renderer {
     pub async fn new(window: Arc<Window>, renderer_config: RendererConfig) -> Result<Self> {
+        // Font discovery does not depend on the GPU; overlap the two startup costs.
+        let fonts = std::thread::spawn(glyphon::FontSystem::new);
         let size = window.inner_size();
         let instance = GpuContext::create_instance();
         let surface = instance.create_surface(window.clone())?;
@@ -35,6 +37,9 @@ impl Renderer {
             swapchain_format,
             size,
             renderer_config,
+            fonts
+                .join()
+                .map_err(|_| anyhow::anyhow!("font discovery thread panicked"))?,
         );
 
         Ok(Self {

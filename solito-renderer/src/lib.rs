@@ -11,7 +11,3 @@ pub use state::renderer::Renderer;
 pub use terminal_view::{
     CopyModePosition, CopyModeSelection, CopyModeSelectionKind, CopyModeSnapshot, TabBarSnapshot,
 };
-
-pub fn estimate_term_size(width: u32, height: u32, config: &RendererConfig) -> TerminalSize {
-    terminal_view::TerminalView::estimate_terminal_size(width, height, config)
-}
