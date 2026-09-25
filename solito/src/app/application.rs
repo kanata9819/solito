@@ -5,13 +5,16 @@ use anyhow::Result;
 use solito_config::app::AppConfig;
 use solito_renderer::{Renderer, RendererConfig, TabBarSnapshot, TerminalSize};
 use solito_terminal::ScreenSnapshot;
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tracing::error;
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
     event::{ElementState, KeyEvent, WindowEvent},
-    event_loop::{ActiveEventLoop, EventLoopProxy},
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoopProxy},
     keyboard::ModifiersState,
     window::{Window, WindowAttributes, WindowId},
 };
@@ -19,6 +22,7 @@ use winit::{
 use crate::app::{copy::CopyMode, event::AppEvent, icon, input, tabs::AppTabs};
 
 pub(super) type AppResult<T = ()> = Result<T>;
+const CURSOR_BLINK_INTERVAL: Duration = Duration::from_millis(500);
 
 pub(crate) struct SolitoApplication {
     config: AppConfig,
@@ -33,6 +37,8 @@ pub(crate) struct SolitoApplication {
     // State updates set this flag; about_to_wait requests a redraw; RedrawRequested draws.
     needs_redraw: bool,
     terminal_dirty: bool,
+    cursor_blink_visible: bool,
+    next_cursor_blink: Instant,
 }
 
 impl SolitoApplication {
@@ -50,6 +56,8 @@ impl SolitoApplication {
             event_proxy,
             needs_redraw: false,
             terminal_dirty: false,
+            cursor_blink_visible: true,
+            next_cursor_blink: Instant::now() + CURSOR_BLINK_INTERVAL,
         }
     }
 
@@ -76,6 +84,7 @@ impl SolitoApplication {
 
         renderer.draw_frame()?;
         window.set_visible(true);
+        self.next_cursor_blink = Instant::now() + CURSOR_BLINK_INTERVAL;
 
         self.renderer = Some(renderer);
         self.drain_terminal_output();
@@ -123,13 +132,17 @@ impl SolitoApplication {
         if self.tabs.drain_outputs() {
             self.terminal_dirty = true;
             self.needs_redraw = true;
+            self.cursor_blink_visible = true;
+            self.next_cursor_blink = Instant::now() + CURSOR_BLINK_INTERVAL;
         }
     }
 
     fn refresh_active_terminal(&mut self) {
         self.terminal_dirty = false;
-        if let (Some(renderer), Some(snapshot)) = (&mut self.renderer, self.tabs.active_snapshot())
+        if let (Some(renderer), Some(mut snapshot)) =
+            (&mut self.renderer, self.tabs.active_snapshot())
         {
+            snapshot.cursor_visible &= self.cursor_blink_visible;
             let copy_mode = self.copy_mode.renderer_snapshot(&snapshot);
             renderer.set_terminal_snapshot(snapshot);
             renderer.set_copy_mode(copy_mode);
@@ -142,8 +155,10 @@ impl SolitoApplication {
         let position = self.mouse.position;
         self.mouse = Default::default();
         self.mouse.position = position;
-        if let (Some(renderer), Some(snapshot)) = (&mut self.renderer, self.tabs.active_snapshot())
+        if let (Some(renderer), Some(mut snapshot)) =
+            (&mut self.renderer, self.tabs.active_snapshot())
         {
+            snapshot.cursor_visible &= self.cursor_blink_visible;
             let copy_mode = self.copy_mode.renderer_snapshot(&snapshot);
             renderer.set_terminal_snapshot_at_bottom(snapshot);
             renderer.set_copy_mode(copy_mode);
@@ -286,9 +301,10 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                     error!("application resize failed: {err}");
                     return;
                 }
-                if let (Some(renderer), Some(snapshot)) =
+                if let (Some(renderer), Some(mut snapshot)) =
                     (&mut self.renderer, self.tabs.active_snapshot())
                 {
+                    snapshot.cursor_visible &= self.cursor_blink_visible;
                     let copy_mode = self.copy_mode.renderer_snapshot(&snapshot);
                     renderer.resize(window_size, snapshot);
                     renderer.set_copy_mode(copy_mode);
@@ -338,7 +354,15 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
         }
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        let now = Instant::now();
+        if now >= self.next_cursor_blink {
+            self.cursor_blink_visible = !self.cursor_blink_visible;
+            self.next_cursor_blink = now + CURSOR_BLINK_INTERVAL;
+            self.terminal_dirty = true;
+            self.needs_redraw = true;
+        }
+        event_loop.set_control_flow(ControlFlow::WaitUntil(self.next_cursor_blink));
         if self.needs_redraw
             && let Some(window) = &self.window
         {

@@ -148,6 +148,21 @@ mod tests {
     }
 
     #[test]
+    fn cursor_blink_damages_its_row_in_both_directions() {
+        let visible = ScreenSnapshot {
+            lines: vec![line("prompt")].into(),
+            cursor_visible: true,
+            ..ScreenSnapshot::default()
+        };
+        let mut hidden = visible.clone();
+        hidden.cursor_visible = false;
+
+        let expected = TextDamage::Rows(BTreeSet::from([0]));
+        assert_eq!(TextDamage::between(&visible, &hidden, 0..1), expected);
+        assert_eq!(TextDamage::between(&hidden, &visible, 0..1), expected);
+    }
+
+    #[test]
     fn offscreen_changes_do_not_damage_visible_text() {
         let previous = ScreenSnapshot {
             lines: vec![line("history"), line("visible"), line("prompt")].into(),
