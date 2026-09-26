@@ -6,6 +6,7 @@ use decodesc::{CsiMessage, EraseMode, EscMessage, OscMessage, TabClearMode};
 use unicode_width::UnicodeWidthChar;
 
 pub(crate) struct Screen {
+    pub(crate) responses: Vec<u8>,
     pub(crate) mouse_mode: crate::MouseMode,
     screen_buffer: ScreenBuffer,
     primary_screen: Option<ScreenBuffer>,
@@ -16,6 +17,7 @@ impl Screen {
     pub(crate) fn new(size: TerminalSize) -> Self {
         let screen_buffer = ScreenBuffer::new(size);
         Self {
+            responses: Vec::new(),
             mouse_mode: Default::default(),
             screen_buffer,
             primary_screen: None,
@@ -179,6 +181,19 @@ impl Screen {
             CsiMessage::ResetMode { private, modes } => self.reset_modes(private, &modes),
             CsiMessage::ShowCursor => self.screen_buffer.cursor_visible = true,
             CsiMessage::HideCursor => self.screen_buffer.cursor_visible = false,
+            CsiMessage::DeviceStatusReport(6) => {
+                let row = self.screen_buffer.cursor.get_current_row()
+                    - self.screen_buffer.get_viewport_top();
+                let row = if self.screen_buffer.origin_mode {
+                    row.saturating_sub(self.screen_buffer.scroll_region.0)
+                } else {
+                    row
+                };
+                let col = self.screen_buffer.cursor.get_current_col();
+                self.responses
+                    .extend_from_slice(format!("\x1b[{};{}R", row + 1, col + 1).as_bytes());
+            }
+            CsiMessage::DeviceStatusReport(5) => self.responses.extend_from_slice(b"\x1b[0n"),
             CsiMessage::Unknown { .. } | CsiMessage::DeviceStatusReport(_) => {}
         }
     }

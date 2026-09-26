@@ -81,6 +81,12 @@ impl TerminalTab for Tab {
                 return updated;
             };
             self.terminal.apply_terminal_output(&output);
+            let responses = self.terminal.take_responses();
+            if !responses.is_empty()
+                && let Err(err) = self.input_tx.send(SessionInput::write(responses))
+            {
+                error!("failed to send terminal response: {err}");
+            }
             updated = true;
         }
         // Continue later even if the producer has stopped after filling the queue.

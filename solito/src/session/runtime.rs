@@ -125,14 +125,7 @@ impl SessionRuntime {
         master: PtyMaster,
     ) -> JoinHandle<()> {
         thread::spawn(move || {
-            // The shell first needs to know the cursor position.
-            // CSI cursor position reports are 1-based, so this means top-left.
-            if let Err(err) = writer.write_all(b"\x1b[1;1R") {
-                error!("failed to report initial cursor position: {err}");
-                return;
-            }
-
-            // After that response, normal input and resize events can be forwarded.
+            // Terminal replies share the same ordered input path as keyboard input.
             while let Ok(input) = input_rx.recv() {
                 match input {
                     SessionInput::Write(bytes) => {
