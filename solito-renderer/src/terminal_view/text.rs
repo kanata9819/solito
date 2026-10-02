@@ -151,6 +151,12 @@ impl TerminalView {
         } else {
             self.update_text_rows(&(start..end).collect());
         }
+        // Fresh BufferLines have no invalidated cache, so shape_until_scroll may skip them.
+        for row in 0..count {
+            self.glyphs
+                .text_buffer
+                .line_layout(&mut self.glyphs.font_system, row);
+        }
         self.glyphs
             .text_buffer
             .shape_until_scroll(&mut self.glyphs.font_system, false);

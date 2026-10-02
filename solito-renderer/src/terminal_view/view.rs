@@ -196,6 +196,20 @@ mod tests {
             config,
             glyphon::FontSystem::new(),
         );
+        let mut startup = TerminalState::new(TerminalSize::new(80, 3));
+        startup.apply_terminal_output(b"Welcome to Nushell");
+        view.set_snapshot(startup.snapshot());
+        assert!(view.update_text_buffer());
+        startup.apply_terminal_output(b"\r\n~> ");
+        view.set_snapshot(startup.snapshot());
+        assert!(view.update_text_buffer());
+        assert!(
+            view.glyphs
+                .text_buffer
+                .layout_runs()
+                .any(|run| run.text == "~> "),
+            "a prompt appended after an already rendered banner must have glyphs"
+        );
         // Three terminal rows plus the reserved tab row.
         let mut terminal = TerminalState::new(TerminalSize::new(80, 3));
         terminal.apply_terminal_output("first\r\nsecond\r\n日本語\r\nlast".as_bytes());
