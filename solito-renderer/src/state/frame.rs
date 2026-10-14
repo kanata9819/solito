@@ -50,6 +50,7 @@ impl Renderer {
             .background_rects(self.window_surface.config.format.is_srgb());
         rects.extend(self.terminal_view.tab_bar_rects());
         rects.extend(self.terminal_view.copy_mode_rects());
+        rects.extend(self.terminal_view.ime_rects());
 
         // Copy mode draws its own cursor over the scrollback. Hiding the shell
         // cursor here prevents two active cursors from appearing at once.

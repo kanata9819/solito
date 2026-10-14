@@ -4,7 +4,7 @@ use solito_terminal::{ScreenSnapshot, TerminalSize};
 use crate::RendererConfig;
 
 use super::{
-    copy_mode::CopyModeSnapshot, glyph::GlyphonResources, tab_bar::TabBarSnapshot,
+    copy_mode::CopyModeSnapshot, glyph::GlyphonResources, ime::ImePreedit, tab_bar::TabBarSnapshot,
     text_damage::TextDamage, viewport::ViewportState,
 };
 
@@ -15,6 +15,7 @@ pub(crate) struct TerminalView {
     pub(super) tab_bar: TabBarSnapshot,
     pub(super) viewport: ViewportState,
     pub(super) copy_mode: CopyModeSnapshot,
+    pub(super) ime_preedit: ImePreedit,
     pub(super) text_damage: TextDamage,
     pub(super) text_origin: Option<(usize, bool)>,
 }
@@ -51,6 +52,7 @@ impl TerminalView {
             snapshot: ScreenSnapshot::default(),
             tab_bar: TabBarSnapshot::default(),
             copy_mode: CopyModeSnapshot::default(),
+            ime_preedit: ImePreedit::default(),
             text_damage: TextDamage::All,
             text_origin: None,
         }
@@ -85,6 +87,11 @@ impl TerminalView {
         }
 
         let next_range = self.viewport.visible_range(snapshot.lines.len().max(1));
+        if self.ime_preedit.is_active() {
+            // Composition follows the shell cursor even while its blink phase is hidden.
+            self.text_damage.add_row(self.snapshot.cursor_row);
+            self.text_damage.add_row(snapshot.cursor_row);
+        }
         if removed > 0 || previous_range != next_range {
             self.invalidate_all_text();
         } else if self.text_damage != TextDamage::All {
@@ -210,6 +217,52 @@ mod tests {
                 .any(|run| run.text == "~> "),
             "a prompt appended after an already rendered banner must have glyphs"
         );
+        let prompt = startup.snapshot();
+        view.set_ime_preedit("日本語".into(), Some((6, 9)));
+        assert!(view.update_text_buffer());
+        assert_eq!(view.glyphs.text_buffer.lines[1].text(), "~> 日 本 語 ");
+        assert!(
+            view.glyphs
+                .text_buffer
+                .layout_runs()
+                .any(|run| run.text.contains('日'))
+        );
+        let candidate = view.ime_cursor_rect();
+        assert_eq!(
+            candidate.0,
+            TerminalView::PADDING_X + 7.0 * view.glyphs.cell_width
+        );
+        assert_eq!(
+            candidate.1,
+            TerminalView::PADDING_Y + view.config.line_height
+        );
+        assert_eq!(view.ime_rects().len(), 3);
+        assert_eq!(view.caret_rect().2, 0.0);
+        let mut blinking = prompt.clone();
+        blinking.cursor_visible = false;
+        view.set_snapshot(blinking.clone());
+        assert!(view.update_text_buffer());
+        assert_eq!(
+            view.ime_cursor_rect(),
+            candidate,
+            "candidate position must not blink"
+        );
+        assert_eq!(view.glyphs.text_buffer.lines[1].text(), "~> 日 本 語 ");
+        blinking.cursor_row = 0;
+        blinking.cursor_col = 5;
+        view.set_snapshot(blinking);
+        assert!(view.update_text_buffer());
+        assert_eq!(view.glyphs.text_buffer.lines[1].text(), "~> ");
+        assert!(view.glyphs.text_buffer.lines[0].text().contains('日'));
+        view.set_ime_preedit(String::new(), None);
+        view.set_snapshot(prompt);
+        assert!(view.update_text_buffer());
+        assert_eq!(
+            view.glyphs.text_buffer.lines[0].text(),
+            "Welcome to Nushell"
+        );
+        assert_eq!(view.glyphs.text_buffer.lines[1].text(), "~> ");
+        assert!(view.ime_rects().is_empty());
         // Three terminal rows plus the reserved tab row.
         let mut terminal = TerminalState::new(TerminalSize::new(80, 3));
         terminal.apply_terminal_output("first\r\nsecond\r\n日本語\r\nlast".as_bytes());

@@ -35,6 +35,10 @@ impl SolitoApplication {
             }
             AppCommand::EnterCopyMode => {
                 if let Some(snapshot) = self.tabs.active_snapshot() {
+                    self.clear_ime();
+                    if let Some(window) = &self.window {
+                        window.set_ime_allowed(false);
+                    }
                     self.copy_mode.enter(&snapshot);
                     self.refresh_copy_mode(&snapshot);
                     self.update_window_title();

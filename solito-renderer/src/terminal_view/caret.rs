@@ -6,7 +6,7 @@ impl TerminalView {
     pub(super) const DEFAULT_CARET_COLOR: [f32; 4] = ThemeColor::WHITE_ALPHA;
 
     pub(crate) fn caret_rect(&mut self) -> (f32, f32, f32, f32) {
-        if !self.snapshot.cursor_visible {
+        if !self.snapshot.cursor_visible || self.ime_preedit.is_active() {
             return (Self::PADDING_X, Self::PADDING_Y, 0.0, 0.0);
         }
 

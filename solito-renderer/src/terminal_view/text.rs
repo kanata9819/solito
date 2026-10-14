@@ -204,12 +204,22 @@ impl TerminalView {
         let font_family = self.config.font_family.clone();
         let default_attrs = Self::text_attrs(None, font_family.as_str());
         let cursor_text_color = Self::cursor_text_color(self.caret_color());
-        let (cursor_row, cursor_col) = if self.snapshot.cursor_visible {
-            (self.snapshot.cursor_row, self.snapshot.cursor_col)
-        } else {
-            (usize::MAX, usize::MAX)
-        };
+        let (cursor_row, cursor_col) =
+            if self.snapshot.cursor_visible && !self.ime_preedit.is_active() {
+                (self.snapshot.cursor_row, self.snapshot.cursor_col)
+            } else {
+                (usize::MAX, usize::MAX)
+            };
         let tab_bar_offset = usize::from(self.has_tab_bar());
+        let preedit_line = self.ime_preedit.is_active().then(|| {
+            self.ime_preedit.overlay_line(
+                self.snapshot
+                    .lines
+                    .get(self.snapshot.cursor_row)
+                    .unwrap_or(&ScreenLine::default()),
+                &self.preedit_layout(),
+            )
+        });
         let grid = GridMetrics {
             cell_width: self.glyphs.cell_width,
             font_size: self.config.font_size,
@@ -224,7 +234,13 @@ impl TerminalView {
                 return;
             };
             let spans = Self::text_spans_for_lines(
-                std::slice::from_ref(&self.snapshot.lines[absolute_row]),
+                std::slice::from_ref(if absolute_row == self.snapshot.cursor_row {
+                    preedit_line
+                        .as_ref()
+                        .unwrap_or(&self.snapshot.lines[absolute_row])
+                } else {
+                    &self.snapshot.lines[absolute_row]
+                }),
                 absolute_row,
                 cursor_row,
                 cursor_col,
@@ -275,6 +291,16 @@ impl TerminalView {
                     )
                 });
             }
+        }
+        for ch in self.ime_preedit.chars() {
+            self.glyphs.glyph_widths.entry(ch).or_insert_with(|| {
+                let mut encoded = [0; 4];
+                GlyphonResources::measure_text_width(
+                    &mut self.glyphs.font_system,
+                    &self.config,
+                    ch.encode_utf8(&mut encoded),
+                )
+            });
         }
     }
 

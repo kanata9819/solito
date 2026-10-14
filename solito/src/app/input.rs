@@ -1,5 +1,5 @@
 use winit::{
-    event::ElementState,
+    event::{ElementState, Ime},
     keyboard::{Key, ModifiersState, NamedKey, SmolStr},
 };
 
@@ -28,12 +28,51 @@ pub(super) enum CopyModeCommand {
     Exit,
 }
 
+#[derive(Default)]
+pub(super) struct ImeInput {
+    pub(super) enabled: bool,
+    pub(super) preedit: String,
+    pub(super) cursor_range: Option<(usize, usize)>,
+}
+
+impl ImeInput {
+    pub(super) fn is_composing(&self) -> bool {
+        !self.preedit.is_empty()
+    }
+
+    pub(super) fn handle_event(&mut self, event: Ime, copy_mode_active: bool) -> AppCommand {
+        if copy_mode_active {
+            *self = Self::default();
+            return AppCommand::Noop;
+        }
+
+        match event {
+            Ime::Enabled => self.enabled = true,
+            Ime::Preedit(text, cursor_range) => {
+                self.enabled = true;
+                self.preedit = text;
+                self.cursor_range = cursor_range;
+            }
+            Ime::Commit(text) => {
+                self.preedit.clear();
+                self.cursor_range = None;
+                if !text.is_empty() {
+                    return AppCommand::SendTerminalInput(text.into_bytes());
+                }
+            }
+            Ime::Disabled => *self = Self::default(),
+        }
+        AppCommand::Noop
+    }
+}
+
 pub(super) fn handle_key(
     text: Option<SmolStr>,
     logical_key: &Key<SmolStr>,
     key_state: ElementState,
     modifiers: ModifiersState,
     copy_mode_active: bool,
+    ime_composing: bool,
 ) -> AppCommand {
     const ENTER: &[u8; 1] = b"\r";
     const BACKSPACE: &[u8; 1] = b"\x7f";
@@ -44,7 +83,8 @@ pub(super) fn handle_key(
     const ARROWRIGHT: &[u8; 3] = b"\x1b[C";
     const ARROWLEFT: &[u8; 3] = b"\x1b[D";
 
-    if key_state != ElementState::Pressed {
+    // Conversion keys belong to the IME, including Enter used to confirm a candidate.
+    if key_state != ElementState::Pressed || ime_composing {
         return AppCommand::Noop;
     }
 
@@ -190,10 +230,12 @@ fn copy_mode_command(
 
 #[cfg(test)]
 mod tests {
-    use super::{AppCommand, CopyModeCommand, copy_mode_command, handle_key, shortcut_command};
+    use super::{
+        AppCommand, CopyModeCommand, ImeInput, copy_mode_command, handle_key, shortcut_command,
+    };
     use crate::app::copy::CopyModeMove;
     use winit::{
-        event::ElementState,
+        event::{ElementState, Ime},
         keyboard::{Key, ModifiersState, NamedKey, SmolStr},
     };
 
@@ -204,6 +246,7 @@ mod tests {
             &Key::Named(NamedKey::Enter),
             ElementState::Pressed,
             ModifiersState::empty(),
+            false,
             false,
         );
 
@@ -217,6 +260,7 @@ mod tests {
             &Key::Character(SmolStr::new("あ")),
             ElementState::Pressed,
             ModifiersState::empty(),
+            false,
             false,
         );
 
@@ -234,6 +278,7 @@ mod tests {
             ElementState::Pressed,
             ModifiersState::CONTROL,
             false,
+            false,
         );
 
         assert_eq!(command, AppCommand::SendTerminalInput(b"\x03".to_vec()));
@@ -246,6 +291,7 @@ mod tests {
             &Key::Character(SmolStr::new("e")),
             ElementState::Pressed,
             ModifiersState::CONTROL,
+            false,
             false,
         );
 
@@ -260,6 +306,7 @@ mod tests {
             ElementState::Released,
             ModifiersState::empty(),
             false,
+            false,
         );
 
         assert_eq!(command, AppCommand::Noop);
@@ -273,6 +320,114 @@ mod tests {
         );
 
         assert!(matches!(command, Some(AppCommand::NewTab)));
+    }
+
+    #[test]
+    fn japanese_composition_only_sends_committed_utf8() {
+        let mut ime = ImeInput::default();
+        for event in [
+            Ime::Enabled,
+            Ime::Preedit("にほんご".into(), Some((12, 12))),
+            Ime::Preedit("日本語".into(), Some((0, 9))),
+        ] {
+            assert_eq!(ime.handle_event(event, false), AppCommand::Noop);
+        }
+        assert_eq!(
+            handle_key(
+                Some(SmolStr::new("n")),
+                &Key::Character(SmolStr::new("n")),
+                ElementState::Pressed,
+                ModifiersState::empty(),
+                false,
+                ime.is_composing(),
+            ),
+            AppCommand::Noop,
+        );
+        for key in [
+            NamedKey::Enter,
+            NamedKey::Space,
+            NamedKey::Escape,
+            NamedKey::ArrowDown,
+        ] {
+            assert_eq!(
+                handle_key(
+                    None,
+                    &Key::Named(key),
+                    ElementState::Pressed,
+                    ModifiersState::empty(),
+                    false,
+                    ime.is_composing()
+                ),
+                AppCommand::Noop,
+            );
+        }
+        assert_eq!(
+            ime.handle_event(Ime::Preedit(String::new(), None), false),
+            AppCommand::Noop
+        );
+        assert_eq!(
+            ime.handle_event(Ime::Commit("日本語".into()), false),
+            AppCommand::SendTerminalInput("日本語".as_bytes().to_vec())
+        );
+        assert!(!ime.is_composing());
+        assert_eq!(ime.handle_event(Ime::Disabled, false), AppCommand::Noop);
+        assert!(!ime.enabled);
+    }
+
+    #[test]
+    fn canceled_composition_restores_normal_keys() {
+        let mut ime = ImeInput::default();
+        ime.handle_event(Ime::Enabled, false);
+        ime.handle_event(Ime::Preedit("あ".into(), None), false);
+        ime.handle_event(Ime::Disabled, false);
+        assert!(ime.preedit.is_empty());
+        assert_eq!(
+            handle_key(
+                None,
+                &Key::Named(NamedKey::Enter),
+                ElementState::Pressed,
+                ModifiersState::empty(),
+                false,
+                ime.is_composing()
+            ),
+            AppCommand::SendTerminalInput(b"\r".to_vec())
+        );
+    }
+
+    #[test]
+    fn partial_commit_can_start_another_composition() {
+        let mut ime = ImeInput::default();
+        ime.handle_event(Ime::Enabled, false);
+        ime.handle_event(Ime::Preedit("日本語入力".into(), Some((0, 9))), false);
+        assert_eq!(
+            ime.handle_event(Ime::Commit("日本語".into()), false),
+            AppCommand::SendTerminalInput("日本語".as_bytes().to_vec())
+        );
+        assert_eq!(
+            ime.handle_event(Ime::Preedit("入力".into(), Some((0, 6))), false),
+            AppCommand::Noop
+        );
+        assert!(ime.is_composing());
+        assert_eq!(
+            ime.handle_event(Ime::Commit("入力".into()), false),
+            AppCommand::SendTerminalInput("入力".as_bytes().to_vec())
+        );
+    }
+
+    #[test]
+    fn copy_mode_discards_pending_ime_input() {
+        let mut ime = ImeInput::default();
+        ime.handle_event(Ime::Preedit("あ".into(), None), false);
+        assert_eq!(
+            ime.handle_event(Ime::Commit("あ".into()), true),
+            AppCommand::Noop
+        );
+        assert!(!ime.is_composing());
+        assert_eq!(
+            ime.handle_event(Ime::Preedit("い".into(), None), true),
+            AppCommand::Noop
+        );
+        assert!(!ime.is_composing());
     }
 
     #[test]

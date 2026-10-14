@@ -3,7 +3,10 @@ use anyhow::Result;
 use solito_terminal::{ScreenSnapshot, TerminalSize};
 use std::sync::Arc;
 use wgpu::TextureFormat;
-use winit::{dpi::PhysicalSize, window::Window};
+use winit::{
+    dpi::{PhysicalPosition, PhysicalSize},
+    window::Window,
+};
 
 use crate::{
     RendererConfig,
@@ -52,6 +55,18 @@ impl Renderer {
 
     pub fn set_copy_mode(&mut self, snapshot: CopyModeSnapshot) {
         self.terminal_view.set_copy_mode(snapshot);
+    }
+
+    pub fn set_ime_preedit(&mut self, text: String, cursor_range: Option<(usize, usize)>) {
+        self.terminal_view.set_ime_preedit(text, cursor_range);
+    }
+
+    pub fn ime_cursor_area(&self) -> (PhysicalPosition<f64>, PhysicalSize<u32>) {
+        let (x, y, width, height) = self.terminal_view.ime_cursor_rect();
+        (
+            PhysicalPosition::new(f64::from(x), f64::from(y)),
+            PhysicalSize::new(width.ceil() as u32, height.ceil() as u32),
+        )
     }
 
     pub fn set_tab_bar(&mut self, snapshot: TabBarSnapshot) {

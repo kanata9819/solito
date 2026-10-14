@@ -32,6 +32,7 @@ pub(crate) struct SolitoApplication {
     tabs: AppTabs,
     copy_mode: CopyMode,
     modifiers: ModifiersState,
+    ime: input::ImeInput,
     mouse: mouse::MouseInputState,
     event_proxy: EventLoopProxy<AppEvent>,
     // State updates set this flag; about_to_wait requests a redraw; RedrawRequested draws.
@@ -52,6 +53,7 @@ impl SolitoApplication {
             tabs: AppTabs::new(),
             copy_mode: CopyMode::default(),
             modifiers: ModifiersState::default(),
+            ime: Default::default(),
             mouse: Default::default(),
             event_proxy,
             needs_redraw: false,
@@ -71,6 +73,7 @@ impl SolitoApplication {
         );
 
         self.window = Some(window.clone());
+        window.set_ime_allowed(true);
         let window_size = window.inner_size();
         let mut renderer = self.create_renderer(&window)?;
         // The renderer already measured the font; reuse its exact grid size.
@@ -197,11 +200,35 @@ impl SolitoApplication {
         }
 
         self.copy_mode.exit();
+        if let Some(window) = &self.window {
+            window.set_ime_allowed(true);
+        }
         if let Some(renderer) = &mut self.renderer {
             renderer.set_copy_mode(Default::default());
             self.needs_redraw = true;
         }
         self.update_window_title();
+    }
+
+    fn clear_ime(&mut self) {
+        self.ime = Default::default();
+        self.refresh_ime_preedit();
+    }
+
+    fn refresh_ime_preedit(&mut self) {
+        if let Some(renderer) = &mut self.renderer {
+            renderer.set_ime_preedit(self.ime.preedit.clone(), self.ime.cursor_range);
+            self.needs_redraw = true;
+        }
+    }
+
+    fn update_ime_cursor_area(&self) {
+        if self.ime.enabled
+            && let (Some(window), Some(renderer)) = (&self.window, &self.renderer)
+        {
+            let (position, size) = renderer.ime_cursor_area();
+            window.set_ime_cursor_area(position, size);
+        }
     }
 
     fn update_window_title(&self) {
@@ -260,6 +287,7 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                     error!("{err}");
                     event_loop.exit();
                 }
+                self.update_ime_cursor_area();
             }
             WindowEvent::KeyboardInput {
                 event:
@@ -284,10 +312,25 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                     key_state,
                     self.modifiers,
                     self.copy_mode.is_active(),
+                    self.ime.is_composing(),
                 );
                 if let Err(err) = self.handle_keyboard_command(command, event_loop) {
                     error!("application command failed: {err}");
                 }
+            }
+            WindowEvent::Ime(event) => {
+                let command = self.ime.handle_event(event, self.copy_mode.is_active());
+                if self.ime.is_composing() {
+                    self.scroll_terminal_to_bottom();
+                }
+                if self.terminal_dirty {
+                    self.refresh_active_terminal();
+                }
+                self.refresh_ime_preedit();
+                if let Err(err) = self.handle_keyboard_command(command, event_loop) {
+                    error!("IME input failed: {err}");
+                }
+                self.update_ime_cursor_area();
             }
             WindowEvent::ModifiersChanged(modifiers) => {
                 self.modifiers = modifiers.state();
@@ -341,12 +384,14 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
             }
             WindowEvent::CursorLeft { .. } => self.mouse.position = None,
             WindowEvent::Focused(false) => {
+                self.clear_ime();
+                self.modifiers = ModifiersState::default();
                 if self.config.window.hide_cursor
                     && let Some(window) = &self.window
                 {
                     window.set_cursor_visible(true);
                 }
-                self.mouse = Default::default()
+                self.mouse = Default::default();
             }
             _ => {
                 tracing::debug!("unhandled event: {event:?}");
