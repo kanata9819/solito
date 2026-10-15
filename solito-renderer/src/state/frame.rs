@@ -93,13 +93,15 @@ impl Renderer {
             match self.window_surface.surface.get_current_texture() {
                 wgpu::CurrentSurfaceTexture::Success(frame) => return Ok(Some(frame)),
                 wgpu::CurrentSurfaceTexture::Suboptimal(frame) => {
+                    // The old texture must be released before configuring again.
+                    drop(frame);
                     self.reconfigure_surface();
-                    return Ok(Some(frame));
                 }
-                wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+                wgpu::CurrentSurfaceTexture::Timeout => {
                     self.window_surface.window.request_redraw();
                     return Ok(None);
                 }
+                wgpu::CurrentSurfaceTexture::Occluded => return Ok(None),
                 wgpu::CurrentSurfaceTexture::Outdated => self.reconfigure_surface(),
                 wgpu::CurrentSurfaceTexture::Lost => {
                     self.window_surface.surface = self
@@ -151,6 +153,11 @@ impl Renderer {
 
     /// Draw and present one frame.
     pub fn draw_frame(&mut self) -> Result<()> {
+        // Keep pending text damage intact while the window cannot be drawn.
+        let Some(frame) = self.acquire_frame()? else {
+            return Ok(());
+        };
+
         self.terminal_view.glyphs.viewport.update(
             &self.gpu.queue,
             Resolution {
@@ -161,18 +168,11 @@ impl Renderer {
 
         self.prepare_text()?;
 
-        let frame = self.acquire_frame().unwrap_or_else(|err| {
-            tracing::error!("acquire frame failed: {err}");
-            None
-        });
-
-        if let Some(frame) = frame {
-            let view = frame.texture.create_view(&TextureViewDescriptor::default());
-            let mut encoder = self.create_encoder();
-            self.draw_to_view(&mut encoder, &view)?;
-            self.gpu.queue.submit(Some(encoder.finish()));
-            self.gpu.queue.present(frame);
-        }
+        let view = frame.texture.create_view(&TextureViewDescriptor::default());
+        let mut encoder = self.create_encoder();
+        self.draw_to_view(&mut encoder, &view)?;
+        self.gpu.queue.submit(Some(encoder.finish()));
+        self.gpu.queue.present(frame);
 
         self.terminal_view.glyphs.atlas.trim();
         Ok(())

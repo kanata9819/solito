@@ -105,6 +105,26 @@ impl TerminalTab for Tab {
 
 pub(super) type AppTabs = Tabs<Tab>;
 
+#[cfg(all(test, target_os = "windows"))]
+impl AppTabs {
+    pub(super) fn test_fixture(
+        terminal: TerminalState,
+        event_proxy: EventLoopProxy<AppEvent>,
+    ) -> (Self, Receiver<SessionInput>) {
+        let (input_tx, input_rx) = channel();
+        let (_, output_rx) = sync_channel(1);
+        let mut tabs = Self::new();
+        tabs.push(Tab {
+            terminal,
+            input_tx,
+            output_rx,
+            title: "fixture".into(),
+            output_notifier: OutputNotifier::new(event_proxy),
+        });
+        (tabs, input_rx)
+    }
+}
+
 pub(super) struct Tabs<T> {
     tabs: Vec<T>,
     active: usize,

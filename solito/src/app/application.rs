@@ -12,7 +12,7 @@ use std::{
 use tracing::error;
 use winit::{
     application::ApplicationHandler,
-    dpi::LogicalSize,
+    dpi::{LogicalSize, PhysicalSize},
     event::{ElementState, KeyEvent, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoopProxy},
     keyboard::ModifiersState,
@@ -151,6 +151,47 @@ impl SolitoApplication {
             renderer.set_copy_mode(copy_mode);
             self.needs_redraw = true;
         }
+    }
+
+    fn resize_window(&mut self, window_size: PhysicalSize<u32>) -> AppResult {
+        // Minimized windows have no drawable area. Resizing the PTY to 1x1
+        // would clamp its cursor and scroll region before the window returns.
+        if window_size.width == 0 || window_size.height == 0 {
+            return Ok(());
+        }
+
+        let Some(renderer) = &self.renderer else {
+            return Ok(());
+        };
+        let terminal_size = renderer.terminal_size_for(window_size);
+        if terminal_size != renderer.terminal_size() {
+            self.tabs.resize_all(terminal_size)?;
+        }
+        if let (Some(renderer), Some(mut snapshot)) =
+            (&mut self.renderer, self.tabs.active_snapshot())
+        {
+            snapshot.cursor_visible &= self.cursor_blink_visible;
+            let copy_mode = self.copy_mode.renderer_snapshot(&snapshot);
+            renderer.resize(window_size, snapshot);
+            renderer.set_copy_mode(copy_mode);
+            self.terminal_dirty = false;
+            self.needs_redraw = true;
+        }
+        Ok(())
+    }
+
+    fn restore_window(&mut self) -> AppResult {
+        let Some(window_size) = self.window.as_ref().map(|window| window.inner_size()) else {
+            return Ok(());
+        };
+        self.drain_terminal_output();
+        self.cursor_blink_visible = true;
+        self.next_cursor_blink = Instant::now() + CURSOR_BLINK_INTERVAL;
+        // Reconfigure at the current physical size and rebuild glyph positions,
+        // even if no terminal output or resize event accompanied activation.
+        self.resize_window(window_size)?;
+        self.update_ime_cursor_area();
+        Ok(())
     }
 
     fn show_active_terminal_at_bottom(&mut self) {
@@ -336,22 +377,8 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                 self.modifiers = modifiers.state();
             }
             WindowEvent::Resized(window_size) => {
-                let Some(renderer) = &self.renderer else {
-                    return;
-                };
-                let terminal_size = renderer.terminal_size_for(window_size);
-                if let Err(err) = self.tabs.resize_all(terminal_size) {
+                if let Err(err) = self.resize_window(window_size) {
                     error!("application resize failed: {err}");
-                    return;
-                }
-                if let (Some(renderer), Some(mut snapshot)) =
-                    (&mut self.renderer, self.tabs.active_snapshot())
-                {
-                    snapshot.cursor_visible &= self.cursor_blink_visible;
-                    let copy_mode = self.copy_mode.renderer_snapshot(&snapshot);
-                    renderer.resize(window_size, snapshot);
-                    renderer.set_copy_mode(copy_mode);
-                    self.needs_redraw = true;
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
@@ -383,6 +410,11 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                 self.report_mouse_button(state, button)
             }
             WindowEvent::CursorLeft { .. } => self.mouse.position = None,
+            WindowEvent::Focused(true) | WindowEvent::Occluded(false) => {
+                if let Err(err) = self.restore_window() {
+                    error!("application restore failed: {err}");
+                }
+            }
             WindowEvent::Focused(false) => {
                 self.clear_ime();
                 self.modifiers = ModifiersState::default();
@@ -413,5 +445,111 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
         {
             window.request_redraw();
         }
+    }
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod tests {
+    use super::*;
+    use solito_terminal::TerminalState;
+    use winit::{event_loop::EventLoop, platform::windows::EventLoopBuilderExtWindows};
+
+    #[test]
+    #[ignore = "requires a Windows desktop and GPU adapter"]
+    fn focus_restore_preserves_terminal_geometry_and_requests_redraw() {
+        struct Regression {
+            proxy: EventLoopProxy<AppEvent>,
+            verified: bool,
+        }
+
+        impl ApplicationHandler<AppEvent> for Regression {
+            fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+                let window = Arc::new(
+                    event_loop
+                        .create_window(
+                            Window::default_attributes()
+                                .with_inner_size(PhysicalSize::new(800, 500))
+                                .with_visible(false),
+                        )
+                        .unwrap(),
+                );
+                let mut config = AppConfig::default();
+                config.window.hide_cursor = false;
+                let mut app = SolitoApplication::new(config, self.proxy.clone());
+                app.renderer_config.window_backdrop = solito_config::renderer::WindowBackdrop::None;
+                let renderer = app.create_renderer(&window).unwrap();
+                let size = renderer.terminal_size();
+                let mut terminal = TerminalState::new(size);
+                terminal.apply_terminal_output(b"first\r\nsecond\x1b[5;16H");
+                let before = terminal.snapshot();
+                let (tabs, input_rx) = AppTabs::test_fixture(terminal, self.proxy.clone());
+                app.tabs = tabs;
+                app.window = Some(window.clone());
+                app.renderer = Some(renderer);
+                app.resize_window(window.inner_size()).unwrap();
+                app.window_event(event_loop, window.id(), WindowEvent::Focused(false));
+                app.needs_redraw = false;
+
+                for zero_size in [(0, 0), (0, 500), (800, 0)] {
+                    app.window_event(
+                        event_loop,
+                        window.id(),
+                        WindowEvent::Resized(PhysicalSize::new(zero_size.0, zero_size.1)),
+                    );
+                    let snapshot = app.tabs.active_snapshot().unwrap();
+                    assert_eq!(snapshot.cursor_col, before.cursor_col);
+                    assert_eq!(snapshot.cursor_row, before.cursor_row);
+                    assert!(snapshot.lines.iter().eq(before.lines.iter()));
+                    assert_eq!(app.renderer.as_ref().unwrap().terminal_size(), size);
+                    assert!(input_rx.try_recv().is_err(), "must not resize the PTY");
+                }
+
+                for event in [WindowEvent::Focused(true), WindowEvent::Occluded(false)] {
+                    app.needs_redraw = false;
+                    app.cursor_blink_visible = false;
+                    app.window_event(event_loop, window.id(), event);
+                    assert!(app.needs_redraw, "restoring must schedule a fresh frame");
+                    assert!(app.cursor_blink_visible);
+                    assert_eq!(app.renderer.as_ref().unwrap().terminal_size(), size);
+                    let snapshot = app.tabs.active_snapshot().unwrap();
+                    assert_eq!(snapshot.cursor_col, before.cursor_col);
+                    assert_eq!(snapshot.cursor_row, before.cursor_row);
+                    assert!(snapshot.lines.iter().eq(before.lines.iter()));
+                    assert!(
+                        input_rx.try_recv().is_err(),
+                        "same grid needs no PTY resize"
+                    );
+                }
+
+                // Simulate a stale surface size without a matching Resized event.
+                app.renderer
+                    .as_mut()
+                    .unwrap()
+                    .resize(PhysicalSize::new(400, 300), before.clone());
+                assert_ne!(app.renderer.as_ref().unwrap().terminal_size(), size);
+                app.window_event(event_loop, window.id(), WindowEvent::Focused(true));
+                assert_eq!(app.renderer.as_ref().unwrap().terminal_size(), size);
+                assert!(matches!(
+                    input_rx.try_recv(),
+                    Ok(crate::session::runtime::SessionInput::Resize(restored)) if restored == size
+                ));
+
+                self.verified = true;
+                event_loop.exit();
+            }
+
+            fn window_event(&mut self, _: &ActiveEventLoop, _: WindowId, _: WindowEvent) {}
+        }
+
+        let event_loop = EventLoop::<AppEvent>::with_user_event()
+            .with_any_thread(true)
+            .build()
+            .unwrap();
+        let mut regression = Regression {
+            proxy: event_loop.create_proxy(),
+            verified: false,
+        };
+        event_loop.run_app(&mut regression).unwrap();
+        assert!(regression.verified);
     }
 }

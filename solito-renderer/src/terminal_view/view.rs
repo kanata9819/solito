@@ -59,7 +59,8 @@ impl TerminalView {
     }
 
     pub(crate) fn resize(&mut self, width: u32, height: u32, snapshot: ScreenSnapshot) {
-        self.snapshot = snapshot;
+        // Anchor scrolled content before adopting output received while hidden.
+        self.set_snapshot(snapshot);
         Self::set_text_buffer_size(&mut self.glyphs, width, height, &self.config);
         self.viewport.resize(
             Self::terminal_content_height(height, self.config.line_height),
@@ -283,6 +284,25 @@ mod tests {
         view.scroll(0.0, 1.0);
         assert!(view.update_text_buffer());
         assert_eq!(view.glyphs.text_buffer.lines[0].text(), "first");
+        let scrolled_layout = |view: &TerminalView| {
+            view.glyphs
+                .text_buffer
+                .layout_runs()
+                .map(|run| (run.text.to_owned(), run.line_y, run.line_w, run.line_height))
+                .collect::<Vec<_>>()
+        };
+        let before_restore = scrolled_layout(&view);
+        let mut background = TerminalState::new(TerminalSize::new(80, 3));
+        background.apply_terminal_output("first\r\nsecond\r\n日本語\r\nlast\r\nnew".as_bytes());
+        view.resize(900, 120, background.snapshot());
+        assert!(view.update_text_buffer());
+        assert_eq!(
+            scrolled_layout(&view),
+            before_restore,
+            "restoring with background output must preserve the scrolled text and glyph positions"
+        );
+        view.resize(900, 120, terminal.snapshot());
+        assert!(view.update_text_buffer());
         assert!(view.scroll_to_bottom());
         assert!(view.update_text_buffer());
         assert!(!view.scroll_to_bottom());
