@@ -2,7 +2,8 @@ use anyhow::Result;
 use glyphon::{Color, Resolution, TextArea, TextBounds};
 use solito_terminal::ScreenSnapshot;
 use wgpu::{
-    CommandEncoder, CommandEncoderDescriptor, SurfaceTexture, TextureView, TextureViewDescriptor,
+    CommandEncoder, CommandEncoderDescriptor, LoadOp, SurfaceTexture, Texture,
+    TextureViewDescriptor,
 };
 use winit::dpi::PhysicalSize;
 
@@ -62,7 +63,7 @@ impl Renderer {
         Ok(())
     }
 
-    fn draw_to_view(&mut self, encoder: &mut CommandEncoder, view: &TextureView) -> Result<()> {
+    fn draw_to_texture(&mut self, encoder: &mut CommandEncoder, texture: &Texture) -> Result<()> {
         let mut rects = self
             .terminal_view
             .background_rects(self.window_surface.config.format.is_srgb());
@@ -94,12 +95,25 @@ impl Renderer {
             .rect_pipeline
             .upload_rects(&self.gpu.device, &self.gpu.queue, &rects);
 
-        let mut render_pass =
-            pass::begin_render_pass(encoder, view, self.window_surface.clear_color);
+        let view = texture.create_view(&TextureViewDescriptor::default());
+        {
+            let mut render_pass = pass::begin_render_pass(
+                encoder,
+                &view,
+                LoadOp::Clear(self.window_surface.clear_color),
+            );
+            self.render_resources
+                .rect_pipeline
+                .draw_rects(&mut render_pass);
+        }
 
-        self.render_resources
-            .rect_pipeline
-            .draw_rects(&mut render_pass);
+        // Reinterpret the existing pixels without copying or resampling them.
+        // Only text coverage uses encoded sRGB; backgrounds keep linear blending.
+        let text_view = texture.create_view(&TextureViewDescriptor {
+            format: Some(self.window_surface.config.format.remove_srgb_suffix()),
+            ..Default::default()
+        });
+        let mut render_pass = pass::begin_render_pass(encoder, &text_view, LoadOp::Load);
 
         self.terminal_view.glyphs.text_renderer.render(
             &self.terminal_view.glyphs.atlas,
@@ -190,9 +204,8 @@ impl Renderer {
 
         self.prepare_text()?;
 
-        let view = frame.texture.create_view(&TextureViewDescriptor::default());
         let mut encoder = self.create_encoder();
-        self.draw_to_view(&mut encoder, &view)?;
+        self.draw_to_texture(&mut encoder, &frame.texture)?;
         self.gpu.queue.submit(Some(encoder.finish()));
         self.gpu.queue.present(frame);
 

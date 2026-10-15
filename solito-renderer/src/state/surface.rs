@@ -44,7 +44,12 @@ impl WindowSurface {
             height: size.height,
             present_mode: wgpu::PresentMode::AutoVsync,
             alpha_mode,
-            view_formats: vec![],
+            // Text uses an unorm view of the same pixels for UI coverage blending.
+            view_formats: if surface_format.is_srgb() {
+                vec![surface_format.remove_srgb_suffix()]
+            } else {
+                vec![]
+            },
             desired_maximum_frame_latency: 2,
         };
 

@@ -11,7 +11,7 @@ use winit::{
     window::{Window, WindowId},
 };
 
-fn save_frame(renderer: &mut Renderer, path: &Path) {
+fn save_frame(renderer: &mut Renderer, path: &Path) -> Vec<u8> {
     let width = renderer.window_surface.config.width;
     let height = renderer.window_surface.config.height;
     renderer
@@ -36,7 +36,7 @@ fn save_frame(renderer: &mut Renderer, path: &Path) {
             dimension: wgpu::TextureDimension::D2,
             format: renderer.window_surface.config.format,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
+            view_formats: &renderer.window_surface.config.view_formats,
         });
     let stride = (width * 4).div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
         * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
@@ -47,9 +47,7 @@ fn save_frame(renderer: &mut Renderer, path: &Path) {
         mapped_at_creation: false,
     });
     let mut encoder = renderer.create_encoder();
-    renderer
-        .draw_to_view(&mut encoder, &texture.create_view(&Default::default()))
-        .unwrap();
+    renderer.draw_to_texture(&mut encoder, &texture).unwrap();
     encoder.copy_texture_to_buffer(
         texture.as_image_copy(),
         wgpu::TexelCopyBufferInfo {
@@ -97,6 +95,130 @@ fn save_frame(renderer: &mut Renderer, path: &Path) {
         .unwrap()
         .write_image_data(&pixels)
         .unwrap();
+    pixels
+}
+
+fn assert_text_coverage(renderer: &mut Renderer, pixels: &[u8]) {
+    let width = renderer.window_surface.config.width as usize;
+    let origin_y = TerminalView::terminal_row_y(0, renderer.terminal_view.config.line_height);
+    let glyphs = &mut renderer.terminal_view.glyphs;
+    let mut edge_pixels = 0;
+    for run in glyphs
+        .text_buffer
+        .layout_runs()
+        .filter(|run| !run.text.trim().is_empty())
+    {
+        // The fixture starts each row with an isolated glyph on the default background.
+        let Some(glyph) = run.glyphs.first() else {
+            continue;
+        };
+        let physical = glyph.physical((TerminalView::PADDING_X, origin_y), 1.0);
+        let image = glyphs
+            .swash_cache
+            .get_image_uncached(&mut glyphs.font_system, physical.cache_key)
+            .unwrap();
+        assert_eq!(image.content, glyphon::SwashContent::Mask);
+        let left = physical.x + image.placement.left;
+        let top = run.line_y.round() as i32 + physical.y - image.placement.top;
+        let color = glyph.color_opt.unwrap_or_else(|| {
+            let [r, g, b, a] = ThemeColor::TEXT;
+            Color::rgba(r, g, b, a)
+        });
+        let foreground = [color.r(), color.g(), color.b()];
+        for (index, coverage) in image.data.into_iter().enumerate() {
+            let x = left as usize + index % image.placement.width as usize;
+            let y = top as usize + index / image.placement.width as usize;
+            let actual = &pixels[(y * width + x) * 4..][..3];
+            // The rasterizer's coverage must interpolate encoded color bytes directly.
+            // Linear-light blending brightens these edge pixels and fails this check.
+            for channel in 0..3 {
+                let background = f32::from(ThemeColor::BACKGROUND[channel]);
+                let alpha = f32::from(coverage) / 255.0;
+                let expected = background + (f32::from(foreground[channel]) - background) * alpha;
+                assert!(
+                    (f32::from(actual[channel]) - expected).abs() <= 2.0,
+                    "{:?}, {}px, pixel ({x}, {y}), coverage {coverage}: {actual:?}, expected channel {channel} = {expected}",
+                    renderer.window_surface.config.format,
+                    renderer.terminal_view.config.font_size,
+                );
+            }
+            if (32..224).contains(&coverage) {
+                edge_pixels += 1;
+            }
+        }
+    }
+    assert!(
+        edge_pixels > 20,
+        "must exercise partially covered glyph edges"
+    );
+    let empty_pixel = &pixels[(width * 100 + width - 20) * 4..][..4];
+    assert_eq!(empty_pixel, ThemeColor::BACKGROUND);
+}
+
+fn verify_text_rasterization(renderer: &mut Renderer, output: &Path) {
+    use crate::state::resources::RenderResources;
+    // Exercise both channel orders and the non-sRGB surface fallback, including
+    // the physical font sizes produced by 100%, 125%, and 150% display scales.
+    for format in [
+        wgpu::TextureFormat::Bgra8UnormSrgb,
+        wgpu::TextureFormat::Rgba8UnormSrgb,
+        wgpu::TextureFormat::Bgra8Unorm,
+        wgpu::TextureFormat::Rgba8Unorm,
+    ] {
+        renderer.window_surface.config.format = format;
+        renderer.window_surface.config.view_formats = if format.is_srgb() {
+            vec![format.remove_srgb_suffix()]
+        } else {
+            vec![]
+        };
+        for scale in [1.0, 1.25, 1.5] {
+            let config = RendererConfig {
+                window_backdrop: WindowBackdrop::None,
+                font_size: 17.0 * scale,
+                line_height: 20.0 * scale,
+                ..Default::default()
+            };
+            // These are offscreen targets; no unsupported format is presented.
+            let [r, g, b, a] = if format.is_srgb() {
+                crate::util::color::srgb_to_linear_rgba(ThemeColor::BACKGROUND)
+            } else {
+                crate::util::color::rgba_to_f32(ThemeColor::BACKGROUND)
+            };
+            renderer.window_surface.clear_color = wgpu::Color {
+                r: f64::from(r),
+                g: f64::from(g),
+                b: f64::from(b),
+                a: f64::from(a),
+            };
+            renderer.render_resources =
+                RenderResources::new(&renderer.gpu, &renderer.window_surface);
+            renderer.terminal_view = TerminalView::new(
+                &renderer.gpu.device,
+                &renderer.gpu.queue,
+                format,
+                PhysicalSize::new(
+                    renderer.window_surface.config.width,
+                    renderer.window_surface.config.height,
+                ),
+                config,
+                glyphon::FontSystem::new(),
+            );
+            let mut terminal = TerminalState::new(renderer.terminal_size());
+            terminal.apply_terminal_output(
+                concat!(
+                    "Welcome to Nushell\r\n",
+                    "\x1b[32mNushell repository\x1b[0m\r\n",
+                    "\x1b[35mhttps://www.nushell.sh\x1b[0m\r\n",
+                    "日本語の文字描画\r\n",
+                )
+                .as_bytes(),
+            );
+            renderer.set_terminal_snapshot(terminal.snapshot());
+            let path = output.join(format!("text-preview-{format:?}-{scale}.png"));
+            let pixels = save_frame(renderer, &path);
+            assert_text_coverage(renderer, &pixels);
+        }
+    }
 }
 
 #[test]
@@ -155,6 +277,7 @@ fn render_appearance_previews() {
                 8,
             ));
             save_frame(&mut renderer, &output.join("ui-preview-narrow.png"));
+            verify_text_rasterization(&mut renderer, &output);
             self.complete = true;
             event_loop.exit();
         }

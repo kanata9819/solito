@@ -1,5 +1,5 @@
 use ::glyphon::{
-    Attrs, Buffer, Cache, Family, FontSystem, Metrics, Shaping, SwashCache, TextAtlas,
+    Attrs, Buffer, Cache, ColorMode, Family, FontSystem, Metrics, Shaping, SwashCache, TextAtlas,
     TextRenderer, Viewport, Wrap,
 };
 use std::collections::HashMap;
@@ -29,7 +29,15 @@ impl GlyphonResources {
         let swash_cache = SwashCache::new();
         let cache = Cache::new(device);
         let viewport = Viewport::new(device, &cache);
-        let mut atlas = TextAtlas::new(device, queue, &cache, swapchain);
+        // Blend coverage in encoded sRGB, as UI toolkits do. Linear-light
+        // blending makes pale antialiased edges too bright on dark backgrounds.
+        let mut atlas = TextAtlas::with_color_mode(
+            device,
+            queue,
+            &cache,
+            swapchain.remove_srgb_suffix(),
+            ColorMode::Web,
+        );
         let text_renderer =
             TextRenderer::new(&mut atlas, device, MultisampleState::default(), None);
         let mut text_buffer = Buffer::new(
