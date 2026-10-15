@@ -1,7 +1,7 @@
 use super::buffer::ScreenLine;
 use std::{
     collections::VecDeque,
-    ops::{Index, IndexMut},
+    ops::{Index, IndexMut, Range},
     sync::Arc,
 };
 
@@ -138,14 +138,31 @@ impl ScreenLines {
         removed
     }
 
-    pub(super) fn insert(&mut self, row: usize, line: ScreenLine) {
-        assert!(row <= self.len);
-        let old_len = self.len;
-        self.push_back(ScreenLine::default());
-        for index in (row..old_len).rev() {
-            self[index + 1] = self[index].clone();
+    pub(super) fn scroll_up(&mut self, range: Range<usize>, amount: usize, blank: ScreenLine) {
+        let amount = amount.min(range.len());
+        if amount == 0 {
+            return;
         }
-        self[row] = line;
+        // Move each retained row once, independent of the scroll distance.
+        for row in range.start..range.end - amount {
+            self[row] = self[row + amount].clone();
+        }
+        for row in range.end - amount..range.end {
+            self[row] = blank.clone();
+        }
+    }
+
+    pub(super) fn scroll_down(&mut self, range: Range<usize>, amount: usize, blank: ScreenLine) {
+        let amount = amount.min(range.len());
+        if amount == 0 {
+            return;
+        }
+        for row in (range.start + amount..range.end).rev() {
+            self[row] = self[row - amount].clone();
+        }
+        for row in range.start..range.start + amount {
+            self[row] = blank.clone();
+        }
     }
 }
 
@@ -193,6 +210,37 @@ mod tests {
     }
 
     #[test]
+    fn bulk_scroll_preserves_surrounding_rows_and_old_snapshots() {
+        for head in [0, 37, 63] {
+            let original: Vec<_> = (0..200).map(line).collect();
+            let mut base: ScreenLines = original.clone().into();
+            base.discard_prefix(head);
+            for range in [0..1, 0..130, 10..135, 130..137] {
+                for amount in [0, 1, 20, 200] {
+                    for down in [false, true] {
+                        let mut actual = base.clone();
+                        let saved = actual.clone();
+                        let mut expected = original[head..].to_vec();
+                        let blank = ScreenLine::default();
+                        let count = amount.min(range.len());
+                        if down {
+                            actual.scroll_down(range.clone(), amount, blank.clone());
+                            expected[range.clone()].rotate_right(count);
+                            expected[range.start..range.start + count].fill(blank);
+                        } else {
+                            actual.scroll_up(range.clone(), amount, blank.clone());
+                            expected[range.clone()].rotate_left(count);
+                            expected[range.end - count..range.end].fill(blank);
+                        }
+                        assert!(actual.iter().eq(expected.iter()));
+                        assert!(saved.iter().eq(original[head..].iter()));
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn blocks_match_vec_across_history_eviction_and_screen_edits() {
         let mut expected: Vec<_> = (0..200).map(line).collect();
         let mut actual: ScreenLines = expected.clone().into();
@@ -208,7 +256,8 @@ mod tests {
             }
             let row = step % expected.len();
             assert_eq!(actual.remove(row), expected.remove(row));
-            actual.insert(row, line(step));
+            actual.push_back(ScreenLine::default());
+            actual.scroll_down(row..actual.len(), 1, line(step));
             expected.insert(row, line(step));
             actual[row][0].ch = '!';
             expected[row][0].ch = '!';

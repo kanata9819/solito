@@ -74,17 +74,17 @@ impl SessionRuntime {
     }
 
     fn pty_pair(size: TerminalSize) -> Result<PtyPair> {
-        Ok(portable_pty::native_pty_system().openpty(PtySize {
+        portable_pty::native_pty_system().openpty(PtySize {
             rows: clamp_pty_size(size.rows),
             cols: clamp_pty_size(size.cols),
             pixel_height: 0,
             pixel_width: 0,
-        })?)
+        })
     }
 
     fn spawn_command(slave: &PtySlave, shell_program: &str) -> Result<PtyChild> {
         let cmd = CommandBuilder::new(shell_program);
-        Ok(slave.spawn_command(cmd)?)
+        slave.spawn_command(cmd)
     }
 
     fn spawn_reading_thread(

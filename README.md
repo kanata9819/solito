@@ -6,6 +6,11 @@ Solito is a terminal emulator I'm building in Rust, mainly for Windows. It's a l
 
 It has tabs, a keyboard copy mode, and settings for the font and window backdrop. Rendering runs on the GPU, with `winit` handling the window, `wgpu` and `glyphon` drawing the screen, and `portable-pty` connecting to the shell.
 
+The compact tab strip stays visible with a single tab. Click a tab to switch;
+keyboard switching also reveals the active tab when the window is narrow.
+The charcoal interface uses a muted teal accent, with separate UI and terminal
+font metrics so shell font settings keep their usual meaning.
+
 Japanese IME input is supported: composing text appears at the terminal cursor, conversion candidates follow the active clause, and only committed text is sent to the shell. IME is disabled in keyboard copy mode so its navigation keys remain available.
 
 There's still work to do on terminal compatibility. Neovim has been particularly good at finding bugs.

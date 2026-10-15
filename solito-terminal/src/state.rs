@@ -59,6 +59,172 @@ mod tests {
     }
 
     #[test]
+    fn overwriting_wide_cells_clears_both_halves() {
+        for (input, expected) in [
+            ("界Z\x1b[1;1Hx", "x Z"),
+            ("界Z\x1b[1;2Hx", " xZ"),
+            ("A界B\x1b[1;1H語", "語 B"),
+        ] {
+            let mut state = terminal(8, 3);
+            state.apply_terminal_output(input.as_bytes());
+            let snapshot = state.snapshot();
+            assert_eq!(line_text(&snapshot.lines[0]), expected);
+            for (col, cell) in snapshot.lines[0].iter().enumerate() {
+                if cell.is_wide_continuation {
+                    assert!(col > 0);
+                    assert_eq!(
+                        unicode_width::UnicodeWidthChar::width(snapshot.lines[0][col - 1].ch),
+                        Some(2)
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn resize_expands_full_screen_margins_and_clamps_restored_cursor() {
+        let mut state = terminal(8, 3);
+        state.apply_terminal_output(b"\x1b[r");
+        state.resize(TerminalSize::new(8, 5));
+        state.apply_terminal_output(b"\x1b[?6h\x1b[5;7HX\x1b7");
+        assert_eq!(state.snapshot().cursor_row, 4);
+        state.resize(TerminalSize::new(3, 2));
+        state.apply_terminal_output(b"\x1b8Z");
+        let snapshot = state.snapshot();
+        let top = snapshot.lines.len().saturating_sub(2);
+        assert!((top..top + 2).contains(&snapshot.cursor_row));
+        assert!(snapshot.cursor_col < 3);
+        assert_eq!(snapshot.lines[snapshot.cursor_row][2].ch, 'Z');
+    }
+
+    #[test]
+    fn line_feed_below_scroll_region_stays_inside_the_screen() {
+        let mut state = terminal(8, 4);
+        state.apply_terminal_output(b"A\r\nB\r\nC\r\nD\x1b[2;3r\x1b[4;1H\nX");
+        let snapshot = state.snapshot();
+        assert_eq!(snapshot.lines.len(), 4);
+        assert_eq!(snapshot.cursor_row, 3);
+        assert_eq!(line_text(&snapshot.lines[0]), "A");
+        assert_eq!(line_text(&snapshot.lines[3]), "X");
+    }
+
+    #[test]
+    fn scrolled_and_inserted_blank_rows_use_the_erase_background() {
+        for (command, blank_rows) in [
+            (b"\x1b[2S".as_slice(), [2, 3]),
+            (b"\x1b[2T".as_slice(), [0, 1]),
+            (b"\x1b[2;1H\x1b[2L".as_slice(), [1, 2]),
+            (b"\x1b[2;1H\x1b[2M".as_slice(), [2, 3]),
+        ] {
+            let mut state = terminal(8, 4);
+            state.apply_terminal_output(b"A\r\nB\r\nC\r\nD\x1b[48;2;128;0;0m");
+            state.apply_terminal_output(command);
+            let snapshot = state.snapshot();
+            for row in blank_rows {
+                assert_eq!(snapshot.lines[row].len(), 8);
+                assert!(snapshot.lines[row].iter().all(|cell| {
+                    cell.ch == ' ' && cell.background_rgba() == Some([128, 0, 0, 255])
+                }));
+            }
+        }
+    }
+
+    #[test]
+    fn editing_and_right_edge_never_leave_half_of_a_wide_cell() {
+        for (input, expected) in [
+            ("界Z\x1b[1;2H\x1b[4hx", " x Z"),
+            ("ab界\x1b[1;1H\x1b[@", " ab "),
+            ("界Z\x1b[1;2H\x1b[@", "   Z"),
+            ("界Z\x1b[1;1H\x1b[P", " Z"),
+            ("界Z\x1b[1;2H\x1b[P", " Z"),
+            ("abc\x1b[?7l界", "abc"),
+        ] {
+            let mut state = terminal(4, 3);
+            state.apply_terminal_output(input.as_bytes());
+            let snapshot = state.snapshot();
+            assert_eq!(snapshot.lines.len(), 1, "{input:?}");
+            assert_eq!(line_text(&snapshot.lines[0]), expected, "{input:?}");
+            assert!(
+                snapshot.lines[0]
+                    .iter()
+                    .all(|cell| !cell.is_wide_continuation)
+            );
+        }
+        let mut narrow = terminal(1, 1);
+        narrow.apply_terminal_output("界X".as_bytes());
+        assert_eq!(line_text(&narrow.snapshot().lines[0]), "X");
+    }
+
+    #[test]
+    fn deleting_characters_colors_only_the_vacated_cells() {
+        let mut state = terminal(8, 3);
+        state.apply_terminal_output(b"AB\x1b[H\x1b[48;2;128;0;0m\x1b[P");
+        let snapshot = state.snapshot();
+        let line = &snapshot.lines[0];
+        assert_eq!(line.len(), 8);
+        assert_eq!(line[0].ch, 'B');
+        assert!(
+            line[..7]
+                .iter()
+                .all(|cell| cell.background_rgba().is_none())
+        );
+        assert_eq!(line[7].ch, ' ');
+        assert_eq!(line[7].background_rgba(), Some([128, 0, 0, 255]));
+    }
+
+    #[test]
+    fn reverse_index_at_the_top_preserves_scrollback() {
+        let mut state = terminal(8, 3);
+        state.apply_terminal_output(b"0\r\n1\r\n2\r\n3\r\n4\r\n5\x1b[H\x1bMX");
+        let snapshot = state.snapshot();
+        let lines: Vec<_> = snapshot.lines.iter().map(|line| line_text(line)).collect();
+        assert_eq!(lines, ["0", "1", "2", "X", "3", "4"]);
+        assert_eq!((snapshot.cursor_row, snapshot.cursor_col), (3, 1));
+    }
+
+    #[test]
+    fn chunked_output_and_resizing_keep_the_cursor_on_screen() {
+        let operations: &[&[u8]] = &[
+            "界AB".as_bytes(),
+            b"\r\n",
+            b"\x1bM",
+            b"\x1b[H",
+            b"\x1b[P",
+            b"\x1b[@",
+            b"\x1b[3S",
+            b"\x1b[3T",
+            b"\x1b[2;4r",
+            b"\x1b[r",
+            b"\x1b7",
+            b"\x1b8",
+            b"\x1b[?6h",
+            b"\x1b[?6l",
+            b"\x1b[?1049h",
+            b"\x1b[?1049l",
+        ];
+        let mut state = terminal(8, 4);
+        let mut size = TerminalSize::new(8, 4);
+        let mut seed = 42_u32;
+        for step in 0..2_000 {
+            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            if step % 11 == 0 {
+                size = TerminalSize::new(1 + (seed as usize % 12), 1 + (seed as usize % 6));
+                state.resize(size);
+            }
+            for byte in operations[(seed >> 16) as usize % operations.len()] {
+                state.apply_terminal_output(&[*byte]);
+            }
+            let snapshot = state.snapshot();
+            let top = snapshot.lines.len().saturating_sub(size.rows);
+            assert!(snapshot.cursor_col < size.cols, "step {step}");
+            assert!(
+                (top..top + size.rows).contains(&snapshot.cursor_row),
+                "step {step}"
+            );
+        }
+    }
+
+    #[test]
     fn terminal_queries_reply_at_the_query_position_across_read_boundaries() {
         let mut state = terminal(8, 3);
         assert!(state.take_responses().is_empty());

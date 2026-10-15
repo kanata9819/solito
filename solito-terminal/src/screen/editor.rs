@@ -238,7 +238,14 @@ impl Screen {
             return;
         }
 
-        let char_width = UnicodeWidthChar::width(c).unwrap_or(1).clamp(1, 2);
+        let char_width = if c.is_ascii() {
+            1
+        } else {
+            UnicodeWidthChar::width(c).unwrap_or(1).clamp(1, 2)
+        };
+        if char_width > self.screen_buffer.cols() {
+            return;
+        }
 
         // If the previous character reached the right edge, wrap before printing this one.
         if self.screen_buffer.pending_wrap {
@@ -258,6 +265,9 @@ impl Screen {
             // If char width is over the buffer edge, start at next line.
             let next_col = current_col + 1;
             if next_col >= self.screen_buffer.cols() {
+                if !self.screen_buffer.auto_wrap {
+                    return;
+                }
                 self.advance_to_next_line();
             }
         }
@@ -281,37 +291,60 @@ impl Screen {
                 cells.resize(col, ScreenCell::blank(CellStyle::default()));
             }
             if self.screen_buffer.insert_mode {
-                for _ in 0..char_width {
-                    cells.insert(col, ScreenCell::blank(style));
-                }
+                Self::clear_split_wide_cell(cells, col, ScreenCell::blank(style));
+                cells.splice(
+                    col..col,
+                    std::iter::repeat_n(ScreenCell::blank(style), char_width),
+                );
                 cells.truncate(cols);
+                Self::clear_truncated_wide_cell(cells, ScreenCell::blank(style));
             }
-            cells.resize(
-                cells.len().max(col + char_width),
-                ScreenCell::blank(CellStyle::default()),
-            );
+            // Replacing either half of a wide glyph clears its other half.
+            // Appending to a fresh row cannot overlap an existing glyph.
+            if !self.screen_buffer.insert_mode && col < cells.len() {
+                if col > 0 && cells[col].is_wide_continuation {
+                    cells[col - 1] = ScreenCell::blank(style);
+                }
+                if cells
+                    .get(col + char_width)
+                    .is_some_and(|cell| cell.is_wide_continuation)
+                {
+                    cells[col + char_width] = ScreenCell::blank(style);
+                }
+            }
+            if cells.len() < col + char_width {
+                cells.resize(col + char_width, ScreenCell::blank(CellStyle::default()));
+            }
             cells[col] = cell;
             if is_wide {
                 cells[col + 1] = continuation;
             }
         }
 
+        // Wrap only when the next printable character arrives.
+        let next_col = col + char_width;
         self.screen_buffer
             .cursor
-            .move_to_col(col.saturating_add(char_width));
-
-        if self.screen_buffer.cursor.get_current_col() >= self.screen_buffer.cols() {
-            // Do not line-break immediately after crossing the edge;
-            // wrap on the next print to match common terminal auto-wrap behavior.
-            self.screen_buffer
-                .cursor
-                .move_to_col(self.screen_buffer.cols().saturating_sub(1));
-
-            self.screen_buffer.pending_wrap = true;
-        }
+            .move_to_col(next_col.min(cols - 1));
+        self.screen_buffer.pending_wrap = next_col >= cols;
 
         // for repeat writing
         self.last_printed = Some(c);
+    }
+
+    fn clear_split_wide_cell(cells: &mut [ScreenCell], col: usize, blank: ScreenCell) {
+        if col > 0 && cells.get(col).is_some_and(|cell| cell.is_wide_continuation) {
+            cells[col - 1] = blank;
+            cells[col] = blank;
+        }
+    }
+
+    fn clear_truncated_wide_cell(cells: &mut [ScreenCell], blank: ScreenCell) {
+        if let Some(last) = cells.last_mut()
+            && UnicodeWidthChar::width(last.ch) == Some(2)
+        {
+            *last = blank;
+        }
     }
 
     fn carriage_return(&mut self) {
@@ -439,22 +472,35 @@ impl Screen {
 
     fn scroll_up(&mut self, amount: usize) {
         let (top, bottom) = self.scroll_region_bounds();
-        for _ in 0..amount.min(bottom - top + 1) {
-            self.screen_buffer.lines.remove(top);
-            self.screen_buffer
-                .lines
-                .insert(bottom, ScreenLine::default());
-        }
+        let blank = self.erase_blank_line();
+        self.screen_buffer
+            .lines
+            .scroll_up(top..bottom + 1, amount, blank);
         self.screen_buffer.pending_wrap = false;
     }
 
     fn scroll_down(&mut self, amount: usize) {
         let (top, bottom) = self.scroll_region_bounds();
-        for _ in 0..amount.min(bottom - top + 1) {
-            self.screen_buffer.lines.remove(bottom);
-            self.screen_buffer.lines.insert(top, ScreenLine::default());
-        }
+        let blank = self.erase_blank_line();
+        self.screen_buffer
+            .lines
+            .scroll_down(top..bottom + 1, amount, blank);
         self.screen_buffer.pending_wrap = false;
+    }
+
+    fn erase_blank_line(&self) -> ScreenLine {
+        let bg_rgba = self.screen_buffer.style.bg_rgba;
+        if bg_rgba.is_none() {
+            return ScreenLine::default();
+        }
+        vec![
+            ScreenCell::blank(CellStyle {
+                bg_rgba,
+                ..Default::default()
+            });
+            self.screen_buffer.cols()
+        ]
+        .into()
     }
 
     fn insert_blank_characters(&mut self, amount: usize) {
@@ -464,11 +510,13 @@ impl Screen {
         let cols = self.screen_buffer.cols();
         let blank = ScreenCell::blank(self.screen_buffer.style);
         let line: &mut Vec<ScreenCell> = &mut self.screen_buffer.lines[row];
+        Self::clear_split_wide_cell(line, col, blank);
         line.splice(
             col..col,
             std::iter::repeat_n(blank, amount.min(cols.saturating_sub(col))),
         );
         line.truncate(cols);
+        Self::clear_truncated_wide_cell(line, blank);
         self.screen_buffer.pending_wrap = false;
     }
 
@@ -478,10 +526,10 @@ impl Screen {
         if !(top..=bottom).contains(&row) {
             return;
         }
-        for _ in 0..amount.min(bottom - row + 1) {
-            self.screen_buffer.lines.insert(row, ScreenLine::default());
-            self.screen_buffer.lines.remove(bottom + 1);
-        }
+        let blank = self.erase_blank_line();
+        self.screen_buffer
+            .lines
+            .scroll_down(row..bottom + 1, amount, blank);
         self.screen_buffer.pending_wrap = false;
     }
 
@@ -491,12 +539,10 @@ impl Screen {
         if !(top..=bottom).contains(&row) {
             return;
         }
-        for _ in 0..amount.min(bottom - row + 1) {
-            self.screen_buffer.lines.remove(row);
-            self.screen_buffer
-                .lines
-                .insert(bottom, ScreenLine::default());
-        }
+        let blank = self.erase_blank_line();
+        self.screen_buffer
+            .lines
+            .scroll_up(row..bottom + 1, amount, blank);
         self.screen_buffer.pending_wrap = false;
     }
 
@@ -571,12 +617,31 @@ impl Screen {
 
         let row = self.screen_buffer.cursor.get_current_row();
         let col = self.screen_buffer.cursor.get_current_col();
+        // Clear split glyphs before shifting; deleting one cell must not leave
+        // the other half masquerading as a complete character.
+        self.erase_cells(row, col, col.saturating_add(amount));
+        let cols = self.screen_buffer.cols();
+        let bg_rgba = self.screen_buffer.style.bg_rgba;
         let line = &mut self.screen_buffer.lines[row];
-
+        line.truncate(cols);
+        if bg_rgba.is_some() {
+            // Shift implicit default blanks too; only the vacated cells take the erase color.
+            line.resize(cols, ScreenCell::blank(CellStyle::default()));
+        }
         let end = col.saturating_add(amount).min(line.len());
         if col < end {
             line.drain(col..end);
         }
+        if bg_rgba.is_some() {
+            line.resize(
+                cols,
+                ScreenCell::blank(CellStyle {
+                    bg_rgba,
+                    ..Default::default()
+                }),
+            );
+        }
+        self.screen_buffer.pending_wrap = false;
     }
 
     fn erase_characters(&mut self, amount: usize) {
@@ -596,7 +661,11 @@ impl Screen {
 
     fn restore_cursor_position(&mut self) {
         if let Some(pos) = self.screen_buffer.cursor.get_saved_cursor_position() {
-            self.screen_buffer.cursor.move_to(pos);
+            let top = self.screen_buffer.get_viewport_top();
+            self.screen_buffer.cursor.move_to(CursorPosition {
+                row: pos.row.clamp(top, top + self.screen_buffer.rows() - 1),
+                col: pos.col.min(self.screen_buffer.cols() - 1),
+            });
             self.screen_buffer.pending_wrap = false;
             self.screen_buffer.ensure_cursor_line();
         }
@@ -615,7 +684,11 @@ impl Screen {
             if (top..=bottom).contains(&cursor_row) && cursor_row == bottom {
                 self.scroll_up(1);
             } else {
-                self.screen_buffer.cursor.move_down();
+                let screen_bottom =
+                    self.screen_buffer.get_viewport_top() + self.screen_buffer.rows() - 1;
+                self.screen_buffer
+                    .cursor
+                    .move_to_row((cursor_row + 1).min(screen_bottom));
             }
         } else {
             self.screen_buffer.cursor.move_down();
@@ -631,14 +704,21 @@ impl Screen {
             if (top..=bottom).contains(&cursor_row) && cursor_row == top {
                 self.scroll_down(1);
             } else {
-                self.screen_buffer
-                    .cursor
-                    .move_to_row(cursor_row.saturating_sub(1));
+                self.screen_buffer.cursor.move_to_row(
+                    cursor_row
+                        .saturating_sub(1)
+                        .max(self.screen_buffer.get_viewport_top()),
+                );
             }
         } else {
-            self.screen_buffer
-                .cursor
-                .move_to_row(cursor_row.saturating_sub(1));
+            let top = self.screen_buffer.get_viewport_top();
+            if cursor_row == top {
+                self.scroll_down(1);
+            } else {
+                self.screen_buffer
+                    .cursor
+                    .move_to_row(cursor_row.saturating_sub(1).max(top));
+            }
         }
         self.screen_buffer.pending_wrap = false;
     }

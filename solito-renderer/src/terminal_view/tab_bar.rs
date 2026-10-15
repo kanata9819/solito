@@ -1,26 +1,11 @@
-use glyphon::Attrs;
+use glyphon::{
+    Attrs, Buffer, Color, Family, FontSystem, Metrics, Shaping, TextArea, TextBounds, Weight, Wrap,
+};
 
-use crate::pipeline::rect::RectSpec;
-use crate::terminal_view::TerminalView;
-use crate::util::color::ThemeColor;
-
-struct TabStyle;
-impl TabStyle {
-    pub const TAB_ACTIVE_TEXT_COLOR: [u8; 4] = ThemeColor::WHITE;
-    pub const TAB_INACTIVE_TEXT_COLOR: [u8; 4] = ThemeColor::BLUE_GRAY_400;
-    pub const TAB_SEPARATOR_COLOR: [u8; 4] = ThemeColor::BLUE_GRAY_700;
-
-    pub const TAB_ACTIVE_BACKGROUND: [f32; 4] = ThemeColor::NAVY_800_ALPHA;
-    pub const TAB_INACTIVE_BACKGROUND: [f32; 4] = ThemeColor::NAVY_900_ALPHA;
-    pub const TAB_ACTIVE_UNDERLINE: [f32; 4] = ThemeColor::CYAN_400;
-    pub const TAB_ACTIVE_TOP_GLOW: [f32; 4] = ThemeColor::CYAN_GLOW;
-
-    pub const TAB_TEXT_PADDING: usize = 2;
-    pub const TAB_GAP_CHARS: usize = 1;
-    pub const TAB_SLANT: f32 = 10.0;
-    pub const TAB_TOP_GLOW_HEIGHT: f32 = 1.0;
-    pub const TAB_UNDERLINE_HEIGHT: f32 = 3.0;
-}
+use crate::{
+    pipeline::rect::RectSpec,
+    util::color::{ThemeColor, rgba_to_f32, srgb_to_linear_rgba},
+};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TabBarSnapshot {
@@ -31,264 +16,304 @@ pub struct TabBarSnapshot {
 impl TabBarSnapshot {
     pub fn new(titles: Vec<String>, active_index: usize) -> Self {
         let active_index = active_index.min(titles.len().saturating_sub(1));
-
         Self {
             titles,
             active_index,
         }
     }
-
-    pub(crate) fn titles(&self) -> &[String] {
-        &self.titles
-    }
-
-    pub(crate) fn active_index(&self) -> usize {
-        self.active_index
-    }
 }
 
-impl TerminalView {
-    pub(crate) fn set_tab_bar(&mut self, tab_bar: TabBarSnapshot) {
-        self.tab_bar = tab_bar;
-        self.invalidate_all_text();
-    }
+#[derive(Clone, Copy, Debug)]
+struct TabPlacement {
+    index: usize,
+    x: f32,
+    width: f32,
+}
 
-    pub(crate) fn tab_bar_rects(&self) -> Vec<RectSpec> {
-        Self::tab_bar_rects_for(
-            &self.tab_bar,
-            self.glyphs.cell_width,
-            self.config.line_height,
-        )
-    }
+struct TabLabel {
+    placement: TabPlacement,
+    buffer: Buffer,
+}
 
-    pub(super) fn tab_bar_spans_for<'a>(
-        tab_bar: &TabBarSnapshot,
-        font_family: &'a str,
-        cell_width: f32,
-    ) -> Vec<(String, Attrs<'a>)> {
-        let mut spans = Vec::new();
+pub(crate) struct TabBar {
+    snapshot: TabBarSnapshot,
+    labels: Vec<TabLabel>,
+    width: u32,
+    hovered: Option<usize>,
+    focused: bool,
+    pub(crate) dirty: bool,
+}
 
-        if tab_bar.titles().len() <= 1 {
-            return spans;
-        }
+impl TabBar {
+    pub(crate) const HEIGHT: f32 = 44.0;
+    const INSET: f32 = 16.0;
+    const GAP: f32 = 6.0;
+    const TOP: f32 = 7.0;
+    const BUTTON_HEIGHT: f32 = 30.0;
+    const TEXT_INSET: f32 = 14.0;
 
-        for (index, title) in tab_bar.titles().iter().enumerate() {
-            if index > 0 {
-                spans.push((
-                    " ".repeat(Self::tab_text_gap_chars(cell_width)),
-                    Self::text_attrs(Some(TabStyle::TAB_SEPARATOR_COLOR), font_family),
-                ));
-            }
-
-            let active = index == tab_bar.active_index();
-            let text = Self::padded_tab_title(title);
-
-            let color: [u8; 4] = if active {
-                TabStyle::TAB_ACTIVE_TEXT_COLOR
-            } else {
-                TabStyle::TAB_INACTIVE_TEXT_COLOR
-            };
-
-            spans.push((text, Self::text_attrs(Some(color), font_family)));
-        }
-
-        spans
-    }
-
-    pub(super) fn has_tab_bar(&self) -> bool {
-        self.tab_bar.titles().len() > 1
-    }
-
-    fn tab_strip_rect(
-        tab_x: f32,
-        tab_y: f32,
-        tab_height: f32,
-        strip_y: f32,
-        strip_height: f32,
-        width: f32,
-        color: [f32; 4],
-    ) -> RectSpec {
-        let bottom_slant = TabStyle::TAB_SLANT * (1.0 - (strip_y + strip_height) / tab_height);
-        let strip_slant = TabStyle::TAB_SLANT * strip_height / tab_height;
-
-        RectSpec::slanted(
-            tab_x + bottom_slant,
-            tab_y + strip_y,
+    pub(crate) fn new(width: u32) -> Self {
+        Self {
+            snapshot: TabBarSnapshot::default(),
+            labels: Vec::new(),
             width,
-            strip_height,
-            color,
-            strip_slant,
-        )
+            hovered: None,
+            focused: true,
+            dirty: true,
+        }
     }
 
-    fn tab_bar_rects_for(
-        tab_bar: &TabBarSnapshot,
-        cell_width: f32,
-        line_height: f32,
-    ) -> Vec<RectSpec> {
-        let mut rects = Vec::new();
-
-        if tab_bar.titles().len() <= 1 {
-            return rects;
+    pub(crate) fn set_snapshot(&mut self, snapshot: TabBarSnapshot, fonts: &mut FontSystem) {
+        if self.snapshot == snapshot {
+            return;
         }
+        self.snapshot = snapshot;
+        self.rebuild(fonts);
+    }
 
-        let mut x = Self::PADDING_X;
-        let tab_y = 6.0;
-        let tab_height = line_height + 2.0;
-        let tab_text_gap_width = Self::tab_text_gap_chars(cell_width) as f32 * cell_width;
+    pub(crate) fn resize(&mut self, width: u32, fonts: &mut FontSystem) {
+        if self.width == width {
+            return;
+        }
+        self.width = width;
+        self.rebuild(fonts);
+    }
 
-        for (index, title) in tab_bar.titles().iter().enumerate() {
-            if index > 0 {
-                x += (tab_text_gap_width - TabStyle::TAB_SLANT).max(0.0);
+    fn placements(width: u32, count: usize, active: usize) -> Vec<TabPlacement> {
+        if count == 0 {
+            return Vec::new();
+        }
+        let available = (width as f32 - Self::INSET * 2.0).max(0.0);
+        if available < 1.0 {
+            return Vec::new();
+        }
+        let slots = (((available + Self::GAP) / (112.0 + Self::GAP)) as usize)
+            .max(1)
+            .min(count);
+        let tab_width = ((available - Self::GAP * (slots - 1) as f32) / slots as f32).min(180.0);
+        // Keyboard switching must always reveal the active tab, including in narrow windows.
+        let start = active
+            .saturating_add(1)
+            .saturating_sub(slots)
+            .min(count - slots);
+        (start..start + slots)
+            .enumerate()
+            .map(|(slot, index)| TabPlacement {
+                index,
+                x: Self::INSET + slot as f32 * (tab_width + Self::GAP),
+                width: tab_width,
+            })
+            .collect()
+    }
+
+    fn rebuild(&mut self, fonts: &mut FontSystem) {
+        self.hovered = None;
+        self.labels = Self::placements(
+            self.width,
+            self.snapshot.titles.len(),
+            self.snapshot.active_index,
+        )
+        .into_iter()
+        .map(|placement| {
+            // UI labels have their own metrics; shell font settings never distort the tab strip.
+            let mut buffer = Buffer::new(fonts, Metrics::new(13.0, Self::BUTTON_HEIGHT));
+            buffer.set_wrap(Wrap::None);
+            let text_width = (placement.width - Self::TEXT_INSET * 2.0).max(1.0);
+            buffer.set_size(Some(text_width), Some(Self::BUTTON_HEIGHT));
+            let attrs = Attrs::new()
+                .family(Family::SansSerif)
+                .weight(Weight::MEDIUM);
+            let title: String = self.snapshot.titles[placement.index]
+                .chars()
+                .filter(|ch| !ch.is_control())
+                .take(48)
+                .collect();
+            let mut name = title.clone();
+            loop {
+                let suffix = if name == title { "" } else { "…" };
+                buffer.set_text(
+                    &format!("{}   {name}{suffix}", placement.index + 1),
+                    &attrs,
+                    Shaping::Advanced,
+                    None,
+                );
+                buffer.shape_until_scroll(fonts, false);
+                if buffer
+                    .layout_runs()
+                    .next()
+                    .is_none_or(|run| run.line_w <= text_width)
+                    || name.is_empty()
+                {
+                    break;
+                }
+                name.pop();
             }
+            TabLabel { placement, buffer }
+        })
+        .collect();
+        self.dirty = true;
+    }
 
-            let tab_width = Self::tab_title_width(title, cell_width);
-            let slanted_width = tab_width + TabStyle::TAB_SLANT;
-            let active = index == tab_bar.active_index();
-            let background: [f32; 4] = if active {
-                TabStyle::TAB_ACTIVE_BACKGROUND
+    pub(crate) fn tab_at(&self, x: f64, y: f64) -> Option<usize> {
+        if !x.is_finite()
+            || !(f64::from(Self::TOP)..f64::from(Self::TOP + Self::BUTTON_HEIGHT)).contains(&y)
+        {
+            return None;
+        }
+        self.labels.iter().find_map(|label| {
+            let p = label.placement;
+            (x >= f64::from(p.x) && x < f64::from(p.x + p.width)).then_some(p.index)
+        })
+    }
+
+    pub(crate) fn hover(&mut self, hovered: Option<usize>) -> bool {
+        if self.hovered == hovered {
+            return false;
+        }
+        self.hovered = hovered;
+        self.dirty = true;
+        true
+    }
+
+    pub(crate) fn focus(&mut self, focused: bool) -> bool {
+        if self.focused == focused {
+            return false;
+        }
+        self.focused = focused;
+        self.hovered = None;
+        self.dirty = true;
+        true
+    }
+
+    pub(crate) fn text_areas(&self) -> impl Iterator<Item = TextArea<'_>> {
+        self.labels.iter().map(|label| {
+            let p = label.placement;
+            let color = if !self.focused {
+                ThemeColor::TEXT_DIM
+            } else if p.index == self.snapshot.active_index || self.hovered == Some(p.index) {
+                ThemeColor::TEXT
             } else {
-                TabStyle::TAB_INACTIVE_BACKGROUND
+                ThemeColor::TEXT_MUTED
             };
+            TextArea {
+                buffer: &label.buffer,
+                left: p.x + Self::TEXT_INSET,
+                top: Self::TOP,
+                scale: 1.0,
+                bounds: TextBounds {
+                    left: (p.x + Self::TEXT_INSET) as i32,
+                    top: 0,
+                    right: (p.x + p.width - Self::TEXT_INSET).max(p.x + Self::TEXT_INSET) as i32,
+                    bottom: Self::HEIGHT as i32,
+                },
+                default_color: Color::rgba(color[0], color[1], color[2], color[3]),
+                custom_glyphs: &[],
+            }
+        })
+    }
 
-            rects.push(RectSpec::slanted(
-                x,
-                tab_y,
-                slanted_width,
-                tab_height,
-                background,
-                TabStyle::TAB_SLANT,
-            ));
-
-            if active {
-                rects.push(Self::tab_strip_rect(
-                    x,
-                    tab_y,
-                    tab_height,
-                    0.0,
-                    TabStyle::TAB_TOP_GLOW_HEIGHT,
-                    slanted_width,
-                    TabStyle::TAB_ACTIVE_TOP_GLOW,
-                ));
-                rects.push(Self::tab_strip_rect(
-                    x,
-                    tab_y,
-                    tab_height,
-                    tab_height - TabStyle::TAB_UNDERLINE_HEIGHT,
-                    TabStyle::TAB_UNDERLINE_HEIGHT,
-                    slanted_width,
-                    TabStyle::TAB_ACTIVE_UNDERLINE,
+    pub(crate) fn rects(&self, srgb: bool) -> Vec<RectSpec> {
+        let color = |rgba| {
+            if srgb {
+                srgb_to_linear_rgba(rgba)
+            } else {
+                rgba_to_f32(rgba)
+            }
+        };
+        let mut rects = vec![
+            RectSpec::new(
+                0.0,
+                0.0,
+                self.width as f32,
+                Self::HEIGHT,
+                color(ThemeColor::CHROME),
+            ),
+            RectSpec::new(
+                0.0,
+                Self::HEIGHT - 1.0,
+                self.width as f32,
+                1.0,
+                color(ThemeColor::BORDER),
+            ),
+        ];
+        for label in &self.labels {
+            let p = label.placement;
+            let active = p.index == self.snapshot.active_index;
+            if active || self.hovered == Some(p.index) {
+                if active {
+                    rects.push(RectSpec::rounded(
+                        p.x,
+                        Self::TOP,
+                        p.width,
+                        Self::BUTTON_HEIGHT,
+                        color(ThemeColor::BORDER),
+                        6.0,
+                    ));
+                }
+                let inset = if active { 1.0 } else { 0.0 };
+                rects.push(RectSpec::rounded(
+                    p.x + inset,
+                    Self::TOP + inset,
+                    (p.width - inset * 2.0).max(0.0),
+                    Self::BUTTON_HEIGHT - inset * 2.0,
+                    color(if active {
+                        ThemeColor::TAB_ACTIVE
+                    } else {
+                        ThemeColor::TAB_HOVER
+                    }),
+                    5.0,
                 ));
             }
-
-            x += slanted_width;
+            if active {
+                rects.push(RectSpec::rounded(
+                    p.x + Self::TEXT_INSET,
+                    Self::HEIGHT - 4.0,
+                    22.0_f32.min((p.width - Self::TEXT_INSET * 2.0).max(0.0)),
+                    2.0,
+                    color(if self.focused {
+                        ThemeColor::ACCENT
+                    } else {
+                        ThemeColor::TEXT_DIM
+                    }),
+                    1.0,
+                ));
+            }
         }
-
         rects
-    }
-
-    fn tab_title_width(title: &str, cell_width: f32) -> f32 {
-        Self::padded_tab_title(title).chars().count() as f32 * cell_width
-    }
-
-    fn padded_tab_title(title: &str) -> String {
-        format!(
-            "{}{}{}",
-            " ".repeat(TabStyle::TAB_TEXT_PADDING),
-            title,
-            " ".repeat(TabStyle::TAB_TEXT_PADDING)
-        )
-    }
-
-    fn tab_text_gap_chars(cell_width: f32) -> usize {
-        let gap_width = cell_width * TabStyle::TAB_GAP_CHARS as f32 + TabStyle::TAB_SLANT * 2.0;
-
-        (gap_width / cell_width).ceil() as usize
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use glyphon::Color;
-
-    use crate::{
-        RendererConfig,
-        terminal_view::{TerminalView, tab_bar::TabStyle},
-        util::color::ThemeColor,
-    };
-
-    use super::TabBarSnapshot;
-
-    fn color([r, g, b, a]: [u8; 4]) -> Color {
-        Color::rgba(r, g, b, a)
-    }
+    use super::{TabBar, TabBarSnapshot};
 
     #[test]
-    fn clamps_active_index_to_existing_tabs() {
-        let snapshot = TabBarSnapshot::new(vec!["Tab 1".to_string()], 99);
-
-        assert_eq!(snapshot.active_index(), 0);
-    }
-
-    #[test]
-    fn tab_bar_text_gap_matches_next_tab_rect() {
-        let snapshot = TabBarSnapshot::new(vec!["Tab 1".to_string(), "Tab 2".to_string()], 0);
-        let cell_width = 10.0;
-        let spans =
-            TerminalView::tab_bar_spans_for(&snapshot, RendererConfig::DEFAULT_FONT_FAMILY, 10.0);
-        let rects = TerminalView::tab_bar_rects_for(
-            &snapshot,
-            cell_width,
-            RendererConfig::DEFAULT_LINE_HEIGHT,
-        );
-        let second_tab_text_x =
-            TerminalView::PADDING_X + (spans[0].0.len() + spans[1].0.len()) as f32 * cell_width;
-
-        assert_eq!(second_tab_text_x, rects[3].x);
-    }
-
-    #[test]
-    fn tab_bar_rects_hide_for_single_tab() {
-        let snapshot = TabBarSnapshot::new(vec!["Tab 1".to_string()], 0);
-
-        assert!(
-            TerminalView::tab_bar_rects_for(&snapshot, 10.0, RendererConfig::DEFAULT_LINE_HEIGHT)
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn tab_bar_rects_include_background_tabs_and_active_accents() {
-        let snapshot = TabBarSnapshot::new(vec!["Tab 1".to_string(), "Tab 2".to_string()], 0);
-        let rects =
-            TerminalView::tab_bar_rects_for(&snapshot, 10.0, RendererConfig::DEFAULT_LINE_HEIGHT);
-
-        assert_eq!(rects.len(), 4);
-        assert_eq!(rects[0].x, TerminalView::PADDING_X);
-        assert_eq!(rects[0].width, 100.0);
-        assert_eq!(rects[0].height, RendererConfig::DEFAULT_LINE_HEIGHT + 2.0);
-        assert_eq!(rects[0].color, TabStyle::TAB_ACTIVE_BACKGROUND);
-        assert_eq!(rects[0].slant, TabStyle::TAB_SLANT);
-        assert_eq!(rects[2].height, TabStyle::TAB_UNDERLINE_HEIGHT);
-        assert_eq!(rects[2].color, TabStyle::TAB_ACTIVE_UNDERLINE);
-        assert_eq!(
-            rects[2].slant,
-            TabStyle::TAB_SLANT * TabStyle::TAB_UNDERLINE_HEIGHT / rects[0].height
-        );
-        assert_eq!(rects[3].x, 130.0);
-        assert_eq!(rects[3].color, TabStyle::TAB_INACTIVE_BACKGROUND);
-    }
-
-    #[test]
-    fn tab_bar_spans_mark_active_tab() {
-        let snapshot = TabBarSnapshot::new(vec!["Tab 1".to_string(), "Tab 2".to_string()], 0);
-        let spans =
-            TerminalView::tab_bar_spans_for(&snapshot, RendererConfig::DEFAULT_FONT_FAMILY, 10.0);
-
-        assert_eq!(spans[0].0, "  Tab 1  ");
-        assert_eq!(spans[0].1.color_opt, Some(color(ThemeColor::WHITE)));
-        assert_eq!(spans[1].0, "   ");
-        assert_eq!(spans[2].0, "  Tab 2  ");
-        assert_eq!(spans[2].1.color_opt, Some(color(ThemeColor::BLUE_GRAY_400)));
+    fn narrow_windows_keep_active_tabs_visible_and_hit_targets_inside_bounds() {
+        let mut fonts = glyphon::FontSystem::new();
+        for width in [24, 60, 320, 1000] {
+            for active in 0..12 {
+                let placements = TabBar::placements(width, 12, active);
+                if width < 33 {
+                    assert!(placements.is_empty());
+                    continue;
+                }
+                assert!(placements.iter().any(|p| p.index == active));
+                let mut bar = TabBar::new(width);
+                // Hit testing uses the exact geometry drawn, not text character counts.
+                bar.set_snapshot(
+                    TabBarSnapshot::new(vec!["日本語 nu".into(); 12], active),
+                    &mut fonts,
+                );
+                for p in placements {
+                    assert!(p.x >= 0.0 && p.x + p.width <= width as f32);
+                    assert_eq!(
+                        bar.tab_at(f64::from(p.x + p.width / 2.0), 20.0),
+                        Some(p.index)
+                    );
+                    assert_eq!(bar.tab_at(f64::from(p.x), 45.0), None);
+                }
+                assert_eq!(bar.tab_at(f64::NAN, 20.0), None);
+            }
+        }
     }
 }

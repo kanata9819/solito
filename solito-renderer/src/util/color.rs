@@ -1,19 +1,22 @@
 pub struct ThemeColor;
 impl ThemeColor {
+    pub const BACKGROUND: [u8; 4] = [20, 24, 27, 255];
+    pub const CHROME: [u8; 4] = [18, 22, 25, 255];
+    pub const BORDER: [u8; 4] = [43, 51, 55, 255];
+    pub const TAB_ACTIVE: [u8; 4] = [31, 39, 43, 255];
+    pub const TAB_HOVER: [u8; 4] = [27, 33, 37, 255];
+    pub const TEXT: [u8; 4] = [218, 225, 228, 255];
+    pub const TEXT_MUTED: [u8; 4] = [145, 157, 164, 255];
+    pub const TEXT_DIM: [u8; 4] = [111, 123, 130, 255];
+    pub const ACCENT: [u8; 4] = [124, 174, 166, 255];
     // u8 color
     pub const BLACK: [u8; 4] = [0, 0, 0, 255];
     pub const WHITE: [u8; 4] = [255, 255, 255, 255];
-    pub const BLUE_GRAY_400: [u8; 4] = [140, 148, 160, 255];
-    pub const BLUE_GRAY_700: [u8; 4] = [80, 88, 100, 255];
 
     // f32 color
     pub const WHITE_ALPHA: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
-    pub const NAVY_900_ALPHA: [f32; 4] = [0.055, 0.075, 0.118, 0.72];
-    pub const NAVY_800_ALPHA: [f32; 4] = [0.118, 0.161, 0.220, 0.96];
-    pub const BLUE_500_ALPHA: [f32; 4] = [0.2, 0.45, 0.95, 0.36];
-    pub const YELLOW_400_ALPHA: [f32; 4] = [0.95, 0.84, 0.25, 0.55];
-    pub const CYAN_400: [f32; 4] = [0.125, 0.827, 0.933, 1.0];
-    pub const CYAN_GLOW: [f32; 4] = [0.408, 0.878, 1.0, 0.34];
+    pub const SELECTION_ALPHA: [f32; 4] = [0.20, 0.42, 0.38, 0.28];
+    pub const COPY_CURSOR_ALPHA: [f32; 4] = [0.73, 0.58, 0.28, 0.55];
 }
 
 pub fn rgba_to_f32([r, g, b, a]: [u8; 4]) -> [f32; 4] {

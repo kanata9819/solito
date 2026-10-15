@@ -3,6 +3,7 @@ use wgpu::{Surface, SurfaceConfiguration};
 use winit::{dpi::PhysicalSize, window::Window};
 
 use super::gpu::GpuContext;
+use crate::util::color::{ThemeColor, rgba_to_f32, srgb_to_linear_rgba};
 use crate::{RendererConfig, WindowBackdrop};
 
 pub(super) struct WindowSurface {
@@ -33,7 +34,7 @@ impl WindowSurface {
             .unwrap_or(surface_caps.formats[0]);
 
         let alpha_mode = Self::choose_alpha_mode(&surface_caps);
-        let clear_color = Self::clear_color(alpha_mode, renderer_config);
+        let clear_color = Self::clear_color(alpha_mode, renderer_config, surface_format.is_srgb());
 
         let config = SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -77,13 +78,33 @@ impl WindowSurface {
     }
 
     fn clear_color(
-        _alpha_mode: wgpu::CompositeAlphaMode,
+        alpha_mode: wgpu::CompositeAlphaMode,
         renderer_config: &RendererConfig,
+        srgb: bool,
     ) -> wgpu::Color {
-        if renderer_config.window_backdrop.is_transparent() {
-            wgpu::Color::TRANSPARENT
+        if renderer_config.window_backdrop == WindowBackdrop::Transparent {
+            return wgpu::Color::TRANSPARENT;
+        }
+        let mut rgba = if srgb {
+            srgb_to_linear_rgba(ThemeColor::BACKGROUND)
         } else {
-            wgpu::Color::BLACK
+            rgba_to_f32(ThemeColor::BACKGROUND)
+        };
+        if renderer_config.window_backdrop == WindowBackdrop::Acrylic {
+            rgba[3] = 0.88;
+        }
+        // The compositor expects premultiplied channels only in this alpha mode.
+        if alpha_mode == wgpu::CompositeAlphaMode::PreMultiplied {
+            let alpha = rgba[3];
+            for channel in &mut rgba[..3] {
+                *channel *= alpha;
+            }
+        }
+        wgpu::Color {
+            r: f64::from(rgba[0]),
+            g: f64::from(rgba[1]),
+            b: f64::from(rgba[2]),
+            a: f64::from(rgba[3]),
         }
     }
 
@@ -265,8 +286,12 @@ impl WindowSurface {
 
             // SAFETY: Windows exports this symbol with the signature declared
             // by `SetWindowCompositionAttribute`.
-            let set_window_composition_attribute =
-                unsafe { std::mem::transmute::<_, SetWindowCompositionAttribute>(function) };
+            let set_window_composition_attribute = unsafe {
+                std::mem::transmute::<
+                    unsafe extern "system" fn() -> isize,
+                    SetWindowCompositionAttribute,
+                >(function)
+            };
 
             let (r, g, b, mut a) = acrylic_tint;
             if a == 0 {

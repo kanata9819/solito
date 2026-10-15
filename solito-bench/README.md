@@ -96,6 +96,34 @@ The explicit ignored tests require a GPU adapter and native Neovim/PTY,
 respectively. They check layout/invalidation and input integration; they do not
 replace visual inspection of the window.
 
+### Bulk scrolling and correctness (2026-10-15)
+
+Compared with `20429bf`, using the same extended `throughput` example in both
+release builds, on the same Windows machine at 120 columns by 40 rows. Three
+alternating before/after runs were measured; the table gives the median of the
+three run medians (each run already takes five samples).
+
+| Workload | Iterations | Before | After |
+| --- | ---: | ---: | ---: |
+| Full repaint + snapshot | 2,000 | 116.18 ms | 117.47 ms |
+| Scroll at history limit | 30,000 | 48.12 ms | 50.23 ms |
+| Edit + snapshot with 10k history | 10,000 | 10.64 ms | 10.99 ms |
+| Cursor control | 500,000 | 31.00 ms | 31.55 ms |
+| Scroll 20 rows + snapshot | 10,000 | 31.46 ms | 3.84 ms |
+
+Bulk scrolling moves each retained row once instead of repeating row removal and
+insertion for every scrolled row. This workload is about 8.2 times faster (87.8%
+less time). It alternates CSI 20 S/T with a live previous snapshot, exercising
+row movement and copy-on-write rather than text rendering. The other workloads
+had 1-5% higher medians in this sample; these component results do not establish
+an application-wide speedup.
+
+The accompanying regression tests cover wide-character replacement and editing,
+resize and saved cursor bounds, movement outside scroll margins, background
+colors on inserted/scrolled rows and deleted characters, and extreme wheel
+input. `cargo test --workspace -- --include-ignored` also exercises the native
+GPU, focus restoration, Neovim mouse, and Nushell startup checks.
+
 ## Startup time (Windows)
 
 ```powershell

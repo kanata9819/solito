@@ -35,8 +35,8 @@ pub struct CopyModeSnapshot {
 }
 
 impl TerminalView {
-    const COPY_MODE_SELECTION_COLOR: [f32; 4] = ThemeColor::BLUE_500_ALPHA;
-    const COPY_MODE_CURSOR_COLOR: [f32; 4] = ThemeColor::YELLOW_400_ALPHA;
+    const COPY_MODE_SELECTION_COLOR: [f32; 4] = ThemeColor::SELECTION_ALPHA;
+    const COPY_MODE_CURSOR_COLOR: [f32; 4] = ThemeColor::COPY_CURSOR_ALPHA;
 
     pub(crate) fn set_copy_mode(&mut self, copy_mode: CopyModeSnapshot) {
         self.copy_mode = copy_mode;
@@ -74,7 +74,6 @@ impl TerminalView {
             visible_end,
             self.glyphs.cell_width,
             self.config.line_height,
-            self.has_tab_bar(),
         )
     }
 
@@ -85,7 +84,6 @@ impl TerminalView {
         visible_end: usize,
         cell_width: f32,
         line_height: f32,
-        has_tab_bar: bool,
     ) -> Vec<RectSpec> {
         let mut rects = Vec::new();
 
@@ -98,7 +96,7 @@ impl TerminalView {
                     let visible_row = row.saturating_sub(visible_start);
                     rects.push(RectSpec::new(
                         Self::PADDING_X + start_col as f32 * cell_width,
-                        Self::terminal_row_y(visible_row, line_height, has_tab_bar),
+                        Self::terminal_row_y(visible_row, line_height),
                         (end_col - start_col) as f32 * cell_width,
                         line_height,
                         Self::COPY_MODE_SELECTION_COLOR,
@@ -116,7 +114,7 @@ impl TerminalView {
 
             rects.push(RectSpec::new(
                 Self::PADDING_X + cursor_col as f32 * cell_width,
-                Self::terminal_row_y(visible_row, line_height, has_tab_bar),
+                Self::terminal_row_y(visible_row, line_height),
                 cell_width,
                 line_height,
                 Self::COPY_MODE_CURSOR_COLOR,

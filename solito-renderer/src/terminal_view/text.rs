@@ -4,8 +4,8 @@ use solito_terminal::ScreenLine;
 use std::collections::{BTreeSet, HashMap};
 
 use crate::{
-    RendererConfig, pipeline::rect::RectSpec, terminal_view::glyph::GlyphonResources,
-    util::color::ThemeColor, util::color::rgba_to_f32,
+    pipeline::rect::RectSpec, terminal_view::glyph::GlyphonResources, util::color::ThemeColor,
+    util::color::rgba_to_f32,
 };
 
 use super::{TerminalView, text_damage::TextDamage};
@@ -32,7 +32,7 @@ impl TerminalView {
             };
             Self::background_rects_for_line(
                 line,
-                Self::terminal_row_y(row - start, self.config.line_height, self.has_tab_bar()),
+                Self::terminal_row_y(row - start, self.config.line_height),
                 self.glyphs.cell_width,
                 self.config.line_height,
                 srgb_target,
@@ -75,23 +75,20 @@ impl TerminalView {
         }
     }
 
-    pub(super) fn set_text_buffer_size(
-        glyphs: &mut GlyphonResources,
-        width: u32,
-        height: u32,
-        config: &RendererConfig,
-    ) {
+    pub(super) fn set_text_buffer_size(glyphs: &mut GlyphonResources, width: u32, height: u32) {
         glyphs.text_buffer.set_size(
             Some(Self::terminal_content_width(width) as f32),
-            Some(Self::terminal_content_height(height, config.line_height) as f32),
+            Some(Self::terminal_content_height(height) as f32),
         );
         glyphs
             .text_buffer
             .shape_until_scroll(&mut glyphs.font_system, false);
     }
 
-    pub(super) fn terminal_content_height(height: u32, line_height: f32) -> u32 {
-        height.saturating_sub(line_height.ceil() as u32)
+    pub(super) fn terminal_content_height(height: u32) -> u32 {
+        // PTY sizing, clipping, and mouse/IME coordinates share the same content bounds.
+        height
+            .saturating_sub((super::tab_bar::TabBar::HEIGHT + Self::PADDING_Y * 2.0).ceil() as u32)
     }
 
     pub(super) fn terminal_content_width(width: u32) -> u32 {
@@ -117,16 +114,13 @@ impl TerminalView {
         let font_family = self.config.font_family.clone();
         let attrs = Self::text_attrs(None, font_family.as_str());
         let (start, end) = self.viewport.visible_range(self.row_count());
-        let has_tab_bar = self.has_tab_bar();
-        let offset = usize::from(has_tab_bar);
-        let count = offset + end - start;
+        let count = end - start;
         let origin = self.snapshot.history_start + start;
         let lines = &mut self.glyphs.text_buffer.lines;
         if lines.len() == count
-            && let Some((previous, previous_tab_bar)) = self.text_origin
-            && previous_tab_bar == has_tab_bar
+            && let Some(previous) = self.text_origin
         {
-            Self::reuse_scrolled_lines(&mut lines[offset..], previous, origin);
+            Self::reuse_scrolled_lines(lines, previous, origin);
         }
         lines.resize_with(count, || {
             BufferLine::new(
@@ -136,18 +130,9 @@ impl TerminalView {
                 Shaping::Advanced,
             )
         });
-        self.text_origin = Some((origin, has_tab_bar));
-        if has_tab_bar {
-            let spans =
-                Self::tab_bar_spans_for(&self.tab_bar, &font_family, self.glyphs.cell_width);
-            Self::set_buffer_line(&mut self.glyphs.text_buffer.lines[0], spans, &attrs);
-        }
+        self.text_origin = Some(origin);
         if self.snapshot.lines.is_empty() {
-            Self::set_buffer_line(
-                &mut self.glyphs.text_buffer.lines[offset],
-                Vec::new(),
-                &attrs,
-            );
+            Self::set_buffer_line(&mut self.glyphs.text_buffer.lines[0], Vec::new(), &attrs);
         } else {
             self.update_text_rows(&(start..end).collect());
         }
@@ -210,7 +195,6 @@ impl TerminalView {
             } else {
                 (usize::MAX, usize::MAX)
             };
-        let tab_bar_offset = usize::from(self.has_tab_bar());
         let preedit_line = self.ime_preedit.is_active().then(|| {
             self.ime_preedit.overlay_line(
                 self.snapshot
@@ -228,7 +212,7 @@ impl TerminalView {
         let mut updated = false;
 
         for &absolute_row in visible_rows {
-            let buffer_row = tab_bar_offset + absolute_row - start;
+            let buffer_row = absolute_row - start;
             let Some(buffer_line) = self.glyphs.text_buffer.lines.get_mut(buffer_row) else {
                 self.set_text_to_buffer();
                 return;
@@ -457,7 +441,7 @@ mod tests {
         assert_eq!(rects.len(), 1);
         assert_eq!(
             (rects[0].x, rects[0].y, rects[0].width, rects[0].height),
-            (20.0, 40.0, 30.0, 20.0)
+            (26.0, 40.0, 30.0, 20.0)
         );
         assert_eq!(
             rects[0].color,

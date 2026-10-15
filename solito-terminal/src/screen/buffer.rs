@@ -140,13 +140,21 @@ impl ScreenBuffer {
     }
 
     pub(super) fn resize(&mut self, size: TerminalSize) {
+        if self.cols == size.cols && self.rows == size.rows {
+            return;
+        }
+        let full_height = self.scroll_region == (0, self.rows - 1);
         self.cols = size.cols;
         self.rows = size.rows;
-        self.scroll_region.0 = self.scroll_region.0.min(size.rows.saturating_sub(1));
-        self.scroll_region.1 = self
-            .scroll_region
-            .1
-            .clamp(self.scroll_region.0, size.rows.saturating_sub(1));
+        if full_height {
+            self.scroll_region = (0, size.rows - 1);
+        } else {
+            self.scroll_region.0 = self.scroll_region.0.min(size.rows - 1);
+            self.scroll_region.1 = self
+                .scroll_region
+                .1
+                .clamp(self.scroll_region.0, size.rows - 1);
+        }
         // Preserve existing stops, including ones explicitly cleared by the application.
         let old_cols = self.tab_stops.len();
         self.tab_stops.resize(size.cols, false);
@@ -155,6 +163,13 @@ impl ScreenBuffer {
         }
         self.cursor
             .move_to_col(self.cursor.get_current_col().min(size.cols - 1));
+        let top = self.get_viewport_top();
+        self.cursor.move_to_row(
+            self.cursor
+                .get_current_row()
+                .clamp(top, top + self.rows - 1),
+        );
+        self.pending_wrap = false;
     }
 
     pub(super) fn limit_history(&mut self, history_limit: usize) {

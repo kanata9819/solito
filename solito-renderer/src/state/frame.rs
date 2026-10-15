@@ -9,15 +9,19 @@ use winit::dpi::PhysicalSize;
 use super::renderer::Renderer;
 use crate::{pass, pipeline::rect, terminal_view::TerminalView, util::color::ThemeColor};
 
+#[cfg(all(test, target_os = "windows"))]
+mod preview;
+
 impl Renderer {
     fn prepare_text(&mut self) -> Result<()> {
         // Several state updates can arrive before one redraw. Shape their
         // final text state once, immediately before glyph preparation.
-        if !self.terminal_view.update_text_buffer() {
+        let text_changed = self.terminal_view.update_text_buffer();
+        if !text_changed && !self.terminal_view.tab_bar.dirty {
             return Ok(());
         }
 
-        let [default_r, default_g, default_b, _] = ThemeColor::WHITE;
+        let [default_r, default_g, default_b, _] = ThemeColor::TEXT;
 
         self.terminal_view.glyphs.text_renderer.prepare(
             &self.gpu.device,
@@ -25,21 +29,35 @@ impl Renderer {
             &mut self.terminal_view.glyphs.font_system,
             &mut self.terminal_view.glyphs.atlas,
             &self.terminal_view.glyphs.viewport,
-            [TextArea {
+            std::iter::once(TextArea {
                 buffer: &self.terminal_view.glyphs.text_buffer,
                 left: TerminalView::PADDING_X,
-                top: TerminalView::PADDING_Y,
+                top: TerminalView::terminal_row_y(0, self.terminal_view.config.line_height),
                 scale: 1.0,
                 bounds: TextBounds {
-                    left: 0,
-                    top: 0,
-                    ..Default::default()
+                    left: TerminalView::PADDING_X as i32,
+                    top: TerminalView::terminal_row_y(0, self.terminal_view.config.line_height)
+                        as i32,
+                    right: self
+                        .window_surface
+                        .config
+                        .width
+                        .saturating_sub(TerminalView::PADDING_X as u32)
+                        as i32,
+                    bottom: self
+                        .window_surface
+                        .config
+                        .height
+                        .saturating_sub(TerminalView::PADDING_Y as u32)
+                        as i32,
                 },
                 default_color: Color::rgb(default_r, default_g, default_b),
                 custom_glyphs: &[],
-            }],
+            })
+            .chain(self.terminal_view.tab_bar.text_areas()),
             &mut self.terminal_view.glyphs.swash_cache,
         )?;
+        self.terminal_view.tab_bar.dirty = false;
 
         Ok(())
     }
@@ -48,7 +66,11 @@ impl Renderer {
         let mut rects = self
             .terminal_view
             .background_rects(self.window_surface.config.format.is_srgb());
-        rects.extend(self.terminal_view.tab_bar_rects());
+        rects.extend(
+            self.terminal_view
+                .tab_bar
+                .rects(self.window_surface.config.format.is_srgb()),
+        );
         rects.extend(self.terminal_view.copy_mode_rects());
         rects.extend(self.terminal_view.ime_rects());
 

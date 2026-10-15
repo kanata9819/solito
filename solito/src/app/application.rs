@@ -118,6 +118,7 @@ impl SolitoApplication {
             .with_transparent(self.renderer_config.window_backdrop.is_transparent())
             .with_window_icon(icon::app_icon())
             .with_title("Solito")
+            .with_theme(Some(winit::window::Theme::Dark))
             .with_visible(false)
     }
 
@@ -340,10 +341,11 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                     },
                 ..
             } => {
-                if self.config.window.hide_cursor && key_state == ElementState::Pressed {
-                    if let Some(window) = &self.window {
-                        window.set_cursor_visible(false);
-                    }
+                if self.config.window.hide_cursor
+                    && key_state == ElementState::Pressed
+                    && let Some(window) = &self.window
+                {
+                    window.set_cursor_visible(false);
                 }
 
                 // Only keyboard input is translated into commands by input.rs before execution.
@@ -399,6 +401,7 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                 self.needs_redraw = true;
             }
             WindowEvent::CursorMoved { position, .. } => {
+                self.update_tab_hover(Some(position));
                 if self.config.window.hide_cursor
                     && let Some(window) = &self.window
                 {
@@ -407,15 +410,32 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                 self.report_mouse_motion(position)
             }
             WindowEvent::MouseInput { state, button, .. } => {
+                if self.activate_clicked_tab(state, button) {
+                    return;
+                }
                 self.report_mouse_button(state, button)
             }
-            WindowEvent::CursorLeft { .. } => self.mouse.position = None,
-            WindowEvent::Focused(true) | WindowEvent::Occluded(false) => {
+            WindowEvent::CursorLeft { .. } => {
+                self.mouse.position = None;
+                self.update_tab_hover(None);
+            }
+            WindowEvent::Focused(true) => {
+                if let Some(renderer) = &mut self.renderer {
+                    self.needs_redraw |= renderer.set_focused(true);
+                }
+                if let Err(err) = self.restore_window() {
+                    error!("application restore failed: {err}");
+                }
+            }
+            WindowEvent::Occluded(false) => {
                 if let Err(err) = self.restore_window() {
                     error!("application restore failed: {err}");
                 }
             }
             WindowEvent::Focused(false) => {
+                if let Some(renderer) = &mut self.renderer {
+                    self.needs_redraw |= renderer.set_focused(false);
+                }
                 self.clear_ime();
                 self.modifiers = ModifiersState::default();
                 if self.config.window.hide_cursor

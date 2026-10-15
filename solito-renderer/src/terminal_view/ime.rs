@@ -3,7 +3,10 @@ use std::ops::Range;
 use solito_terminal::{ScreenCell, ScreenLine};
 use unicode_width::UnicodeWidthChar;
 
-use crate::{pipeline::rect::RectSpec, util::color::ThemeColor};
+use crate::{
+    pipeline::rect::RectSpec,
+    util::color::{ThemeColor, srgb_to_linear_rgba},
+};
 
 use super::TerminalView;
 
@@ -160,7 +163,7 @@ impl TerminalView {
         };
         (
             Self::PADDING_X + col as f32 * self.glyphs.cell_width,
-            Self::terminal_row_y(visible_row, self.config.line_height, self.has_tab_bar()),
+            Self::terminal_row_y(visible_row, self.config.line_height),
             self.glyphs.cell_width,
             self.config.line_height,
         )
@@ -173,11 +176,7 @@ impl TerminalView {
         }
         let layout = self.preedit_layout();
         let x = Self::PADDING_X + layout.col as f32 * self.glyphs.cell_width;
-        let y = Self::terminal_row_y(
-            self.snapshot.cursor_row - start,
-            self.config.line_height,
-            self.has_tab_bar(),
-        );
+        let y = Self::terminal_row_y(self.snapshot.cursor_row - start, self.config.line_height);
         let width = layout.width as f32 * self.glyphs.cell_width;
         let mut rects = vec![
             RectSpec::new(
@@ -185,7 +184,7 @@ impl TerminalView {
                 y,
                 width,
                 self.config.line_height,
-                [0.04, 0.04, 0.04, 1.0],
+                srgb_to_linear_rgba(ThemeColor::TAB_ACTIVE),
             ),
             RectSpec::new(
                 x,
@@ -203,7 +202,7 @@ impl TerminalView {
                     y,
                     1.0,
                     self.config.line_height,
-                    ThemeColor::CYAN_400,
+                    srgb_to_linear_rgba(ThemeColor::ACCENT),
                 ));
             } else {
                 rects.push(RectSpec::new(
@@ -211,7 +210,7 @@ impl TerminalView {
                     y + self.config.line_height - 3.0,
                     cursor.len() as f32 * self.glyphs.cell_width,
                     2.0,
-                    ThemeColor::CYAN_400,
+                    srgb_to_linear_rgba(ThemeColor::ACCENT),
                 ));
             }
         }

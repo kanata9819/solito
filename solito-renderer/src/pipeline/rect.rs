@@ -17,22 +17,21 @@ pub(crate) struct RectSpec {
     pub(crate) width: f32,
     pub(crate) height: f32,
     pub(crate) color: [f32; 4],
-    pub(crate) slant: f32,
+    pub(crate) radius: f32,
 }
 
 impl RectSpec {
     pub(crate) fn new(x: f32, y: f32, width: f32, height: f32, color: [f32; 4]) -> Self {
-        Self::slanted(x, y, width, height, color, 0.0)
+        Self::rounded(x, y, width, height, color, 0.0)
     }
 
-    // used for tab bar design
-    pub(crate) fn slanted(
+    pub(crate) fn rounded(
         x: f32,
         y: f32,
         width: f32,
         height: f32,
         color: [f32; 4],
-        slant: f32,
+        radius: f32,
     ) -> Self {
         Self {
             x,
@@ -40,7 +39,7 @@ impl RectSpec {
             width,
             height,
             color,
-            slant,
+            radius,
         }
     }
 }
@@ -51,7 +50,7 @@ struct RectInstance {
     pos: [f32; 2],
     size: [f32; 2],
     color: [f32; 4],
-    slant: f32,
+    radius: f32,
     _pad: [f32; 3],
 }
 
@@ -61,7 +60,7 @@ impl From<RectSpec> for RectInstance {
             pos: [rect.x, rect.y],
             size: [rect.width, rect.height],
             color: rect.color,
-            slant: rect.slant,
+            radius: rect.radius,
             _pad: [0.0; 3],
         }
     }

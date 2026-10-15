@@ -66,4 +66,12 @@ fn main() {
         500_000,
         false,
     );
+    let scroll_setup = format!("\x1b[?1049h{repaint}\x1b[1;40r");
+    measure(
+        "scroll 20 rows + snapshot",
+        scroll_setup.as_bytes(),
+        [b"\x1b[20S", b"\x1b[20T"],
+        10_000,
+        true,
+    );
 }

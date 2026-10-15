@@ -16,6 +16,50 @@ pub(super) struct MouseInputState {
 }
 
 impl SolitoApplication {
+    pub(super) fn activate_clicked_tab(
+        &mut self,
+        state: ElementState,
+        button: MouseButton,
+    ) -> bool {
+        if state != ElementState::Pressed || button != MouseButton::Left {
+            return false;
+        }
+        let Some(position) = self.mouse.position else {
+            return false;
+        };
+        let Some(index) = self
+            .renderer
+            .as_ref()
+            .and_then(|renderer| renderer.tab_at(position.x, position.y))
+        else {
+            return false;
+        };
+        if self.tabs.activate(index) {
+            self.clear_ime();
+            self.leave_copy_mode();
+            self.refresh_tab_bar();
+            self.show_active_terminal_at_bottom();
+            self.update_tab_hover(Some(position));
+            self.update_ime_cursor_area();
+        }
+        // A click on the strip belongs to Solito even when the tab is already active.
+        true
+    }
+
+    pub(super) fn update_tab_hover(&mut self, position: Option<PhysicalPosition<f64>>) {
+        if let Some(renderer) = &mut self.renderer {
+            let tab = position.and_then(|p| renderer.tab_at(p.x, p.y));
+            self.needs_redraw |= renderer.set_tab_hover(tab);
+            if let Some(window) = &self.window {
+                window.set_cursor(if tab.is_some() {
+                    winit::window::CursorIcon::Pointer
+                } else {
+                    winit::window::CursorIcon::Default
+                });
+            }
+        }
+    }
+
     fn mouse_mode(&mut self) -> MouseMode {
         let mode = self.tabs.active_mouse_mode();
         let context = (self.tabs.active_index(), mode, self.copy_mode.is_active());
@@ -125,17 +169,30 @@ impl SolitoApplication {
 }
 
 fn scroll_steps(remainder: &mut f64, delta: f64) -> i32 {
+    const MAX_STEPS_PER_EVENT: f64 = 256.0;
     if !delta.is_finite() {
         return 0;
     }
-    *remainder += delta;
-    let steps = remainder.trunc() as i32;
-    *remainder -= f64::from(steps);
-    steps
+    let total = *remainder + delta;
+    *remainder = total.fract();
+    // Bound PTY messages per event so an extreme wheel delta cannot stall input.
+    total
+        .trunc()
+        .clamp(-MAX_STEPS_PER_EVENT, MAX_STEPS_PER_EVENT) as i32
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn extreme_wheel_deltas_do_not_leave_unbounded_work_pending() {
+        let mut remainder = 0.0;
+        assert_eq!(super::scroll_steps(&mut remainder, f64::MAX), 256);
+        assert_eq!(super::scroll_steps(&mut remainder, 0.5), 0);
+        assert_eq!(super::scroll_steps(&mut remainder, 0.5), 1);
+        assert_eq!(super::scroll_steps(&mut remainder, -f64::MAX), -256);
+        assert_eq!(remainder, 0.0);
+    }
+
     #[test]
     fn touchpad_retains_fractional_scroll_in_both_directions() {
         let mut remainder = 0.0;

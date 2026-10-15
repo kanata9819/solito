@@ -25,8 +25,7 @@ impl TerminalView {
 
         let visible_row = self.snapshot.cursor_row - start;
         let caret_x = Self::PADDING_X + self.snapshot.cursor_col as f32 * self.glyphs.cell_width;
-        let caret_y =
-            Self::terminal_row_y(visible_row, self.config.line_height, self.has_tab_bar());
+        let caret_y = Self::terminal_row_y(visible_row, self.config.line_height);
 
         (
             caret_x,

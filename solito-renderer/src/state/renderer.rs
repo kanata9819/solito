@@ -2,7 +2,6 @@ use crate::terminal_view::{CopyModeSnapshot, TabBarSnapshot};
 use anyhow::Result;
 use solito_terminal::{ScreenSnapshot, TerminalSize};
 use std::sync::Arc;
-use wgpu::TextureFormat;
 use winit::{
     dpi::{PhysicalPosition, PhysicalSize},
     window::Window,
@@ -33,7 +32,7 @@ impl Renderer {
         let gpu = GpuContext::new(instance, &surface).await?;
         let window_surface = WindowSurface::new(window, surface, &gpu, size, &renderer_config);
         let render_resources = RenderResources::new(&gpu, &window_surface);
-        let swapchain_format = TextureFormat::Bgra8UnormSrgb;
+        let swapchain_format = window_surface.config.format;
         let terminal_view = TerminalView::new(
             &gpu.device,
             &gpu.queue,
@@ -71,6 +70,18 @@ impl Renderer {
 
     pub fn set_tab_bar(&mut self, snapshot: TabBarSnapshot) {
         self.terminal_view.set_tab_bar(snapshot);
+    }
+
+    pub fn tab_at(&self, x: f64, y: f64) -> Option<usize> {
+        self.terminal_view.tab_bar.tab_at(x, y)
+    }
+
+    pub fn set_tab_hover(&mut self, tab: Option<usize>) -> bool {
+        self.terminal_view.tab_bar.hover(tab)
+    }
+
+    pub fn set_focused(&mut self, focused: bool) -> bool {
+        self.terminal_view.tab_bar.focus(focused)
     }
 
     pub fn set_terminal_snapshot(&mut self, snapshot: ScreenSnapshot) {

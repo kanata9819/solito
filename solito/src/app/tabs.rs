@@ -152,6 +152,14 @@ impl<T> Tabs<T> {
         self.tabs.is_empty()
     }
 
+    pub(super) fn activate(&mut self, index: usize) -> bool {
+        if index >= self.tabs.len() || index == self.active {
+            return false;
+        }
+        self.active = index;
+        true
+    }
+
     fn push(&mut self, tab: T) {
         self.tabs.push(tab);
         self.active = self.tabs.len().saturating_sub(1);

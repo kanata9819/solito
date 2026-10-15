@@ -48,16 +48,17 @@ impl ViewportState {
     }
 
     pub(super) fn scroll(&mut self, y: f32, row_count: usize) {
-        self.scroll_accumulator += y;
-
-        while self.scroll_accumulator >= 1.0 {
-            self.scroll_offset = self.scroll_offset.saturating_add(1);
-            self.scroll_accumulator -= 1.0;
+        if !y.is_finite() {
+            return;
         }
-
-        while self.scroll_accumulator <= -1.0 {
-            self.scroll_offset = self.scroll_offset.saturating_sub(1);
-            self.scroll_accumulator += 1.0;
+        let total = f64::from(self.scroll_accumulator) + f64::from(y);
+        let steps = total.trunc();
+        self.scroll_accumulator = total.fract() as f32;
+        // Arithmetic stays bounded even when a device reports a huge delta.
+        if steps >= 0.0 {
+            self.scroll_offset = self.scroll_offset.saturating_add(steps as usize);
+        } else {
+            self.scroll_offset = self.scroll_offset.saturating_sub(-steps as usize);
         }
 
         self.clamp(row_count);
@@ -93,6 +94,20 @@ impl ViewportState {
 #[cfg(test)]
 mod tests {
     use super::ViewportState;
+
+    #[test]
+    fn extreme_scroll_is_bounded_and_preserves_fractional_input() {
+        let mut viewport = ViewportState::new(30, 10.0);
+        viewport.scroll(0.75, 100);
+        viewport.scroll(f32::NAN, 100);
+        viewport.scroll(f32::INFINITY, 100);
+        viewport.scroll(0.5, 100);
+        assert_eq!(viewport.visible_range(100), (96, 99));
+        viewport.scroll(f32::MAX, 100);
+        assert_eq!(viewport.visible_range(100), (0, 3));
+        viewport.scroll(-f32::MAX, 100);
+        assert_eq!(viewport.visible_range(100), (97, 100));
+    }
 
     #[test]
     fn scroll_to_start_preserves_visible_top_when_rows_grow() {
