@@ -405,7 +405,10 @@ mod tests {
     fn three_tabs() -> Tabs<FakeTab> {
         let mut tabs = Tabs::new();
         for title in ["first", "second", "third"] {
-            tabs.push(FakeTab { title, ..FakeTab::new() });
+            tabs.push(FakeTab {
+                title,
+                ..FakeTab::new()
+            });
         }
         tabs
     }
