@@ -1,6 +1,7 @@
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum AppEvent {
     TerminalOutputReady,
+    TerminalSessionExited,
 }
 
 /// Coalesce many PTY reads into one pending UI wake-up per tab.

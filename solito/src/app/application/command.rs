@@ -62,7 +62,7 @@ impl SolitoApplication {
                 self.leave_copy_mode();
                 if self.tabs.close_active() {
                     if self.tabs.is_empty() {
-                        event_loop.exit();
+                        self.close_window(event_loop);
                     } else {
                         self.refresh_tab_bar();
                         self.show_active_terminal_at_bottom();

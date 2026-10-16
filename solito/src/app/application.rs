@@ -141,6 +141,32 @@ impl SolitoApplication {
         }
     }
 
+    fn close_window(&mut self, event_loop: &ActiveEventLoop) {
+        // The renderer also owns the native window; hide it before exiting.
+        if let Some(window) = self.window.take() {
+            window.set_visible(false);
+        }
+        event_loop.exit();
+    }
+
+    fn close_exited_tabs(&mut self, event_loop: &ActiveEventLoop) {
+        let closed = self.tabs.close_exited();
+        if !closed.any_closed {
+            return;
+        }
+        if self.tabs.is_empty() {
+            self.close_window(event_loop);
+            return;
+        }
+        if closed.active_closed {
+            self.leave_copy_mode();
+            self.clear_ime();
+            self.show_active_terminal_at_bottom();
+            self.update_ime_cursor_area();
+        }
+        self.refresh_tab_bar();
+    }
+
     fn refresh_active_terminal(&mut self) {
         self.terminal_dirty = false;
         if let (Some(renderer), Some(mut snapshot)) =
@@ -295,9 +321,10 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
         }
     }
 
-    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: AppEvent) {
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: AppEvent) {
         match event {
             AppEvent::TerminalOutputReady => self.drain_terminal_output(),
+            AppEvent::TerminalSessionExited => self.close_exited_tabs(event_loop),
         }
     }
 
@@ -312,9 +339,7 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                 if let Some(window) = &self.window
                     && window.id() == window_id
                 {
-                    window.set_visible(false);
-                    self.window = None;
-                    event_loop.exit();
+                    self.close_window(event_loop);
                 }
             }
             WindowEvent::RedrawRequested => {

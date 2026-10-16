@@ -4,7 +4,11 @@ use anyhow::Result;
 use solito_terminal::{ScreenSnapshot, TerminalSize, TerminalState};
 use std::{
     path::Path,
-    sync::mpsc::{Receiver, Sender, channel, sync_channel},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc::{Receiver, Sender, channel, sync_channel},
+    },
 };
 use tracing::error;
 use winit::event_loop::EventLoopProxy;
@@ -16,6 +20,7 @@ pub(super) trait TerminalTab {
     fn snapshot(&self) -> ScreenSnapshot;
     fn title(&self) -> &str;
     fn drain_output(&mut self) -> bool;
+    fn has_exited(&self) -> bool;
     fn resize(&mut self, size: TerminalSize) -> Result<()>;
 }
 
@@ -25,6 +30,7 @@ pub(super) struct Tab {
     output_rx: Receiver<Vec<u8>>,
     title: String,
     output_notifier: OutputNotifier,
+    exited: Arc<AtomicBool>,
 }
 
 impl Tab {
@@ -38,7 +44,9 @@ impl Tab {
         let (output_tx, output_rx) = sync_channel::<Vec<u8>>(64);
         let title = tab_title_for_program(&shell_program);
 
-        let output_notifier = OutputNotifier::new(event_proxy);
+        let exited = Arc::new(AtomicBool::new(false));
+        let runtime_exited = exited.clone();
+        let output_notifier = OutputNotifier::new(event_proxy.clone());
         let runtime_notifier = output_notifier.clone();
         std::thread::spawn(move || {
             let result =
@@ -47,6 +55,10 @@ impl Tab {
             if let Err(err) = result {
                 error!("terminal session failed: {err}");
             }
+            // Publish completion before waking the UI, including silent exits.
+            // The flag belongs to this tab, so a late event cannot close a new tab.
+            runtime_exited.store(true, Ordering::Release);
+            let _ = event_proxy.send_event(AppEvent::TerminalSessionExited);
         });
 
         Self {
@@ -55,6 +67,7 @@ impl Tab {
             output_rx,
             title,
             output_notifier,
+            exited,
         }
     }
 }
@@ -70,6 +83,10 @@ impl TerminalTab for Tab {
 
     fn title(&self) -> &str {
         &self.title
+    }
+
+    fn has_exited(&self) -> bool {
+        self.exited.load(Ordering::Acquire)
     }
 
     fn drain_output(&mut self) -> bool {
@@ -120,6 +137,7 @@ impl AppTabs {
             output_rx,
             title: "fixture".into(),
             output_notifier: OutputNotifier::new(event_proxy),
+            exited: Default::default(),
         });
         (tabs, input_rx)
     }
@@ -128,6 +146,12 @@ impl AppTabs {
 pub(super) struct Tabs<T> {
     tabs: Vec<T>,
     active: usize,
+}
+
+#[derive(Default)]
+pub(super) struct ClosedTabs {
+    pub(super) any_closed: bool,
+    pub(super) active_closed: bool,
 }
 
 impl<T> Tabs<T> {
@@ -143,9 +167,17 @@ impl<T> Tabs<T> {
             return false;
         }
 
-        self.tabs.remove(self.active);
-        self.active = self.active.min(self.tabs.len().saturating_sub(1));
+        self.remove(self.active);
         true
+    }
+
+    fn remove(&mut self, index: usize) {
+        self.tabs.remove(index);
+        if index < self.active {
+            self.active -= 1;
+        } else {
+            self.active = self.active.min(self.tabs.len().saturating_sub(1));
+        }
     }
 
     pub(super) fn is_empty(&self) -> bool {
@@ -184,6 +216,19 @@ impl Tabs<Tab> {
 }
 
 impl<T: TerminalTab> Tabs<T> {
+    pub(super) fn close_exited(&mut self) -> ClosedTabs {
+        let mut closed = ClosedTabs::default();
+        // Remove back to front so earlier indexes remain valid.
+        for index in (0..self.tabs.len()).rev() {
+            if self.tabs[index].has_exited() {
+                closed.any_closed = true;
+                closed.active_closed |= index == self.active;
+                self.remove(index);
+            }
+        }
+        closed
+    }
+
     pub(super) fn active_input_tx(&self) -> Option<&Sender<SessionInput>> {
         self.active_tab().map(TerminalTab::input_tx)
     }
@@ -278,6 +323,8 @@ mod tests {
     struct FakeTab {
         input_tx: Sender<SessionInput>,
         _input_rx: Receiver<SessionInput>,
+        title: &'static str,
+        exited: bool,
     }
 
     impl FakeTab {
@@ -287,6 +334,8 @@ mod tests {
             Self {
                 input_tx,
                 _input_rx: input_rx,
+                title: "fake",
+                exited: false,
             }
         }
     }
@@ -301,7 +350,11 @@ mod tests {
         }
 
         fn title(&self) -> &str {
-            "fake"
+            self.title
+        }
+
+        fn has_exited(&self) -> bool {
+            self.exited
         }
 
         fn drain_output(&mut self) -> bool {
@@ -347,6 +400,58 @@ mod tests {
         assert!(tabs.close_active());
         assert!(tabs.is_empty());
         assert_eq!(tabs.active, 0);
+    }
+
+    fn three_tabs() -> Tabs<FakeTab> {
+        let mut tabs = Tabs::new();
+        for title in ["first", "second", "third"] {
+            tabs.push(FakeTab { title, ..FakeTab::new() });
+        }
+        tabs
+    }
+
+    #[test]
+    fn exiting_background_tabs_preserves_the_active_session() {
+        let mut tabs = three_tabs();
+        tabs.activate(1);
+        tabs.tabs[0].exited = true;
+        tabs.tabs[2].exited = true;
+        let closed = tabs.close_exited();
+        assert!(closed.any_closed);
+        assert!(!closed.active_closed);
+        assert_eq!(tabs.active_index(), 0);
+        assert_eq!(tabs.active_tab().unwrap().title(), "second");
+    }
+
+    #[test]
+    fn exiting_active_tab_selects_a_surviving_neighbor() {
+        let mut tabs = three_tabs();
+        tabs.activate(1);
+        tabs.tabs[1].exited = true;
+        let closed = tabs.close_exited();
+        assert!(closed.active_closed);
+        assert_eq!(tabs.active_tab().unwrap().title(), "third");
+        tabs.tabs[1].exited = true;
+        assert!(tabs.close_exited().active_closed);
+        assert_eq!(tabs.active_tab().unwrap().title(), "first");
+    }
+
+    #[test]
+    fn simultaneous_exits_empty_tabs_and_late_notifications_do_not_close_new_tabs() {
+        let mut tabs = three_tabs();
+        for tab in &mut tabs.tabs {
+            tab.exited = true;
+        }
+        let closed = tabs.close_exited();
+        assert!(closed.any_closed);
+        assert!(closed.active_closed);
+        assert!(tabs.is_empty());
+        assert_eq!(tabs.active_index(), 0);
+        tabs.push(FakeTab::new());
+        let closed = tabs.close_exited();
+        assert!(!closed.any_closed);
+        assert!(!closed.active_closed);
+        assert_eq!(tabs.titles(), ["fake"]);
     }
 
     #[test]
