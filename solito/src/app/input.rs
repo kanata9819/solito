@@ -70,6 +70,7 @@ pub(super) fn handle_key(
     text: Option<SmolStr>,
     logical_key: &Key<SmolStr>,
     key_state: ElementState,
+    is_synthetic: bool,
     modifiers: ModifiersState,
     copy_mode_active: bool,
     ime_composing: bool,
@@ -84,7 +85,7 @@ pub(super) fn handle_key(
     const ARROWLEFT: &[u8; 3] = b"\x1b[D";
 
     // Conversion keys belong to the IME, including Enter used to confirm a candidate.
-    if key_state != ElementState::Pressed || ime_composing {
+    if key_state != ElementState::Pressed || is_synthetic || ime_composing {
         return AppCommand::Noop;
     }
 
@@ -245,6 +246,7 @@ mod tests {
             None,
             &Key::Named(NamedKey::Enter),
             ElementState::Pressed,
+            false,
             ModifiersState::empty(),
             false,
             false,
@@ -259,6 +261,7 @@ mod tests {
             Some(SmolStr::new("あ")),
             &Key::Character(SmolStr::new("あ")),
             ElementState::Pressed,
+            false,
             ModifiersState::empty(),
             false,
             false,
@@ -276,6 +279,7 @@ mod tests {
             None,
             &Key::Character(SmolStr::new("c")),
             ElementState::Pressed,
+            false,
             ModifiersState::CONTROL,
             false,
             false,
@@ -290,6 +294,7 @@ mod tests {
             None,
             &Key::Character(SmolStr::new("e")),
             ElementState::Pressed,
+            false,
             ModifiersState::CONTROL,
             false,
             false,
@@ -304,12 +309,35 @@ mod tests {
             Some(SmolStr::new("a")),
             &Key::Character(SmolStr::new("a")),
             ElementState::Released,
+            false,
             ModifiersState::empty(),
             false,
             false,
         );
 
         assert_eq!(command, AppCommand::Noop);
+    }
+
+    #[test]
+    fn synthetic_focus_keys_do_not_send_input_or_run_shortcuts() {
+        for key in [
+            Key::Named(NamedKey::Tab),
+            Key::Named(NamedKey::Enter),
+            Key::Character("T".into()),
+        ] {
+            for is_synthetic in [true, false] {
+                let command = handle_key(
+                    None,
+                    &key,
+                    ElementState::Pressed,
+                    is_synthetic,
+                    ModifiersState::CONTROL | ModifiersState::SHIFT,
+                    false,
+                    false,
+                );
+                assert_eq!(command == AppCommand::Noop, is_synthetic);
+            }
+        }
     }
 
     #[test]
@@ -337,6 +365,7 @@ mod tests {
                 Some(SmolStr::new("n")),
                 &Key::Character(SmolStr::new("n")),
                 ElementState::Pressed,
+                false,
                 ModifiersState::empty(),
                 false,
                 ime.is_composing(),
@@ -354,6 +383,7 @@ mod tests {
                     None,
                     &Key::Named(key),
                     ElementState::Pressed,
+                    false,
                     ModifiersState::empty(),
                     false,
                     ime.is_composing()
@@ -386,6 +416,7 @@ mod tests {
                 None,
                 &Key::Named(NamedKey::Enter),
                 ElementState::Pressed,
+                false,
                 ModifiersState::empty(),
                 false,
                 ime.is_composing()

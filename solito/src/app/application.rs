@@ -364,6 +364,7 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                         text,
                         ..
                     },
+                is_synthetic,
                 ..
             } => {
                 if self.config.window.hide_cursor
@@ -378,6 +379,7 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                     text,
                     &logical_key,
                     key_state,
+                    is_synthetic,
                     self.modifiers,
                     self.copy_mode.is_active(),
                     self.ime.is_composing(),
@@ -445,6 +447,11 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                 self.update_tab_hover(None);
             }
             WindowEvent::Focused(true) => {
+                // Reset both sides of IME state after any queued blur events.
+                self.clear_ime();
+                if let Some(window) = &self.window {
+                    window.set_ime_allowed(!self.copy_mode.is_active());
+                }
                 if let Some(renderer) = &mut self.renderer {
                     self.needs_redraw |= renderer.set_focused(true);
                 }
@@ -458,6 +465,9 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                 }
             }
             WindowEvent::Focused(false) => {
+                if let Some(window) = &self.window {
+                    window.set_ime_allowed(false);
+                }
                 if let Some(renderer) = &mut self.renderer {
                     self.needs_redraw |= renderer.set_focused(false);
                 }
@@ -501,7 +511,7 @@ mod tests {
 
     #[test]
     #[ignore = "requires a Windows desktop and GPU adapter"]
-    fn focus_restore_preserves_terminal_geometry_and_requests_redraw() {
+    fn focus_restore_preserves_terminal_geometry_and_keyboard_input() {
         struct Regression {
             proxy: EventLoopProxy<AppEvent>,
             verified: bool,
@@ -578,6 +588,69 @@ mod tests {
                     input_rx.try_recv(),
                     Ok(crate::session::runtime::SessionInput::Resize(restored)) if restored == size
                 ));
+
+                app.window_event(event_loop, window.id(), WindowEvent::Focused(false));
+                // A queued IME update can arrive after the blur cleared the preedit.
+                app.window_event(
+                    event_loop,
+                    window.id(),
+                    WindowEvent::Ime(winit::event::Ime::Preedit("あ".into(), Some((3, 3)))),
+                );
+                assert!(app.ime.is_composing());
+                app.window_event(event_loop, window.id(), WindowEvent::Focused(true));
+                for (text, key, expected) in [
+                    (
+                        Some(winit::keyboard::SmolStr::new("a")),
+                        winit::keyboard::Key::Character("a".into()),
+                        b"a".to_vec(),
+                    ),
+                    (
+                        None,
+                        winit::keyboard::Key::Named(winit::keyboard::NamedKey::Enter),
+                        b"\r".to_vec(),
+                    ),
+                ] {
+                    let command = input::handle_key(
+                        text,
+                        &key,
+                        ElementState::Pressed,
+                        false,
+                        app.modifiers,
+                        app.copy_mode.is_active(),
+                        app.ime.is_composing(),
+                    );
+                    app.handle_keyboard_command(command, event_loop).unwrap();
+                    assert!(
+                        matches!(
+                            input_rx.try_recv(),
+                            Ok(crate::session::runtime::SessionInput::Write(bytes)) if bytes == expected
+                        ),
+                        "keyboard input must reach the terminal after focus returns"
+                    );
+                }
+
+                app.window_event(
+                    event_loop,
+                    window.id(),
+                    WindowEvent::Ime(winit::event::Ime::Preedit("日本語".into(), Some((0, 9)))),
+                );
+                assert!(app.ime.is_composing());
+                app.window_event(
+                    event_loop,
+                    window.id(),
+                    WindowEvent::Ime(winit::event::Ime::Commit("日本語".into())),
+                );
+                assert!(matches!(
+                    input_rx.try_recv(),
+                    Ok(crate::session::runtime::SessionInput::Write(bytes)) if bytes == "日本語".as_bytes()
+                ));
+                app.handle_keyboard_command(input::AppCommand::EnterCopyMode, event_loop)
+                    .unwrap();
+                app.window_event(event_loop, window.id(), WindowEvent::Focused(false));
+                app.window_event(event_loop, window.id(), WindowEvent::Focused(true));
+                assert!(app.copy_mode.is_active());
+                assert!(!app.ime.is_composing());
+                assert!(input_rx.try_recv().is_err());
 
                 self.verified = true;
                 event_loop.exit();
