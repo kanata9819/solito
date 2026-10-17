@@ -98,6 +98,57 @@ mod tests {
     }
 
     #[test]
+    fn resize_keeps_cursor_with_its_text_when_shrinking_height() {
+        for alternate in [false, true] {
+            let mut state = terminal(8, 5);
+            if alternate {
+                state.apply_terminal_output(b"\x1b[?1049h");
+            }
+            state.apply_terminal_output(b"A\r\nB\r\nC\r\nD\r\nE\x1b[2;2H");
+            let before = state.snapshot();
+            state.resize(TerminalSize::new(8, 3));
+            state.apply_terminal_output(b"X");
+            let snapshot = state.snapshot();
+            assert_eq!(snapshot.cursor_row, 1);
+            assert_eq!(line_text(&snapshot.lines[1]), "BX");
+            assert_eq!(line_text(&snapshot.lines[2]), "C");
+            assert_eq!(line_text(&before.lines[1]), "B");
+        }
+    }
+
+    #[test]
+    fn resize_does_not_restore_erased_text_from_outside_narrowed_screen() {
+        for text in ["ABCDEFGH", "ABC界XYZ"] {
+            let mut state = terminal(8, 3);
+            state.apply_terminal_output(text.as_bytes());
+            let before = state.snapshot();
+            state.resize(TerminalSize::new(4, 3));
+            let narrow = state.snapshot();
+            assert!(narrow.lines[0].len() <= 4);
+            assert_ne!(narrow.lines[0][3].ch, '界');
+            state.apply_terminal_output(b"\r\x1b[Kok");
+            state.resize(TerminalSize::new(8, 3));
+            assert_eq!(line_text(&state.snapshot().lines[0]).trim_end(), "ok");
+            assert_eq!(line_text(&before.lines[0]), text);
+        }
+    }
+
+    #[test]
+    fn resize_preserves_scrollback_and_the_resized_primary_screen() {
+        let mut state = terminal(8, 3);
+        state.apply_terminal_output(b"history!\r\nA\r\nB\r\nC\x1b7\x1b[?1049h");
+        state.resize(TerminalSize::new(4, 2));
+        state.apply_terminal_output(b"\x1b[?1049l\x1b8X");
+        let snapshot = state.snapshot();
+        assert_eq!(snapshot.lines.len(), 4);
+        assert_eq!(line_text(&snapshot.lines[0]), "history!");
+        assert_eq!(line_text(&snapshot.lines[1]), "A");
+        assert_eq!(line_text(&snapshot.lines[2]), "B");
+        assert_eq!(line_text(&snapshot.lines[3]), "CX");
+        assert_eq!((snapshot.cursor_row, snapshot.cursor_col), (3, 2));
+    }
+
+    #[test]
     fn line_feed_below_scroll_region_stays_inside_the_screen() {
         let mut state = terminal(8, 4);
         state.apply_terminal_output(b"A\r\nB\r\nC\r\nD\x1b[2;3r\x1b[4;1H\nX");

@@ -1,6 +1,7 @@
 use super::cursor::Cursor;
 use super::lines::ScreenLines;
 use crate::TerminalSize;
+use unicode_width::UnicodeWidthChar;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) struct CellStyle {
@@ -143,6 +144,13 @@ impl ScreenBuffer {
         if self.cols == size.cols && self.rows == size.rows {
             return;
         }
+        // Remove rows below the cursor before pushing its row into scrollback.
+        let top = self.get_viewport_top();
+        while self.lines.len() > top + size.rows
+            && self.lines.len() > self.cursor.get_current_row() + 1
+        {
+            self.lines.remove(self.lines.len() - 1);
+        }
         let full_height = self.scroll_region == (0, self.rows - 1);
         self.cols = size.cols;
         self.rows = size.rows;
@@ -154,6 +162,18 @@ impl ScreenBuffer {
                 .scroll_region
                 .1
                 .clamp(self.scroll_region.0, size.rows - 1);
+        }
+        // shortcut: clip visible rows; track soft wraps before adding resize reflow.
+        for row in self.get_viewport_top()..self.lines.len() {
+            if self.lines[row].len() > size.cols {
+                let line = &mut self.lines[row];
+                line.truncate(size.cols);
+                if let Some(last) = line.last_mut()
+                    && last.ch.width() == Some(2)
+                {
+                    *last = ScreenCell::blank(CellStyle::default());
+                }
+            }
         }
         // Preserve existing stops, including ones explicitly cleared by the application.
         let old_cols = self.tab_stops.len();
