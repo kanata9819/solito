@@ -46,6 +46,13 @@ fn main() {
         true,
     );
     measure(
+        "unchanged erase + snapshot",
+        b"\x1b[48;2;12;34;56m\x1b[2J",
+        [b"\x1b[2J"; 2],
+        5_000,
+        true,
+    );
+    measure(
         "scroll at history limit",
         history.as_bytes(),
         [line.as_bytes(); 2],

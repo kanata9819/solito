@@ -59,6 +59,97 @@ mod tests {
     }
 
     #[test]
+    fn cursor_position_materializes_blank_rows_without_printing() {
+        let mut state = terminal(8, 5);
+        state.apply_terminal_output(b"\x1b[5;3H");
+        let snapshot = state.snapshot();
+        assert_eq!((snapshot.cursor_row, snapshot.cursor_col), (4, 2));
+        assert_eq!(snapshot.lines.len(), 5);
+        assert!(snapshot.lines.iter().all(|line| line.is_empty()));
+    }
+
+    #[test]
+    fn resetting_scroll_margins_restores_scrollback() {
+        for reset in [b"\x1b[r".as_slice(), b"\x1b[1;3r"] {
+            let mut state = terminal(8, 3);
+            state.apply_terminal_output(b"\x1b[2;3r");
+            state.apply_terminal_output(reset);
+            state.apply_terminal_output(b"A\r\nB\r\nC\r\nD");
+            let snapshot = state.snapshot();
+            assert_eq!(snapshot.lines.len(), 4);
+            assert_eq!(line_text(&snapshot.lines[0]), "A");
+            assert_eq!(line_text(&snapshot.lines[3]), "D");
+        }
+    }
+
+    #[test]
+    fn resizing_a_partial_scroll_region_to_full_height_restores_scrollback() {
+        let mut state = terminal(8, 5);
+        state.apply_terminal_output(b"\x1b[1;3r");
+        state.resize(TerminalSize::new(8, 3));
+        state.apply_terminal_output(b"A\r\nB\r\nC\r\nD");
+        let snapshot = state.snapshot();
+        assert_eq!(snapshot.lines.len(), 4);
+        assert_eq!(line_text(&snapshot.lines[0]), "A");
+        assert_eq!(line_text(&snapshot.lines[3]), "D");
+    }
+
+    #[test]
+    fn partial_scroll_region_preserves_rows_outside_its_margins() {
+        let mut state = terminal(8, 4);
+        state.apply_terminal_output(b"A\r\nB\r\nC\r\nD\x1b[2;3r\x1b[3;1H\r\nZ");
+        let snapshot = state.snapshot();
+        let lines: Vec<_> = snapshot.lines.iter().map(|line| line_text(line)).collect();
+        assert_eq!(lines, ["A", "C", "Z", "D"]);
+    }
+
+    #[test]
+    fn origin_mode_and_scroll_margins_home_the_cursor() {
+        let mut state = terminal(8, 5);
+        state.apply_terminal_output(b"\x1b[2;4r\x1b[4;5H\x1b[?6h\x1b[6n");
+        assert_eq!(
+            (state.snapshot().cursor_row, state.snapshot().cursor_col),
+            (1, 0)
+        );
+        assert_eq!(state.take_responses(), b"\x1b[1;1R");
+        state.apply_terminal_output(b"\x1b[3;5r\x1b[6n");
+        assert_eq!(
+            (state.snapshot().cursor_row, state.snapshot().cursor_col),
+            (2, 0)
+        );
+        assert_eq!(state.take_responses(), b"\x1b[1;1R");
+        state.apply_terminal_output(b"\x1b[?6l\x1b[6n");
+        assert_eq!(
+            (state.snapshot().cursor_row, state.snapshot().cursor_col),
+            (0, 0)
+        );
+        assert_eq!(state.take_responses(), b"\x1b[1;1R");
+    }
+
+    #[test]
+    fn repeated_erasure_keeps_unchanged_row_storage() {
+        for background in [b"".as_slice(), b"\x1b[48;2;12;34;56m"] {
+            for erase in [b"\x1b[2J".as_slice(), b"\x1b[2K", b"\x1b[3X"] {
+                let mut state = terminal(8, 3);
+                state.apply_terminal_output(b"ABCDEFGH\x1b[H");
+                state.apply_terminal_output(background);
+                state.apply_terminal_output(erase);
+                let before = state.snapshot();
+                state.apply_terminal_output(erase);
+                let after = state.snapshot();
+                assert!(after.lines.iter().eq(before.lines.iter()));
+                assert!(
+                    before
+                        .lines
+                        .iter()
+                        .zip(after.lines.iter())
+                        .all(|(old, new)| { old.shares_storage_with(new) })
+                );
+            }
+        }
+    }
+
+    #[test]
     fn overwriting_wide_cells_clears_both_halves() {
         for (input, expected) in [
             ("界Z\x1b[1;1Hx", "x Z"),

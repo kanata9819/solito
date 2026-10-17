@@ -199,6 +199,20 @@ mod tests {
             config,
             glyphon::FontSystem::new(),
         );
+        let mut blank = TerminalState::new(TerminalSize::new(80, 3));
+        blank.apply_terminal_output(b"\x1b[3;4H");
+        view.set_snapshot(blank.snapshot());
+        assert!(view.update_text_buffer());
+        assert_eq!(
+            view.caret_rect(),
+            (
+                TerminalView::PADDING_X + 3.0 * view.glyphs.cell_width,
+                TerminalView::terminal_row_y(2, view.config.line_height),
+                view.glyphs.cell_width,
+                view.config.line_height,
+            ),
+            "moving to an empty row must keep the cursor visible without printing"
+        );
         let mut startup = TerminalState::new(TerminalSize::new(80, 3));
         startup.apply_terminal_output(b"Welcome to Nushell");
         view.set_snapshot(startup.snapshot());

@@ -57,7 +57,7 @@ impl Screen {
         while self.screen_buffer.lines.len() <= row {
             self.screen_buffer.lines.push_back(ScreenLine::default());
         }
-        let line = &mut self.screen_buffer.lines[row];
+        let line = &self.screen_buffer.lines[row];
         // Erasing either half of a wide character clears both cells.
         if line
             .get(start)
@@ -72,23 +72,27 @@ impl Screen {
             bg_rgba: self.screen_buffer.style.bg_rgba,
             ..CellStyle::default()
         });
+        if blank.background_rgba().is_none() {
+            // Default blanks beyond the stored text need no allocation.
+            end = end.min(line.len());
+        }
+        if start >= end || (line.len() >= end && line[start..end].iter().all(|cell| *cell == blank))
+        {
+            return;
+        }
+        let line = &mut self.screen_buffer.lines[row];
         if blank.background_rgba().is_some() {
             // Missing cells are default blanks, not part of the colored erase.
             let length = line.len().max(end);
             line.resize(length, ScreenCell::blank(CellStyle::default()));
-        } else {
-            // Default blanks beyond the stored text need no allocation.
-            end = end.min(line.len());
         }
-        if start < end {
-            line[start..end].fill(blank);
-        }
+        line[start..end].fill(blank);
     }
 
     fn erase_line_range(&mut self, row: usize, start: usize, end: usize) {
         self.erase_cells(row, start, end);
         // Keep the sparse representation: trailing default blanks are implicit.
-        let Some(line) = self.screen_buffer.lines.get_mut(row) else {
+        let Some(line) = self.screen_buffer.lines.get(row) else {
             return;
         };
         let blank = ScreenCell::blank(CellStyle::default());
@@ -97,7 +101,7 @@ impl Screen {
             .rposition(|cell| *cell != blank)
             .map_or(0, |col| col + 1);
         if keep < line.len() {
-            line.truncate(keep);
+            self.screen_buffer.lines[row].truncate(keep);
         }
     }
 
@@ -120,6 +124,7 @@ impl Screen {
             col: position.col.min(self.screen_buffer.cols() - 1),
         });
         self.screen_buffer.pending_wrap = false;
+        self.screen_buffer.ensure_cursor_line();
     }
 
     pub(super) fn apply_csi(&mut self, message: CsiMessage) {
@@ -466,8 +471,10 @@ impl Screen {
             .saturating_sub(1)
             .clamp(top, rows.saturating_sub(1));
         self.screen_buffer.scroll_region = (top, bottom);
-        self.screen_buffer.scroll_region_active = true;
-        self.move_cursor_to(CursorPosition { row: 0, col: 0 });
+        self.move_cursor_to(CursorPosition {
+            row: self.cursor_row_from_viewport(0),
+            col: 0,
+        });
     }
 
     fn scroll_up(&mut self, amount: usize) {
@@ -679,7 +686,7 @@ impl Screen {
 
     fn index(&mut self) {
         let cursor_row = self.screen_buffer.cursor.get_current_row();
-        if self.screen_buffer.scroll_region_active {
+        if self.screen_buffer.scroll_region != (0, self.screen_buffer.rows() - 1) {
             let (top, bottom) = self.scroll_region_bounds();
             if (top..=bottom).contains(&cursor_row) && cursor_row == bottom {
                 self.scroll_up(1);
@@ -699,7 +706,7 @@ impl Screen {
 
     fn reverse_index(&mut self) {
         let cursor_row = self.screen_buffer.cursor.get_current_row();
-        if self.screen_buffer.scroll_region_active {
+        if self.screen_buffer.scroll_region != (0, self.screen_buffer.rows() - 1) {
             let (top, bottom) = self.scroll_region_bounds();
             if (top..=bottom).contains(&cursor_row) && cursor_row == top {
                 self.scroll_down(1);
@@ -736,7 +743,13 @@ impl Screen {
             if private {
                 self.mouse_mode.set(*mode, true);
                 match mode {
-                    6 => self.screen_buffer.origin_mode = true,
+                    6 => {
+                        self.screen_buffer.origin_mode = true;
+                        self.move_cursor_to(CursorPosition {
+                            row: self.screen_buffer.scroll_region.0,
+                            col: 0,
+                        });
+                    }
                     7 => self.screen_buffer.auto_wrap = true,
                     25 => self.screen_buffer.cursor_visible = true,
                     47 | 1047 => self.enter_alternate_screen(false),
@@ -755,7 +768,10 @@ impl Screen {
             if private {
                 self.mouse_mode.set(*mode, false);
                 match mode {
-                    6 => self.screen_buffer.origin_mode = false,
+                    6 => {
+                        self.screen_buffer.origin_mode = false;
+                        self.move_cursor_to(CursorPosition { row: 0, col: 0 });
+                    }
                     7 => self.screen_buffer.auto_wrap = false,
                     25 => self.screen_buffer.cursor_visible = false,
                     47 | 1047 => self.leave_alternate_screen(false),
