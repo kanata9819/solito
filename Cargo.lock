@@ -2292,6 +2292,7 @@ dependencies = [
  "solito-config",
  "solito-terminal",
  "tracing",
+ "unicode-script",
  "unicode-width",
  "wgpu",
  "windows-sys 0.61.2",

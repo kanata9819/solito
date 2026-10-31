@@ -11,7 +11,7 @@ use crate::{
     RendererConfig,
     pipeline::rect,
     state::{gpu::GpuContext, resources::RenderResources, surface::WindowSurface},
-    terminal_view::TerminalView,
+    terminal_view::{TerminalView, new_font_system},
 };
 
 /// Owns the GPU, window surface, and terminal view used to draw one window.
@@ -25,7 +25,7 @@ pub struct Renderer {
 impl Renderer {
     pub async fn new(window: Arc<Window>, renderer_config: RendererConfig) -> Result<Self> {
         // Font discovery does not depend on the GPU; overlap the two startup costs.
-        let fonts = std::thread::spawn(glyphon::FontSystem::new);
+        let fonts = std::thread::spawn(new_font_system);
         let size = window.inner_size();
         let instance = GpuContext::create_instance();
         let surface = instance.create_surface(window.clone())?;

@@ -22,6 +22,9 @@ windows-sys = { version = "0.61.2", features = [
 ] }
 winit.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+unicode-script = "0.5.8"
+
 [dev-dependencies]
 pollster = "1.0.1"
 png = "0.18.1"

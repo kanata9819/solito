@@ -201,7 +201,7 @@ fn verify_text_rasterization(renderer: &mut Renderer, output: &Path) {
                     renderer.window_surface.config.height,
                 ),
                 config,
-                glyphon::FontSystem::new(),
+                crate::terminal_view::new_font_system(),
             );
             let mut terminal = TerminalState::new(renderer.terminal_size());
             terminal.apply_terminal_output(
