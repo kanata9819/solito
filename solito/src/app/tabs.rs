@@ -303,12 +303,18 @@ fn tab_title_for_program(program: &str) -> String {
         return "shell".to_string();
     }
 
-    Path::new(program)
+    // Split on both separators so Windows-style paths in a shared config
+    // produce the same title on every platform.
+    let file_name = program
+        .rsplit(['/', '\\'])
+        .find(|segment| !segment.is_empty())
+        .unwrap_or(program);
+
+    Path::new(file_name)
         .file_stem()
-        .or_else(|| Path::new(program).file_name())
         .and_then(|title| title.to_str())
         .filter(|title| !title.is_empty())
-        .unwrap_or(program)
+        .unwrap_or(file_name)
         .to_string()
 }
 

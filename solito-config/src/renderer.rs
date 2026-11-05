@@ -24,7 +24,11 @@ impl WindowBackdrop {
 }
 
 impl RendererConfig {
+    #[cfg(target_os = "windows")]
     pub const DEFAULT_FONT_FAMILY: &str = "Cascadia Mono";
+    /// Generic name resolved to the system's default monospace font.
+    #[cfg(not(target_os = "windows"))]
+    pub const DEFAULT_FONT_FAMILY: &str = "monospace";
     pub const DEFAULT_FONT_SIZE: f32 = 20.0;
     pub const DEFAULT_LINE_HEIGHT: f32 = 30.0;
     pub const DEFAULT_WINDOW_BACKDROP: WindowBackdrop = WindowBackdrop::Acrylic;
