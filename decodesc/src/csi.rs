@@ -48,7 +48,9 @@ pub enum CsiMessage {
     RepeatPrecedingCharacter(u16),
     SaveCursor,
     RestoreCursor,
-    SelectGraphicRendition(Vec<u16>),
+    /// SGR parameters grouped as sent: each entry is one `;`-separated
+    /// parameter followed by its `:`-separated subparameters.
+    SelectGraphicRendition(Vec<Vec<u16>>),
     DeviceStatusReport(u16),
     SetMode {
         /// Whether the CSI sequence uses the `?` prefix,
@@ -172,11 +174,11 @@ fn param_optional(params: &Params, index: usize) -> Option<u16> {
         .filter(|value| *value > 0)
 }
 
-fn graphics_rendition_params(params: &Params) -> Vec<u16> {
-    let collected = params_to_vec(params);
+fn graphics_rendition_params(params: &Params) -> Vec<Vec<u16>> {
+    let collected: Vec<Vec<u16>> = params.iter().map(<[u16]>::to_vec).collect();
 
     if collected.is_empty() {
-        vec![0]
+        vec![vec![0]]
     } else {
         collected
     }
@@ -289,5 +291,21 @@ mod tests {
             }
         );
         assert_eq!(decode(b"\x1b[?25h"), CsiMessage::ShowCursor);
+    }
+
+    #[test]
+    fn keeps_sgr_subparameters_grouped() {
+        assert_eq!(
+            decode(b"\x1b[1;38:2::255:0:0m"),
+            CsiMessage::SelectGraphicRendition(vec![vec![1], vec![38, 2, 0, 255, 0, 0]])
+        );
+        assert_eq!(
+            decode(b"\x1b[38;5;196m"),
+            CsiMessage::SelectGraphicRendition(vec![vec![38], vec![5], vec![196]])
+        );
+        assert_eq!(
+            decode(b"\x1b[m"),
+            CsiMessage::SelectGraphicRendition(vec![vec![0]])
+        );
     }
 }
