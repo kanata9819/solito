@@ -1,10 +1,12 @@
-use glyphon::{Attrs, AttrsList, BufferLine, Color, Family, Shaping};
+use glyphon::{Attrs, AttrsList, BufferLine, Color, Shaping};
 use solito_terminal::ScreenCell;
 use solito_terminal::ScreenLine;
 use std::collections::{BTreeSet, HashMap};
 
 use crate::{
-    pipeline::rect::RectSpec, terminal_view::glyph::GlyphonResources, util::color::ThemeColor,
+    pipeline::rect::RectSpec,
+    terminal_view::glyph::{GlyphonResources, terminal_font_family},
+    util::color::ThemeColor,
     util::color::rgba_to_f32,
 };
 
@@ -161,7 +163,7 @@ impl TerminalView {
     }
 
     pub(super) fn text_attrs<'a>(color: Option<[u8; 4]>, font_family: &'a str) -> Attrs<'a> {
-        let attrs = Attrs::new().family(Family::Name(font_family));
+        let attrs = Attrs::new().family(terminal_font_family(font_family));
 
         match color {
             Some([r, g, b, a]) => attrs.color(Color::rgba(r, g, b, a)),

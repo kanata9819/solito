@@ -407,7 +407,7 @@ mod tests {
     }
 
     #[test]
-    fn history_is_bounded_and_saved_cursor_tracks_retained_rows() {
+    fn history_is_bounded_and_saved_cursor_keeps_its_screen_row() {
         let mut state = terminal(12, 3);
         for _ in 0..10_002 {
             state.apply_terminal_output(b"row\r\n");
@@ -418,9 +418,67 @@ mod tests {
         let after = state.snapshot();
         assert_eq!(after.lines.len(), 10_003);
         assert_eq!(after.history_start, 2);
-        assert_eq!(after.cursor_row, before.cursor_row - 2);
+        // DECRC returns to the same visible row even though the screen scrolled.
+        assert_eq!(after.cursor_row, before.cursor_row);
         assert_eq!(before.history_start, 0);
         assert!(before.lines[2].shares_storage_with(&after.lines[0]));
+    }
+
+    #[test]
+    fn restore_cursor_uses_screen_row_after_scrolling() {
+        let mut state = terminal(8, 3);
+        state.apply_terminal_output(b"\x1b[2;4H\x1b7");
+        state.apply_terminal_output(b"\x1b[3;1Ha\r\nb\r\nc\x1b8X");
+        let snapshot = state.snapshot();
+        let top = snapshot.lines.len() - 3;
+
+        assert_eq!(snapshot.cursor_row, top + 1);
+        assert_eq!(snapshot.cursor_col, 4);
+        assert_eq!(line_text(&snapshot.lines[top + 1])[3..4], *"X");
+    }
+
+    #[test]
+    fn restore_cursor_restores_graphic_rendition() {
+        let mut state = terminal(8, 2);
+        state.apply_terminal_output(b"\x1b[31m\x1b7\x1b[0m\x1b8a\x1b[0mb");
+        let snapshot = state.snapshot();
+
+        assert_eq!(
+            snapshot.lines[0][0].foreground_rgba(),
+            Some([197, 15, 31, 255])
+        );
+        assert_eq!(snapshot.lines[0][1].foreground_rgba(), None);
+    }
+
+    #[test]
+    fn restore_cursor_restores_origin_mode() {
+        let mut state = terminal(8, 4);
+        // Save with origin mode off, then enable it inside a scroll region.
+        state.apply_terminal_output(b"\x1b7\x1b[2;3r\x1b[?6h\x1b8\x1b[1;1HZ");
+        let snapshot = state.snapshot();
+
+        assert_eq!(line_text(&snapshot.lines[0]).chars().next(), Some('Z'));
+    }
+
+    #[test]
+    fn zero_width_characters_do_not_take_cells() {
+        let mut state = terminal(8, 2);
+        // Combining acute accent, zero-width joiner and variation selector 16.
+        state.apply_terminal_output("e\u{301}a\u{200d}b\u{fe0f}X".as_bytes());
+        let snapshot = state.snapshot();
+
+        assert_eq!(line_text(&snapshot.lines[0]), "eabX");
+        assert_eq!(snapshot.cursor_col, 4);
+    }
+
+    #[test]
+    fn zero_width_character_does_not_trigger_pending_wrap() {
+        let mut state = terminal(3, 2);
+        state.apply_terminal_output("abc\u{301}".as_bytes());
+        let snapshot = state.snapshot();
+
+        assert_eq!(line_text(&snapshot.lines[0]), "abc");
+        assert_eq!(snapshot.cursor_row, 0);
     }
 
     #[test]

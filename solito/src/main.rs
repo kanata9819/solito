@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+#[cfg(windows)]
 mod panic;
 mod session;
 
@@ -12,9 +13,8 @@ use winit::event_loop::EventLoop;
 use crate::app::{application::SolitoApplication, event::AppEvent};
 
 fn main() -> Result<()> {
-    if cfg!(windows) {
-        panic::attach_handler();
-    }
+    #[cfg(windows)]
+    panic::attach_handler();
     let config = AppConfig::load_or_create()?;
     init_tracing(&config);
     run_app(config)?;

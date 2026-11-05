@@ -7,6 +7,16 @@ use wgpu::MultisampleState;
 
 use crate::RendererConfig;
 
+/// Maps a configured font name to a font family, treating the generic
+/// `monospace` name as the system's default monospace font.
+pub(crate) fn terminal_font_family(name: &str) -> Family<'_> {
+    if name.trim().eq_ignore_ascii_case("monospace") {
+        Family::Monospace
+    } else {
+        Family::Name(name)
+    }
+}
+
 pub(crate) fn new_font_system() -> FontSystem {
     let fonts = FontSystem::new();
     #[cfg(target_os = "windows")]
@@ -233,7 +243,7 @@ impl GlyphonResources {
 
         buffer.set_text(
             text,
-            &Attrs::new().family(Family::Name(config.font_family.as_str())),
+            &Attrs::new().family(terminal_font_family(config.font_family.as_str())),
             Shaping::Advanced,
             None,
         );

@@ -1,8 +1,22 @@
+use super::buffer::CellStyle;
+
 #[derive(Clone, Default, Debug)]
 pub(super) struct Cursor {
     cursor_col: usize,
     cursor_row: usize,
-    saved_cursor: Option<CursorPosition>,
+    saved_cursor: Option<SavedCursor>,
+}
+
+/// State saved by DECSC. The row is relative to the visible screen, like
+/// xterm, so output that scrolls the screen does not move the restore target.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct SavedCursor {
+    pub(super) screen_row: usize,
+    pub(super) col: usize,
+    pub(super) style: CellStyle,
+    pub(super) origin_mode: bool,
+    pub(super) auto_wrap: bool,
+    pub(super) pending_wrap: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -14,9 +28,6 @@ pub(super) struct CursorPosition {
 impl Cursor {
     pub(super) fn discard_rows(&mut self, count: usize) {
         self.cursor_row = self.cursor_row.saturating_sub(count);
-        if let Some(saved) = &mut self.saved_cursor {
-            saved.row = saved.row.saturating_sub(count);
-        }
     }
 
     pub(super) fn get_current_row(&self) -> usize {
@@ -52,11 +63,11 @@ impl Cursor {
         self.cursor_row = row;
     }
 
-    pub(super) fn save_cursor_position(&mut self, position: CursorPosition) {
-        self.saved_cursor = Some(position);
+    pub(super) fn save(&mut self, saved: SavedCursor) {
+        self.saved_cursor = Some(saved);
     }
 
-    pub(super) fn get_saved_cursor_position(&self) -> Option<CursorPosition> {
+    pub(super) fn saved(&self) -> Option<SavedCursor> {
         self.saved_cursor
     }
 }
