@@ -1,5 +1,5 @@
 use super::buffer::{CellStyle, ScreenBuffer, ScreenCell, ScreenLine, ScreenSnapshot};
-use super::cursor::CursorPosition;
+use super::cursor::{CursorPosition, SavedCursor};
 use super::sgr;
 use crate::TerminalSize;
 use decodesc::{CsiMessage, EraseMode, EscMessage, OscMessage, TabClearMode};
@@ -246,7 +246,13 @@ impl Screen {
         let char_width = if c.is_ascii() {
             1
         } else {
-            UnicodeWidthChar::width(c).unwrap_or(1).clamp(1, 2)
+            match UnicodeWidthChar::width(c) {
+                // Combining marks, ZWJ and variation selectors occupy no cell.
+                // Cells hold one char, so drop them rather than shifting the
+                // rest of the line out of step with the shell's cursor.
+                Some(0) => return,
+                width => width.unwrap_or(1).clamp(1, 2),
+            }
         };
         if char_width > self.screen_buffer.cols() {
             return;
@@ -658,24 +664,39 @@ impl Screen {
     }
 
     fn save_cursor_position(&mut self) {
-        self.screen_buffer
+        let buffer = &mut self.screen_buffer;
+        let screen_row = buffer
             .cursor
-            .save_cursor_position(CursorPosition {
-                row: self.screen_buffer.cursor.get_current_row(),
-                col: self.screen_buffer.cursor.get_current_col(),
-            });
+            .get_current_row()
+            .saturating_sub(buffer.get_viewport_top());
+        let saved = SavedCursor {
+            screen_row,
+            col: buffer.cursor.get_current_col(),
+            style: buffer.style,
+            origin_mode: buffer.origin_mode,
+            auto_wrap: buffer.auto_wrap,
+            pending_wrap: buffer.pending_wrap,
+        };
+        buffer.cursor.save(saved);
     }
 
     fn restore_cursor_position(&mut self) {
-        if let Some(pos) = self.screen_buffer.cursor.get_saved_cursor_position() {
-            let top = self.screen_buffer.get_viewport_top();
-            self.screen_buffer.cursor.move_to(CursorPosition {
-                row: pos.row.clamp(top, top + self.screen_buffer.rows() - 1),
-                col: pos.col.min(self.screen_buffer.cols() - 1),
-            });
-            self.screen_buffer.pending_wrap = false;
-            self.screen_buffer.ensure_cursor_line();
-        }
+        let buffer = &mut self.screen_buffer;
+        let Some(saved) = buffer.cursor.saved() else {
+            return;
+        };
+        let top = buffer.get_viewport_top();
+        let col = saved.col.min(buffer.cols() - 1);
+        buffer.cursor.move_to(CursorPosition {
+            row: top + saved.screen_row.min(buffer.rows() - 1),
+            col,
+        });
+        buffer.style = saved.style;
+        buffer.origin_mode = saved.origin_mode;
+        buffer.auto_wrap = saved.auto_wrap;
+        // A pending wrap only makes sense if the column survived a resize.
+        buffer.pending_wrap = saved.pending_wrap && col == saved.col;
+        buffer.ensure_cursor_line();
     }
 
     fn advance_to_next_line(&mut self) {
