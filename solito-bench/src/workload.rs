@@ -69,17 +69,15 @@ pub fn run_from_environment() -> Result<()> {
         anyhow::bail!("{DURATION_ENV} and {FPS_ENV} must be greater than zero");
     }
 
-    if let Some(path) = env::var_os(READY_FILE_ENV) {
-        // The parent starts measurement only after the PTY child confirms that
-        // the benchmark workload, rather than an idle shell, is running.
-        fs::write(path, std::process::id().to_string())?;
-    }
-
-    run(&WorkloadConfig {
-        mode,
-        duration_seconds,
-        fps,
-    })?;
+    let ready_file = env::var_os(READY_FILE_ENV);
+    run(
+        &WorkloadConfig {
+            mode,
+            duration_seconds,
+            fps,
+        },
+        ready_file.as_deref().map(Path::new),
+    )?;
     Ok(())
 }
 
@@ -98,9 +96,9 @@ where
     }
 }
 
-pub fn run(config: &WorkloadConfig) -> io::Result<()> {
+pub fn run(config: &WorkloadConfig, ready_file: Option<&Path>) -> io::Result<()> {
     if config.mode == WorkloadMode::Nvim {
-        return run_nvim(config);
+        return run_nvim(config, ready_file);
     }
 
     let mut output = io::stdout().lock();
@@ -113,7 +111,10 @@ pub fn run(config: &WorkloadConfig) -> io::Result<()> {
     output.write_all(b"\x1b[?1049h\x1b[?25l")?;
     if config.mode == WorkloadMode::Incremental {
         output.write_all(&full_frame(0))?;
-        output.flush()?;
+    }
+    output.flush()?;
+    if let Some(path) = ready_file {
+        fs::write(path, std::process::id().to_string())?;
     }
 
     while started.elapsed() < duration {
@@ -132,7 +133,7 @@ pub fn run(config: &WorkloadConfig) -> io::Result<()> {
     output.flush()
 }
 
-fn run_nvim(config: &WorkloadConfig) -> io::Result<()> {
+fn run_nvim(config: &WorkloadConfig, ready_file: Option<&Path>) -> io::Result<()> {
     let nvim = nvim_executable();
     if !nvim.is_file() {
         return Err(io::Error::new(
@@ -146,6 +147,7 @@ fn run_nvim(config: &WorkloadConfig) -> io::Result<()> {
 
     let script = TemporaryNvimScript::create(config)?;
     let status = Command::new(&nvim)
+        .env(READY_FILE_ENV, ready_file.unwrap_or(Path::new("")))
         .arg("--clean")
         .arg("-S")
         .arg(script.path())
@@ -201,6 +203,7 @@ local update = uv.new_timer()
 local finish = uv.new_timer()
 _G.solito_bench_update = update
 _G.solito_bench_finish = finish
+local ready_file = vim.env.{READY_FILE_ENV}
 
 update:start(0, {interval_ms}, function()
   vim.schedule(function()
@@ -216,6 +219,12 @@ update:start(0, {interval_ms}, function()
     }})
     vim.cmd("normal! zz")
     vim.cmd("redraw!")
+    if frame == 1 and ready_file and ready_file ~= "" then
+      local ok, result = pcall(vim.fn.writefile, {{ tostring(vim.fn.getpid()) }}, ready_file)
+      if not ok or result ~= 0 then
+        vim.cmd("cquit")
+      end
+    end
   end)
 end)
 

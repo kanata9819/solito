@@ -34,6 +34,7 @@ pub(crate) struct SolitoApplication {
     modifiers: ModifiersState,
     ime: input::ImeInput,
     mouse: mouse::MouseInputState,
+    clipboard: Option<arboard::Clipboard>,
     event_proxy: EventLoopProxy<AppEvent>,
     // State updates set this flag; about_to_wait requests a redraw; RedrawRequested draws.
     needs_redraw: bool,
@@ -55,6 +56,7 @@ impl SolitoApplication {
             modifiers: ModifiersState::default(),
             ime: Default::default(),
             mouse: Default::default(),
+            clipboard: None,
             event_proxy,
             needs_redraw: false,
             terminal_dirty: false,
@@ -311,6 +313,10 @@ impl SolitoApplication {
 }
 
 impl ApplicationHandler<AppEvent> for SolitoApplication {
+    fn exiting(&mut self, _: &ActiveEventLoop) {
+        self.clipboard = None;
+    }
+
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none()
             && let Err(err) = self.create_window(event_loop)

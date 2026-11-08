@@ -708,19 +708,22 @@ impl Screen {
 
     fn index(&mut self) {
         let cursor_row = self.screen_buffer.cursor.get_current_row();
+        let screen_bottom = self.screen_buffer.get_viewport_top() + self.screen_buffer.rows() - 1;
         if self.screen_buffer.scroll_region != (0, self.screen_buffer.rows() - 1) {
             let (top, bottom) = self.scroll_region_bounds();
             if (top..=bottom).contains(&cursor_row) && cursor_row == bottom {
                 self.scroll_up(1);
             } else {
-                let screen_bottom =
-                    self.screen_buffer.get_viewport_top() + self.screen_buffer.rows() - 1;
                 self.screen_buffer
                     .cursor
                     .move_to_row((cursor_row + 1).min(screen_bottom));
             }
         } else {
             self.screen_buffer.cursor.move_down();
+            if cursor_row == screen_bottom {
+                let blank = self.erase_blank_line();
+                self.screen_buffer.lines.push_back(blank);
+            }
         }
         self.screen_buffer.pending_wrap = false;
         self.screen_buffer.ensure_cursor_line();

@@ -111,11 +111,12 @@ impl TerminalView {
                 .cursor
                 .col
                 .min(Self::display_col_count(lines, copy_mode.cursor.row) - 1);
+            let cursor_end = Self::glyph_end_col(lines, copy_mode.cursor.row, cursor_col);
 
             rects.push(RectSpec::new(
                 Self::PADDING_X + cursor_col as f32 * cell_width,
                 Self::terminal_row_y(visible_row, line_height),
-                cell_width,
+                (cursor_end - cursor_col) as f32 * cell_width,
                 line_height,
                 Self::COPY_MODE_CURSOR_COLOR,
             ));
@@ -155,7 +156,7 @@ impl TerminalView {
                     0
                 };
                 let end_col = if row == end.row {
-                    end.col.min(col_count - 1) + 1
+                    Self::glyph_end_col(lines, row, end.col.min(col_count - 1))
                 } else {
                     col_count
                 };
@@ -163,5 +164,49 @@ impl TerminalView {
                 Some((start_col, end_col))
             }
         }
+    }
+
+    fn glyph_end_col(lines: &ScreenLines, row: usize, col: usize) -> usize {
+        let next_col = col + 1;
+        let has_continuation = lines
+            .get(row)
+            .and_then(|line| line.get(next_col))
+            .is_some_and(|cell| cell.is_wide_continuation);
+        next_col + usize::from(has_continuation)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use solito_terminal::{TerminalSize, TerminalState};
+
+    #[test]
+    fn copy_cursor_and_highlight_cover_both_columns_of_a_wide_character() {
+        let mut terminal = TerminalState::new(TerminalSize::new(5, 1));
+        terminal.apply_terminal_output("a日b".as_bytes());
+        let cursor = CopyModePosition::new(0, 1);
+        let copy_mode = CopyModeSnapshot {
+            active: true,
+            cursor,
+            selection: Some(CopyModeSelection {
+                anchor: cursor,
+                cursor,
+                kind: CopyModeSelectionKind::Cell,
+            }),
+        };
+
+        let rects = TerminalView::copy_mode_rects_for(
+            &copy_mode,
+            &terminal.snapshot().lines,
+            0,
+            1,
+            10.0,
+            20.0,
+        );
+
+        assert_eq!(rects.len(), 2);
+        assert_eq!(rects[0].width, 20.0);
+        assert_eq!(rects[1].width, 20.0);
     }
 }

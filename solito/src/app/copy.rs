@@ -125,7 +125,7 @@ impl CopyMode {
 mod tests {
     use super::{CopyMode, CopyModeMove};
     use solito_renderer::{CopyModePosition, CopyModeSelectionKind};
-    use solito_terminal::{ScreenCell, ScreenSnapshot};
+    use solito_terminal::{ScreenCell, ScreenSnapshot, TerminalSize, TerminalState};
 
     fn screen(lines: &[&str], cursor_row: usize, cursor_col: usize) -> ScreenSnapshot {
         ScreenSnapshot {
@@ -234,6 +234,45 @@ mod tests {
 
         copy_mode.move_cursor(&screen, CopyModeMove::PreviousWord);
         assert_eq!(copy_mode.snapshot.cursor, CopyModePosition::new(0, 5));
+    }
+
+    #[test]
+    fn copy_cursor_and_selection_stay_on_whole_wide_characters() {
+        let mut terminal = TerminalState::new(TerminalSize::new(10, 2));
+        terminal.apply_terminal_output("a日b\r\n終\x1b[1;3H".as_bytes());
+        let screen = terminal.snapshot();
+        let mut mode = CopyMode::default();
+        mode.enter(&screen);
+        assert_eq!(mode.snapshot.cursor, CopyModePosition::new(0, 1));
+
+        mode.move_cursor(&screen, CopyModeMove::Right);
+        assert_eq!(mode.snapshot.cursor, CopyModePosition::new(0, 3));
+        mode.move_cursor(&screen, CopyModeMove::Left);
+        mode.toggle_cell_selection(&screen);
+        assert_eq!(mode.selected_text(&screen).as_deref(), Some("日"));
+
+        mode.move_cursor(&screen, CopyModeMove::Down);
+        mode.move_cursor(&screen, CopyModeMove::EndOfLine);
+        assert_eq!(mode.snapshot.cursor, CopyModePosition::new(1, 0));
+        assert_eq!(mode.selected_text(&screen).as_deref(), Some("日b\n終"));
+    }
+
+    #[test]
+    fn word_motions_treat_full_width_letters_and_spaces_as_whole_characters() {
+        let mut terminal = TerminalState::new(TerminalSize::new(15, 2));
+        terminal.apply_terminal_output("a日本　b\r".as_bytes());
+        let screen = terminal.snapshot();
+        let mut mode = CopyMode::default();
+        mode.enter(&screen);
+
+        mode.move_cursor(&screen, CopyModeMove::WordEnd);
+        assert_eq!(mode.snapshot.cursor, CopyModePosition::new(0, 3));
+        mode.move_cursor(&screen, CopyModeMove::WordEnd);
+        assert_eq!(mode.snapshot.cursor, CopyModePosition::new(0, 7));
+        mode.move_cursor(&screen, CopyModeMove::PreviousWord);
+        assert_eq!(mode.snapshot.cursor, CopyModePosition::new(0, 0));
+        mode.move_cursor(&screen, CopyModeMove::NextWord);
+        assert_eq!(mode.snapshot.cursor, CopyModePosition::new(0, 7));
     }
 
     #[test]

@@ -12,7 +12,7 @@ fn main() -> Result<()> {
 
     match cli::parse()? {
         cli::Command::Measure(options) => benchmark::measure(&options)?,
-        cli::Command::Workload(config) => workload::run(&config)?,
+        cli::Command::Workload(config) => workload::run(&config, None)?,
         cli::Command::Help => print!("{}", cli::HELP),
     }
 

@@ -68,7 +68,7 @@ impl Renderer {
         let mut rects = self.terminal_view.background_rects(srgb_target);
         rects.extend(self.terminal_view.tab_bar.rects(srgb_target));
         rects.extend(self.terminal_view.copy_mode_rects());
-        rects.extend(self.terminal_view.ime_rects());
+        rects.extend(self.terminal_view.ime_rects(srgb_target));
 
         let (caret_x, caret_y, caret_w, caret_h) = self.terminal_view.caret_rect();
         if caret_w > 0.0 && caret_h > 0.0 {

@@ -5,7 +5,7 @@ use unicode_width::UnicodeWidthChar;
 
 use crate::{
     pipeline::rect::RectSpec,
-    util::color::{ThemeColor, srgb_to_linear_rgba},
+    util::color::{ThemeColor, rgba_to_f32, srgb_to_linear_rgba},
 };
 
 use super::TerminalView;
@@ -62,9 +62,10 @@ impl ImePreedit {
             Self::columns(&self.text[..start])..Self::columns(&self.text[..end])
         });
         let scroll = if width > cols {
-            cursor
-                .as_ref()
-                .map_or(0, |cursor| cursor.start.saturating_sub(cols / 2))
+            cursor.as_ref().map_or(0, |cursor| {
+                let preceding = (cols / 2).min(cols.saturating_sub(cursor.len().max(2)));
+                cursor.start.saturating_sub(preceding)
+            })
         } else {
             0
         };
@@ -169,7 +170,7 @@ impl TerminalView {
         )
     }
 
-    pub(crate) fn ime_rects(&self) -> Vec<RectSpec> {
+    pub(crate) fn ime_rects(&self, srgb_target: bool) -> Vec<RectSpec> {
         let (start, end) = self.viewport.visible_range(self.row_count());
         if !self.ime_preedit.is_active() || !(start..end).contains(&self.snapshot.cursor_row) {
             return Vec::new();
@@ -178,13 +179,18 @@ impl TerminalView {
         let x = Self::PADDING_X + layout.col as f32 * self.glyphs.cell_width;
         let y = Self::terminal_row_y(self.snapshot.cursor_row - start, self.config.line_height);
         let width = layout.width as f32 * self.glyphs.cell_width;
+        let color = if srgb_target {
+            srgb_to_linear_rgba
+        } else {
+            rgba_to_f32
+        };
         let mut rects = vec![
             RectSpec::new(
                 x,
                 y,
                 width,
                 self.config.line_height,
-                srgb_to_linear_rgba(ThemeColor::TAB_ACTIVE),
+                color(ThemeColor::TAB_ACTIVE),
             ),
             RectSpec::new(
                 x,
@@ -202,7 +208,7 @@ impl TerminalView {
                     y,
                     1.0,
                     self.config.line_height,
-                    srgb_to_linear_rgba(ThemeColor::ACCENT),
+                    color(ThemeColor::ACCENT),
                 ));
             } else {
                 rects.push(RectSpec::new(
@@ -210,7 +216,7 @@ impl TerminalView {
                     y + self.config.line_height - 3.0,
                     cursor.len() as f32 * self.glyphs.cell_width,
                     2.0,
-                    srgb_to_linear_rgba(ThemeColor::ACCENT),
+                    color(ThemeColor::ACCENT),
                 ));
             }
         }
@@ -273,6 +279,19 @@ mod tests {
         assert!(layout.width <= 6);
         assert!(preedit.text[layout.text_range.clone()].contains('け'));
         assert!(layout.cursor.unwrap().end <= layout.width);
+    }
+
+    #[test]
+    fn narrow_composition_shows_the_whole_active_clause_when_it_fits() {
+        let preedit = ImePreedit::new("aあいz".into(), Some((1, 7)));
+        let layout = preedit.layout(0, 4);
+        assert_eq!(&preedit.text[layout.text_range], "あい");
+        assert_eq!(layout.cursor, Some(0..4));
+
+        let preedit = ImePreedit::new("aあz".into(), Some((1, 4)));
+        let layout = preedit.layout(0, 2);
+        assert_eq!(&preedit.text[layout.text_range], "あ");
+        assert_eq!(layout.cursor, Some(0..2));
     }
 
     #[test]

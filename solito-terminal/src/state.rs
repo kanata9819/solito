@@ -300,6 +300,23 @@ mod tests {
     }
 
     #[test]
+    fn line_feed_at_the_bottom_fills_the_new_row_with_the_erase_background() {
+        let mut state = terminal(8, 3);
+        state.apply_terminal_output(b"A\r\nB\r\nC\x1b[48;2;128;0;0m\n");
+        let snapshot = state.snapshot();
+
+        assert_eq!(line_text(&snapshot.lines[0]), "A");
+        assert_eq!(line_text(&snapshot.lines[2]), "C");
+        assert_eq!((snapshot.cursor_row, snapshot.cursor_col), (3, 1));
+        assert_eq!(snapshot.lines[3].len(), 8);
+        assert!(
+            snapshot.lines[3]
+                .iter()
+                .all(|cell| { cell.ch == ' ' && cell.background_rgba() == Some([128, 0, 0, 255]) })
+        );
+    }
+
+    #[test]
     fn editing_and_right_edge_never_leave_half_of_a_wide_cell() {
         for (input, expected) in [
             ("界Z\x1b[1;2H\x1b[4hx", " x Z"),

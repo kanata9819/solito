@@ -8,44 +8,25 @@ pub(super) fn move_position(
     direction: CopyModeMove,
 ) -> CopyModePosition {
     let row_count = screen.lines.len().max(1);
-    let mut row = position.row.min(row_count - 1);
-    let mut col = position.col.min(last_col(screen, row));
+    let CopyModePosition { row, col } = position;
 
-    match direction {
-        CopyModeMove::Left => col = col.saturating_sub(1),
-        CopyModeMove::Right => col = col.saturating_add(1).min(last_col(screen, row)),
-        CopyModeMove::Up => {
-            row = row.saturating_sub(1);
-            col = col.min(last_col(screen, row));
-        }
-        CopyModeMove::Down => {
-            row = row.saturating_add(1).min(row_count - 1);
-            col = col.min(last_col(screen, row));
-        }
-        CopyModeMove::StartOfLine => col = 0,
-        CopyModeMove::EndOfLine => col = last_col(screen, row),
-        CopyModeMove::NextWord => return next_word_start(screen, position),
-        CopyModeMove::PreviousWord => return previous_word_start(screen, position),
-        CopyModeMove::WordEnd => return word_end(screen, position),
-        CopyModeMove::FirstLine => {
-            row = 0;
-            col = col.min(last_col(screen, row));
-        }
-        CopyModeMove::LastLine => {
-            row = row_count - 1;
-            col = col.min(last_col(screen, row));
-        }
-        CopyModeMove::PageUp => {
-            row = row.saturating_sub(page_rows(screen));
-            col = col.min(last_col(screen, row));
-        }
-        CopyModeMove::PageDown => {
-            row = row.saturating_add(page_rows(screen)).min(row_count - 1);
-            col = col.min(last_col(screen, row));
-        }
-    }
+    let target = match direction {
+        CopyModeMove::Left => CopyModePosition::new(row, col.saturating_sub(1)),
+        CopyModeMove::Right => CopyModePosition::new(row, next_glyph_col(screen, row, col)),
+        CopyModeMove::Up => CopyModePosition::new(row.saturating_sub(1), col),
+        CopyModeMove::Down => CopyModePosition::new(row + 1, col),
+        CopyModeMove::StartOfLine => CopyModePosition::new(row, 0),
+        CopyModeMove::EndOfLine => CopyModePosition::new(row, last_col(screen, row)),
+        CopyModeMove::NextWord => next_word_start(screen, position),
+        CopyModeMove::PreviousWord => previous_word_start(screen, position),
+        CopyModeMove::WordEnd => word_end(screen, position),
+        CopyModeMove::FirstLine => CopyModePosition::new(0, col),
+        CopyModeMove::LastLine => CopyModePosition::new(row_count - 1, col),
+        CopyModeMove::PageUp => CopyModePosition::new(row.saturating_sub(page_rows(screen)), col),
+        CopyModeMove::PageDown => CopyModePosition::new(row + page_rows(screen), col),
+    };
 
-    CopyModePosition::new(row, col)
+    clamp_position(screen, target)
 }
 
 pub(super) fn clamp_position(
@@ -55,7 +36,7 @@ pub(super) fn clamp_position(
     let row_count = screen.lines.len().max(1);
     let row = position.row.min(row_count - 1);
     let col = position.col.min(last_col(screen, row));
-    CopyModePosition::new(row, col)
+    CopyModePosition::new(row, leading_col(screen, row, col))
 }
 
 fn next_word_start(screen: &ScreenSnapshot, position: CopyModePosition) -> CopyModePosition {
@@ -118,23 +99,14 @@ fn previous_word_start(screen: &ScreenSnapshot, position: CopyModePosition) -> C
 }
 
 fn word_end(screen: &ScreenSnapshot, position: CopyModePosition) -> CopyModePosition {
-    let row_count = screen.lines.len().max(1);
-    let mut row = position.row.min(row_count - 1);
-    let mut col = position.col.min(last_col(screen, row));
-
-    if is_nonblank(screen, row, col)
-        && col < last_col(screen, row)
-        && is_nonblank(screen, row, col + 1)
-    {
-        while col < last_col(screen, row) && is_nonblank(screen, row, col + 1) {
-            col += 1;
-        }
-        return CopyModePosition::new(row, col);
-    }
-
-    let start = next_word_start(screen, position);
-    row = start.row.min(row_count - 1);
-    col = start.col.min(last_col(screen, row));
+    let CopyModePosition { row, col } = position;
+    let next = next_glyph_col(screen, row, col);
+    let CopyModePosition { row, mut col } =
+        if is_nonblank(screen, row, col) && is_nonblank(screen, row, next) {
+            position
+        } else {
+            next_word_start(screen, position)
+        };
 
     while col < last_col(screen, row) && is_nonblank(screen, row, col + 1) {
         col += 1;
@@ -161,9 +133,27 @@ fn last_col(screen: &ScreenSnapshot, row: usize) -> usize {
 }
 
 fn is_nonblank(screen: &ScreenSnapshot, row: usize, col: usize) -> bool {
+    let col = leading_col(screen, row, col);
     screen
         .lines
         .get(row)
         .and_then(|line| line.get(col))
-        .is_some_and(|cell| !cell.is_wide_continuation && !cell.ch.is_whitespace())
+        .is_some_and(|cell| !cell.ch.is_whitespace())
+}
+
+fn leading_col(screen: &ScreenSnapshot, row: usize, col: usize) -> usize {
+    col.saturating_sub(usize::from(is_continuation(screen, row, col)))
+}
+
+fn next_glyph_col(screen: &ScreenSnapshot, row: usize, col: usize) -> usize {
+    let next = col + 1;
+    next + usize::from(is_continuation(screen, row, next))
+}
+
+fn is_continuation(screen: &ScreenSnapshot, row: usize, col: usize) -> bool {
+    screen
+        .lines
+        .get(row)
+        .and_then(|line| line.get(col))
+        .is_some_and(|cell| cell.is_wide_continuation)
 }

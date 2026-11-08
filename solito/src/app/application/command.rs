@@ -81,7 +81,7 @@ impl SolitoApplication {
                 if let Some(snapshot) = self.tabs.active_snapshot()
                     && let Some(text) = self.copy_mode.selected_text(&snapshot)
                 {
-                    Self::copy_to_clipboard(text)?;
+                    self.clipboard()?.set_text(text)?;
                 }
             }
             AppCommand::PasteFromClipboard => self.paste_from_clipboard()?,
@@ -109,12 +109,10 @@ impl SolitoApplication {
                 self.refresh_copy_mode(&snapshot);
             }
             CopyModeCommand::CopyAndExit => {
-                let copy_result = self
-                    .copy_mode
-                    .selected_text(&snapshot)
-                    .map_or(Ok(()), Self::copy_to_clipboard);
+                if let Some(text) = self.copy_mode.selected_text(&snapshot) {
+                    self.clipboard()?.set_text(text)?;
+                }
                 self.leave_copy_mode();
-                copy_result?;
             }
             CopyModeCommand::Exit => self.leave_copy_mode(),
         }
@@ -122,24 +120,25 @@ impl SolitoApplication {
         Ok(())
     }
 
-    fn copy_to_clipboard(text: String) -> AppResult {
-        let mut clipboard = arboard::Clipboard::new()?;
-        clipboard.set_text(text)?;
-        Ok(())
+    fn clipboard(&mut self) -> Result<&mut arboard::Clipboard, arboard::Error> {
+        // X11 serves copied text only while the clipboard owner stays alive.
+        match &mut self.clipboard {
+            Some(clipboard) => Ok(clipboard),
+            slot @ None => Ok(slot.insert(arboard::Clipboard::new()?)),
+        }
     }
 
     fn paste_from_clipboard(&mut self) -> AppResult {
-        let Some(input_tx) = self.tabs.active_input_tx() else {
-            return Ok(());
-        };
-        let Ok(mut clipboard) = arboard::Clipboard::new() else {
+        let Ok(clipboard) = self.clipboard() else {
             return Ok(());
         };
         let Ok(text) = clipboard.get_text() else {
             return Ok(());
         };
 
-        if !text.is_empty() {
+        if !text.is_empty()
+            && let Some(input_tx) = self.tabs.active_input_tx()
+        {
             input_tx.send(SessionInput::write(text.into_bytes()))?;
             self.scroll_terminal_to_bottom();
         }

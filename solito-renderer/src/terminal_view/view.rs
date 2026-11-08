@@ -252,7 +252,21 @@ mod tests {
             candidate.1,
             TerminalView::terminal_row_y(1, view.config.line_height)
         );
-        assert_eq!(view.ime_rects().len(), 3);
+        let ime_rects = view.ime_rects(true);
+        assert_eq!(ime_rects.len(), 3);
+        assert_eq!(
+            ime_rects[2].color,
+            util::color::srgb_to_linear_rgba(ThemeColor::ACCENT)
+        );
+        let ime_rects = view.ime_rects(false);
+        assert_eq!(
+            ime_rects[0].color,
+            util::color::rgba_to_f32(ThemeColor::TAB_ACTIVE)
+        );
+        assert_eq!(
+            ime_rects[2].color,
+            util::color::rgba_to_f32(ThemeColor::ACCENT)
+        );
         assert_eq!(view.caret_rect().2, 0.0);
         let mut blinking = prompt.clone();
         blinking.cursor_visible = false;
@@ -278,7 +292,7 @@ mod tests {
             "Welcome to Nushell"
         );
         assert_eq!(view.glyphs.text_buffer.lines[1].text(), "~> ");
-        assert!(view.ime_rects().is_empty());
+        assert!(view.ime_rects(true).is_empty());
         // Three terminal rows below the fixed toolbar and content padding.
         let mut terminal = TerminalState::new(TerminalSize::new(80, 3));
         terminal.apply_terminal_output("first\r\nsecond\r\n日本語\r\nlast".as_bytes());
