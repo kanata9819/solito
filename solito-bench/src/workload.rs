@@ -65,6 +65,9 @@ pub fn run_from_environment() -> Result<()> {
         .parse()?;
     let duration_seconds = parse_environment(DURATION_ENV, 13_u64)?;
     let fps = parse_environment(FPS_ENV, 60_u32)?;
+    if duration_seconds == 0 || fps == 0 {
+        anyhow::bail!("{DURATION_ENV} and {FPS_ENV} must be greater than zero");
+    }
 
     if let Some(path) = env::var_os(READY_FILE_ENV) {
         // The parent starts measurement only after the PTY child confirms that

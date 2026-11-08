@@ -1,12 +1,16 @@
-use crate::util::{self, color::ThemeColor};
+use crate::util::color::{ThemeColor, rgba_to_f32, srgb_to_linear_rgba};
 
 use super::TerminalView;
 
 impl TerminalView {
     pub(super) const DEFAULT_CARET_COLOR: [f32; 4] = ThemeColor::WHITE_ALPHA;
 
+    pub(super) fn shell_caret_visible(&self) -> bool {
+        self.snapshot.cursor_visible && !self.ime_preedit.is_active() && !self.copy_mode.active
+    }
+
     pub(crate) fn caret_rect(&mut self) -> (f32, f32, f32, f32) {
-        if !self.snapshot.cursor_visible || self.ime_preedit.is_active() {
+        if !self.shell_caret_visible() {
             return (Self::PADDING_X, Self::PADDING_Y, 0.0, 0.0);
         }
 
@@ -35,10 +39,11 @@ impl TerminalView {
         )
     }
 
-    pub(crate) fn caret_color(&self) -> [f32; 4] {
-        self.snapshot
-            .cursor_color
-            .map(util::color::rgba_to_f32)
-            .unwrap_or(Self::DEFAULT_CARET_COLOR)
+    pub(crate) fn caret_color(&self, srgb_target: bool) -> [f32; 4] {
+        match self.snapshot.cursor_color {
+            Some(color) if srgb_target => srgb_to_linear_rgba(color),
+            Some(color) => rgba_to_f32(color),
+            None => Self::DEFAULT_CARET_COLOR,
+        }
     }
 }

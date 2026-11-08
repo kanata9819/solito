@@ -39,7 +39,11 @@ impl TerminalView {
     const COPY_MODE_CURSOR_COLOR: [f32; 4] = ThemeColor::COPY_CURSOR_ALPHA;
 
     pub(crate) fn set_copy_mode(&mut self, copy_mode: CopyModeSnapshot) {
+        let caret_was_visible = self.shell_caret_visible();
         self.copy_mode = copy_mode;
+        if caret_was_visible != self.shell_caret_visible() {
+            self.text_damage.add_row(self.snapshot.cursor_row);
+        }
 
         let viewport_changed = if self.copy_mode.active {
             let row_count = self.row_count();
@@ -53,10 +57,6 @@ impl TerminalView {
         if viewport_changed {
             self.invalidate_all_text();
         }
-    }
-
-    pub(crate) fn copy_mode_active(&self) -> bool {
-        self.copy_mode.active
     }
 
     pub(crate) fn copy_mode_rects(&mut self) -> Vec<RectSpec> {

@@ -200,7 +200,7 @@ mod tests {
             glyphon::FontSystem::new(),
         );
         let mut blank = TerminalState::new(TerminalSize::new(80, 3));
-        blank.apply_terminal_output(b"\x1b[3;4H");
+        blank.apply_terminal_output(b"\x1b[3;4H\x1b]12;#2880f0\x07");
         view.set_snapshot(blank.snapshot());
         assert!(view.update_text_buffer());
         assert_eq!(
@@ -213,6 +213,12 @@ mod tests {
             ),
             "moving to an empty row must keep the cursor visible without printing"
         );
+        let rgba = [40, 128, 240, 255];
+        assert_eq!(
+            view.caret_color(true),
+            util::color::srgb_to_linear_rgba(rgba)
+        );
+        assert_eq!(view.caret_color(false), util::color::rgba_to_f32(rgba));
         let mut startup = TerminalState::new(TerminalSize::new(80, 3));
         startup.apply_terminal_output(b"Welcome to Nushell");
         view.set_snapshot(startup.snapshot());
@@ -317,16 +323,35 @@ mod tests {
         assert!(!view.scroll_to_bottom());
         assert!(!view.update_text_buffer());
 
-        view.set_copy_mode(CopyModeSnapshot {
+        let mut snapshot = terminal.snapshot();
+        snapshot.cursor_col = 0;
+        view.set_snapshot(snapshot);
+        assert!(view.update_text_buffer());
+        let shell_text_color = |view: &TerminalView| {
+            view.glyphs.text_buffer.lines[2]
+                .attrs_list()
+                .get_span(0)
+                .color_opt
+        };
+        assert!(shell_text_color(&view).is_some());
+        let mut copy_mode = CopyModeSnapshot {
             active: true,
             cursor: CopyModePosition::new(2, 0),
             selection: None,
-        });
+        };
+        view.set_copy_mode(copy_mode);
+        assert!(view.update_text_buffer());
+        assert_eq!(shell_text_color(&view), None);
+        assert_eq!(view.caret_rect().2, 0.0);
+        copy_mode.cursor.col = 1;
+        view.set_copy_mode(copy_mode);
         assert!(
             !view.update_text_buffer(),
-            "copy cursor only updates rectangles"
+            "moving the copy cursor only updates rectangles"
         );
         view.set_copy_mode(CopyModeSnapshot::default());
+        assert!(view.update_text_buffer());
+        assert!(shell_text_color(&view).is_some());
         view.set_tab_bar(TabBarSnapshot::new(vec!["one".into(), "two".into()], 1));
         assert!(
             !view.update_text_buffer(),

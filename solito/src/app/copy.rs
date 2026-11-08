@@ -55,6 +55,7 @@ impl CopyMode {
             return;
         }
 
+        self.update_snapshot(screen);
         let cursor = movement::move_position(screen, self.snapshot.cursor, direction);
         self.snapshot.cursor = cursor;
 
@@ -63,19 +64,20 @@ impl CopyMode {
         }
     }
 
-    pub(super) fn toggle_cell_selection(&mut self) {
-        self.toggle_selection(CopyModeSelectionKind::Cell);
+    pub(super) fn toggle_cell_selection(&mut self, screen: &ScreenSnapshot) {
+        self.toggle_selection(screen, CopyModeSelectionKind::Cell);
     }
 
-    pub(super) fn toggle_line_selection(&mut self) {
-        self.toggle_selection(CopyModeSelectionKind::Line);
+    pub(super) fn toggle_line_selection(&mut self, screen: &ScreenSnapshot) {
+        self.toggle_selection(screen, CopyModeSelectionKind::Line);
     }
 
-    fn toggle_selection(&mut self, kind: CopyModeSelectionKind) {
+    fn toggle_selection(&mut self, screen: &ScreenSnapshot, kind: CopyModeSelectionKind) {
         if !self.snapshot.active {
             return;
         }
 
+        self.update_snapshot(screen);
         if self.snapshot.selection.map(|selection| selection.kind) == Some(kind) {
             self.snapshot.selection = None;
             return;
@@ -88,11 +90,11 @@ impl CopyMode {
         });
     }
 
-    pub(super) fn selected_text(&self, screen: &ScreenSnapshot) -> Option<String> {
-        selection::selected_text(self.snapshot.selection?, screen)
+    pub(super) fn selected_text(&mut self, screen: &ScreenSnapshot) -> Option<String> {
+        selection::selected_text(self.update_snapshot(screen).selection?, screen)
     }
 
-    pub(super) fn renderer_snapshot(&mut self, screen: &ScreenSnapshot) -> CopyModeSnapshot {
+    pub(super) fn update_snapshot(&mut self, screen: &ScreenSnapshot) -> CopyModeSnapshot {
         if !self.snapshot.active {
             return CopyModeSnapshot::default();
         }
@@ -152,14 +154,29 @@ mod tests {
         let mut original = screen(&["old", "keep", "last"], 1, 0);
         let mut mode = CopyMode::default();
         mode.enter(&original);
-        mode.toggle_cell_selection();
+        mode.toggle_cell_selection(&original);
         original.lines.remove(0);
         original.history_start = 1;
-        assert_eq!(mode.renderer_snapshot(&original).cursor.row, 0);
         assert_eq!(mode.selected_text(&original), Some("k".to_string()));
+        assert_eq!(mode.update_snapshot(&original).cursor.row, 0);
         original.lines.remove(0);
         original.history_start = 2;
-        assert!(mode.renderer_snapshot(&original).selection.is_none());
+        assert_eq!(mode.selected_text(&original), None);
+        assert!(mode.update_snapshot(&original).selection.is_none());
+    }
+
+    #[test]
+    fn moving_before_redraw_uses_the_cursor_after_history_eviction() {
+        let mut original = screen(&["old", "first", "second", "third"], 1, 0);
+        let mut mode = CopyMode::default();
+        mode.enter(&original);
+        mode.toggle_cell_selection(&original);
+        original.lines.remove(0);
+        original.history_start = 1;
+
+        mode.move_cursor(&original, CopyModeMove::Down);
+
+        assert_eq!(mode.selected_text(&original).as_deref(), Some("first\ns"));
     }
 
     #[test]
@@ -168,7 +185,7 @@ mod tests {
         let mut copy_mode = CopyMode::default();
 
         copy_mode.enter(&screen);
-        copy_mode.toggle_cell_selection();
+        copy_mode.toggle_cell_selection(&screen);
         copy_mode.move_cursor(&screen, CopyModeMove::Right);
         copy_mode.move_cursor(&screen, CopyModeMove::Right);
 
@@ -181,7 +198,7 @@ mod tests {
         let mut copy_mode = CopyMode::default();
 
         copy_mode.enter(&screen);
-        copy_mode.toggle_cell_selection();
+        copy_mode.toggle_cell_selection(&screen);
         copy_mode.move_cursor(&screen, CopyModeMove::Left);
         copy_mode.move_cursor(&screen, CopyModeMove::Left);
 
@@ -194,7 +211,7 @@ mod tests {
         let mut copy_mode = CopyMode::default();
 
         copy_mode.enter(&screen);
-        copy_mode.toggle_line_selection();
+        copy_mode.toggle_line_selection(&screen);
         copy_mode.move_cursor(&screen, CopyModeMove::Down);
 
         assert_eq!(
@@ -251,19 +268,19 @@ mod tests {
         let mut copy_mode = CopyMode::default();
         copy_mode.enter(&screen);
 
-        copy_mode.toggle_cell_selection();
+        copy_mode.toggle_cell_selection(&screen);
         assert_eq!(
             copy_mode.snapshot.selection.map(|selection| selection.kind),
             Some(CopyModeSelectionKind::Cell)
         );
 
-        copy_mode.toggle_line_selection();
+        copy_mode.toggle_line_selection(&screen);
         assert_eq!(
             copy_mode.snapshot.selection.map(|selection| selection.kind),
             Some(CopyModeSelectionKind::Line)
         );
 
-        copy_mode.toggle_line_selection();
+        copy_mode.toggle_line_selection(&screen);
         assert!(copy_mode.snapshot.selection.is_none());
     }
 }

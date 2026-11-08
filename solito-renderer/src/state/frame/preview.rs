@@ -210,6 +210,7 @@ fn verify_text_rasterization(renderer: &mut Renderer, output: &Path) {
                     "\x1b[32mNushell repository\x1b[0m\r\n",
                     "\x1b[35mhttps://www.nushell.sh\x1b[0m\r\n",
                     "日本語の文字描画\r\n",
+                    "\x1b]12;#2880f0\x07",
                 )
                 .as_bytes(),
             );
@@ -217,6 +218,10 @@ fn verify_text_rasterization(renderer: &mut Renderer, output: &Path) {
             let path = output.join(format!("text-preview-{format:?}-{scale}.png"));
             let pixels = save_frame(renderer, &path);
             assert_text_coverage(renderer, &pixels);
+            let (x, y, w, h) = renderer.terminal_view.caret_rect();
+            let stride = renderer.window_surface.config.width as usize * 4;
+            let pixel = (y + h / 2.0) as usize * stride + (x + w / 2.0) as usize * 4;
+            assert_eq!(&pixels[pixel..pixel + 4], &[40, 128, 240, 255]);
         }
     }
 }

@@ -64,31 +64,21 @@ impl Renderer {
     }
 
     fn draw_to_texture(&mut self, encoder: &mut CommandEncoder, texture: &Texture) -> Result<()> {
-        let mut rects = self
-            .terminal_view
-            .background_rects(self.window_surface.config.format.is_srgb());
-        rects.extend(
-            self.terminal_view
-                .tab_bar
-                .rects(self.window_surface.config.format.is_srgb()),
-        );
+        let srgb_target = self.window_surface.config.format.is_srgb();
+        let mut rects = self.terminal_view.background_rects(srgb_target);
+        rects.extend(self.terminal_view.tab_bar.rects(srgb_target));
         rects.extend(self.terminal_view.copy_mode_rects());
         rects.extend(self.terminal_view.ime_rects());
 
-        // Copy mode draws its own cursor over the scrollback. Hiding the shell
-        // cursor here prevents two active cursors from appearing at once.
-        if !self.terminal_view.copy_mode_active() {
-            let (caret_x, caret_y, caret_w, caret_h) = self.terminal_view.caret_rect();
-
-            if caret_w > 0.0 && caret_h > 0.0 {
-                rects.push(rect::RectSpec::new(
-                    caret_x,
-                    caret_y,
-                    caret_w,
-                    caret_h,
-                    self.terminal_view.caret_color(),
-                ));
-            }
+        let (caret_x, caret_y, caret_w, caret_h) = self.terminal_view.caret_rect();
+        if caret_w > 0.0 && caret_h > 0.0 {
+            rects.push(rect::RectSpec::new(
+                caret_x,
+                caret_y,
+                caret_w,
+                caret_h,
+                self.terminal_view.caret_color(srgb_target),
+            ));
         }
 
         self.render_resources

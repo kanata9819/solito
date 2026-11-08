@@ -83,7 +83,12 @@ impl SessionRuntime {
     }
 
     fn spawn_command(slave: &PtySlave, shell_program: &str) -> Result<PtyChild> {
-        let cmd = CommandBuilder::new(shell_program);
+        let mut cmd = CommandBuilder::new(shell_program);
+        // portable-pty falls back to the home directory when no cwd is set.
+        // Inherit ours instead so a shortcut's "Start in" folder is honored.
+        if let Ok(cwd) = std::env::current_dir() {
+            cmd.cwd(cwd);
+        }
         slave.spawn_command(cmd)
     }
 

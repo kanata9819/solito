@@ -43,7 +43,6 @@ impl ViewportState {
         let start = start.min(row_count.saturating_sub(self.visible_rows));
         let end = start.saturating_add(self.visible_rows).min(row_count);
         self.scroll_offset = row_count.saturating_sub(end);
-        self.scroll_accumulator = 0.0;
         self.clamp(row_count);
     }
 
@@ -119,6 +118,16 @@ mod tests {
         viewport.scroll_to_start(start, 12);
 
         assert_eq!(viewport.visible_range(12), (3, 6));
+    }
+
+    #[test]
+    fn preserving_visible_top_does_not_reset_fractional_scroll() {
+        let mut viewport = ViewportState::new(30, 10.0);
+        viewport.scroll(1.5, 10);
+        let (start, _) = viewport.visible_range(10);
+        viewport.scroll_to_start(start, 11);
+        viewport.scroll(0.5, 11);
+        assert_eq!(viewport.visible_range(11), (5, 8));
     }
 
     #[test]

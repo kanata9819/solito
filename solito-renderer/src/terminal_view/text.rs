@@ -190,13 +190,12 @@ impl TerminalView {
 
         let font_family = self.config.font_family.clone();
         let default_attrs = Self::text_attrs(None, font_family.as_str());
-        let cursor_text_color = Self::cursor_text_color(self.caret_color());
-        let (cursor_row, cursor_col) =
-            if self.snapshot.cursor_visible && !self.ime_preedit.is_active() {
-                (self.snapshot.cursor_row, self.snapshot.cursor_col)
-            } else {
-                (usize::MAX, usize::MAX)
-            };
+        let cursor_text_color = Self::cursor_text_color(self.caret_color(false));
+        let (cursor_row, cursor_col) = if self.shell_caret_visible() {
+            (self.snapshot.cursor_row, self.snapshot.cursor_col)
+        } else {
+            (usize::MAX, usize::MAX)
+        };
         let preedit_line = self.ime_preedit.is_active().then(|| {
             self.ime_preedit.overlay_line(
                 self.snapshot

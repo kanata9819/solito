@@ -158,6 +158,7 @@ impl Screen {
                 col: usize::from(col).saturating_sub(1),
             }),
             CsiMessage::EraseDisplay(mode) => self.erase_display(mode),
+            CsiMessage::EraseScrollback => self.screen_buffer.limit_history(0),
             CsiMessage::EraseLine(mode) => self.erase_line(mode),
             CsiMessage::EraseCharacters(amount) => self.erase_characters(usize::from(amount)),
             CsiMessage::DeleteCharacters(amount) => self.delete_characters(usize::from(amount)),
@@ -471,11 +472,11 @@ impl Screen {
 
     fn set_scroll_region(&mut self, top: usize, bottom: Option<usize>) {
         let rows = self.screen_buffer.rows();
-        let top = top.saturating_sub(1).min(rows.saturating_sub(1));
-        let bottom = bottom
-            .unwrap_or(rows)
-            .saturating_sub(1)
-            .clamp(top, rows.saturating_sub(1));
+        let top = top.saturating_sub(1);
+        let bottom = bottom.unwrap_or(rows).min(rows).saturating_sub(1);
+        if top > bottom || (top == bottom && rows > 1) {
+            return;
+        }
         self.screen_buffer.scroll_region = (top, bottom);
         self.move_cursor_to(CursorPosition {
             row: self.cursor_row_from_viewport(0),
@@ -694,8 +695,8 @@ impl Screen {
         buffer.style = saved.style;
         buffer.origin_mode = saved.origin_mode;
         buffer.auto_wrap = saved.auto_wrap;
-        // A pending wrap only makes sense if the column survived a resize.
-        buffer.pending_wrap = saved.pending_wrap && col == saved.col;
+        // A resize can invalidate the right edge where the wrap was saved.
+        buffer.pending_wrap = saved.pending_wrap && saved.col == buffer.cols() - 1;
         buffer.ensure_cursor_line();
     }
 

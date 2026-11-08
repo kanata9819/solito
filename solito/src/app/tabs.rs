@@ -260,12 +260,12 @@ impl<T: TerminalTab> Tabs<T> {
         active_updated
     }
 
-    pub(super) fn resize_all(&mut self, size: TerminalSize) -> Result<()> {
+    pub(super) fn resize_all(&mut self, size: TerminalSize) {
         for tab in &mut self.tabs {
-            tab.resize(size)?;
+            if let Err(err) = tab.resize(size) {
+                error!("failed to send PTY resize: {err}");
+            }
         }
-
-        Ok(())
     }
 
     pub(super) fn activate_next(&mut self) -> bool {
@@ -328,7 +328,7 @@ mod tests {
 
     struct FakeTab {
         input_tx: Sender<SessionInput>,
-        _input_rx: Receiver<SessionInput>,
+        input_rx: Receiver<SessionInput>,
         title: &'static str,
         exited: bool,
     }
@@ -339,7 +339,7 @@ mod tests {
                 channel::<SessionInput>();
             Self {
                 input_tx,
-                _input_rx: input_rx,
+                input_rx,
                 title: "fake",
                 exited: false,
             }
@@ -367,7 +367,8 @@ mod tests {
             false
         }
 
-        fn resize(&mut self, _size: TerminalSize) -> Result<()> {
+        fn resize(&mut self, size: TerminalSize) -> Result<()> {
+            self.input_tx.send(SessionInput::resize(size))?;
             Ok(())
         }
     }
@@ -430,6 +431,23 @@ mod tests {
         assert!(!closed.active_closed);
         assert_eq!(tabs.active_index(), 0);
         assert_eq!(tabs.active_tab().unwrap().title(), "second");
+    }
+
+    #[test]
+    fn disconnected_tab_does_not_block_resizing_other_tabs() {
+        let mut tabs = three_tabs();
+        let (disconnected_tx, disconnected_rx) = channel();
+        drop(disconnected_rx);
+        tabs.tabs[0].input_tx = disconnected_tx;
+        let size = TerminalSize::new(100, 30);
+
+        tabs.resize_all(size);
+
+        for tab in &tabs.tabs[1..] {
+            assert!(
+                matches!(tab.input_rx.try_recv(), Ok(SessionInput::Resize(actual)) if actual == size)
+            );
+        }
     }
 
     #[test]

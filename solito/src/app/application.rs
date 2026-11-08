@@ -173,52 +173,50 @@ impl SolitoApplication {
             (&mut self.renderer, self.tabs.active_snapshot())
         {
             snapshot.cursor_visible &= self.cursor_blink_visible;
-            let copy_mode = self.copy_mode.renderer_snapshot(&snapshot);
+            let copy_mode = self.copy_mode.update_snapshot(&snapshot);
             renderer.set_terminal_snapshot(snapshot);
             renderer.set_copy_mode(copy_mode);
             self.needs_redraw = true;
         }
     }
 
-    fn resize_window(&mut self, window_size: PhysicalSize<u32>) -> AppResult {
+    fn resize_window(&mut self, window_size: PhysicalSize<u32>) {
         // Minimized windows have no drawable area. Resizing the PTY to 1x1
         // would clamp its cursor and scroll region before the window returns.
         if window_size.width == 0 || window_size.height == 0 {
-            return Ok(());
+            return;
         }
 
         let Some(renderer) = &self.renderer else {
-            return Ok(());
+            return;
         };
         let terminal_size = renderer.terminal_size_for(window_size);
         if terminal_size != renderer.terminal_size() {
-            self.tabs.resize_all(terminal_size)?;
+            self.tabs.resize_all(terminal_size);
         }
         if let (Some(renderer), Some(mut snapshot)) =
             (&mut self.renderer, self.tabs.active_snapshot())
         {
             snapshot.cursor_visible &= self.cursor_blink_visible;
-            let copy_mode = self.copy_mode.renderer_snapshot(&snapshot);
+            let copy_mode = self.copy_mode.update_snapshot(&snapshot);
             renderer.resize(window_size, snapshot);
             renderer.set_copy_mode(copy_mode);
             self.terminal_dirty = false;
             self.needs_redraw = true;
         }
-        Ok(())
     }
 
-    fn restore_window(&mut self) -> AppResult {
+    fn restore_window(&mut self) {
         let Some(window_size) = self.window.as_ref().map(|window| window.inner_size()) else {
-            return Ok(());
+            return;
         };
         self.drain_terminal_output();
         self.cursor_blink_visible = true;
         self.next_cursor_blink = Instant::now() + CURSOR_BLINK_INTERVAL;
         // Reconfigure at the current physical size and rebuild glyph positions,
         // even if no terminal output or resize event accompanied activation.
-        self.resize_window(window_size)?;
+        self.resize_window(window_size);
         self.update_ime_cursor_area();
-        Ok(())
     }
 
     fn show_active_terminal_at_bottom(&mut self) {
@@ -230,7 +228,7 @@ impl SolitoApplication {
             (&mut self.renderer, self.tabs.active_snapshot())
         {
             snapshot.cursor_visible &= self.cursor_blink_visible;
-            let copy_mode = self.copy_mode.renderer_snapshot(&snapshot);
+            let copy_mode = self.copy_mode.update_snapshot(&snapshot);
             renderer.set_terminal_snapshot_at_bottom(snapshot);
             renderer.set_copy_mode(copy_mode);
             self.needs_redraw = true;
@@ -257,7 +255,7 @@ impl SolitoApplication {
 
     fn refresh_copy_mode(&mut self, snapshot: &ScreenSnapshot) {
         if let Some(renderer) = &mut self.renderer {
-            renderer.set_copy_mode(self.copy_mode.renderer_snapshot(snapshot));
+            renderer.set_copy_mode(self.copy_mode.update_snapshot(snapshot));
             self.needs_redraw = true;
         }
     }
@@ -318,6 +316,7 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
             && let Err(err) = self.create_window(event_loop)
         {
             error!("create window failed: {err}");
+            self.close_window(event_loop);
         }
     }
 
@@ -406,9 +405,7 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                 self.modifiers = modifiers.state();
             }
             WindowEvent::Resized(window_size) => {
-                if let Err(err) = self.resize_window(window_size) {
-                    error!("application resize failed: {err}");
-                }
+                self.resize_window(window_size);
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 if self.report_mouse_wheel(delta) {
@@ -455,14 +452,10 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                 if let Some(renderer) = &mut self.renderer {
                     self.needs_redraw |= renderer.set_focused(true);
                 }
-                if let Err(err) = self.restore_window() {
-                    error!("application restore failed: {err}");
-                }
+                self.restore_window();
             }
             WindowEvent::Occluded(false) => {
-                if let Err(err) = self.restore_window() {
-                    error!("application restore failed: {err}");
-                }
+                self.restore_window();
             }
             WindowEvent::Focused(false) => {
                 if let Some(window) = &self.window {
@@ -541,7 +534,7 @@ mod tests {
                 app.tabs = tabs;
                 app.window = Some(window.clone());
                 app.renderer = Some(renderer);
-                app.resize_window(window.inner_size()).unwrap();
+                app.resize_window(window.inner_size());
                 app.window_event(event_loop, window.id(), WindowEvent::Focused(false));
                 app.needs_redraw = false;
 

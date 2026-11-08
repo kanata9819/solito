@@ -104,6 +104,22 @@ mod tests {
     }
 
     #[test]
+    fn invalid_scroll_margins_leave_the_cursor_and_region_unchanged() {
+        for invalid in [b"\x1b[3;2r".as_slice(), b"\x1b[3;3r", b"\x1b[9r"] {
+            let mut state = terminal(8, 4);
+            state.apply_terminal_output(b"A\r\nB\r\nC\r\nD\x1b[2;3r\x1b[3;2H");
+            state.apply_terminal_output(invalid);
+            let snapshot = state.snapshot();
+            assert_eq!((snapshot.cursor_row, snapshot.cursor_col), (2, 1));
+
+            state.apply_terminal_output(b"\r\nZ");
+            let snapshot = state.snapshot();
+            let lines: Vec<_> = snapshot.lines.iter().map(|line| line_text(line)).collect();
+            assert_eq!(lines, ["A", "C", "Z", "D"]);
+        }
+    }
+
+    #[test]
     fn origin_mode_and_scroll_margins_home_the_cursor() {
         let mut state = terminal(8, 5);
         state.apply_terminal_output(b"\x1b[2;4r\x1b[4;5H\x1b[?6h\x1b[6n");
@@ -186,6 +202,18 @@ mod tests {
         assert!((top..top + 2).contains(&snapshot.cursor_row));
         assert!(snapshot.cursor_col < 3);
         assert_eq!(snapshot.lines[snapshot.cursor_row][2].ch, 'Z');
+    }
+
+    #[test]
+    fn restoring_a_saved_cursor_after_widening_does_not_wrap_early() {
+        let mut state = terminal(3, 2);
+        state.apply_terminal_output(b"abc\x1b7\r");
+        state.resize(TerminalSize::new(5, 2));
+        state.apply_terminal_output(b"\x1b8X");
+
+        let snapshot = state.snapshot();
+        assert_eq!(line_text(&snapshot.lines[0]), "abX");
+        assert_eq!((snapshot.cursor_row, snapshot.cursor_col), (0, 3));
     }
 
     #[test]
@@ -422,6 +450,29 @@ mod tests {
         assert_eq!(after.cursor_row, before.cursor_row);
         assert_eq!(before.history_start, 0);
         assert!(before.lines[2].shares_storage_with(&after.lines[0]));
+    }
+
+    #[test]
+    fn erase_scrollback_preserves_the_visible_screen_and_cursor() {
+        let mut state = terminal(8, 3);
+        state.apply_terminal_output(b"old\r\nA\r\nB\r\nC\x1b[2;1H\x1b7\x1b[3J");
+
+        let snapshot = state.snapshot();
+        let lines: Vec<_> = snapshot.lines.iter().map(|line| line_text(line)).collect();
+        assert_eq!(lines, ["A", "B", "C"]);
+        assert_eq!(snapshot.history_start, 1);
+        assert_eq!((snapshot.cursor_row, snapshot.cursor_col), (1, 0));
+
+        state.apply_terminal_output(b"\x1b[H\x1b8X");
+        assert_eq!(line_text(&state.snapshot().lines[1]), "X");
+    }
+
+    #[test]
+    fn unsupported_erase_parameters_leave_the_screen_intact() {
+        let mut state = terminal(8, 3);
+        state.apply_terminal_output(b"abc\x1b[H\x1b[4J\x1b[3K");
+
+        assert_eq!(line_text(&state.snapshot().lines[0]), "abc");
     }
 
     #[test]

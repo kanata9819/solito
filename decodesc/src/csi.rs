@@ -30,6 +30,7 @@ pub enum CsiMessage {
         col: u16,
     },
     EraseDisplay(EraseMode),
+    EraseScrollback,
     EraseLine(EraseMode),
     EraseCharacters(u16),
     DeleteCharacters(u16),
@@ -93,8 +94,13 @@ pub fn decode_csi(params: &Params, intermediates: &[u8], ignore: bool, action: c
             row: param(params, 0, 1),
             col: param(params, 1, 1),
         },
-        (true, _, 'J') => CsiMessage::EraseDisplay(EraseMode::from_csi_mode(param(params, 0, 0))),
-        (true, _, 'K') => CsiMessage::EraseLine(EraseMode::from_csi_mode(param(params, 0, 0))),
+        (true, _, 'J') if amount == 3 => CsiMessage::EraseScrollback,
+        (true, _, 'J') if amount <= 2 => {
+            CsiMessage::EraseDisplay(EraseMode::from_csi_mode(param(params, 0, 0)))
+        }
+        (true, _, 'K') if amount <= 2 => {
+            CsiMessage::EraseLine(EraseMode::from_csi_mode(param(params, 0, 0)))
+        }
         (true, _, 'X') => CsiMessage::EraseCharacters(amount),
         (true, _, 'P') => CsiMessage::DeleteCharacters(amount),
         (true, _, '@') => CsiMessage::InsertBlankCharacters(amount),

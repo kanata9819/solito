@@ -38,8 +38,8 @@ impl RendererConfig {
         if self.font_family.trim().is_empty() {
             self.font_family = Self::DEFAULT_FONT_FAMILY.to_string();
         }
-        self.font_size = sanitize_positive_f32(self.font_size, Self::DEFAULT_FONT_SIZE);
-        self.line_height = sanitize_positive_f32(self.line_height, Self::DEFAULT_LINE_HEIGHT);
+        self.font_size = sanitize_pixel_size(self.font_size, Self::DEFAULT_FONT_SIZE);
+        self.line_height = sanitize_pixel_size(self.line_height, Self::DEFAULT_LINE_HEIGHT);
 
         self
     }
@@ -57,8 +57,8 @@ impl Default for RendererConfig {
     }
 }
 
-pub(crate) fn sanitize_positive_f32(value: f32, fallback: f32) -> f32 {
-    if value.is_finite() && value > 0.0 {
+pub(crate) fn sanitize_pixel_size(value: f32, fallback: f32) -> f32 {
+    if value.is_finite() && value >= 1.0 {
         value
     } else {
         fallback

@@ -45,7 +45,7 @@ fn parse_color(value: Option<&[u8]>) -> Option<[u8; 4]> {
 
 fn parse_hash_color(value: &str) -> Option<[u8; 4]> {
     let value = value.strip_prefix('#')?;
-    if value.len() != 6 {
+    if value.len() != 6 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return None;
     }
 
@@ -92,6 +92,19 @@ mod tests {
         assert_eq!(
             message,
             Some(OscMessage::SetCursorColor([0, 255, 128, 255]))
+        );
+    }
+
+    #[test]
+    fn rejects_non_ascii_hash_cursor_color() {
+        let color = "#aé000".as_bytes();
+
+        assert_eq!(
+            decode_osc(&[b"12", color], true),
+            Some(OscMessage::Unknown {
+                params: vec![b"12".to_vec(), color.to_vec()],
+                bell_terminated: true,
+            })
         );
     }
 

@@ -101,11 +101,11 @@ impl SolitoApplication {
                 self.refresh_copy_mode(&snapshot);
             }
             CopyModeCommand::ToggleCellSelection => {
-                self.copy_mode.toggle_cell_selection();
+                self.copy_mode.toggle_cell_selection(&snapshot);
                 self.refresh_copy_mode(&snapshot);
             }
             CopyModeCommand::ToggleLineSelection => {
-                self.copy_mode.toggle_line_selection();
+                self.copy_mode.toggle_line_selection(&snapshot);
                 self.refresh_copy_mode(&snapshot);
             }
             CopyModeCommand::CopyAndExit => {

@@ -1,6 +1,6 @@
 use std::{env, fs, path::PathBuf};
 
-use super::renderer::{RendererConfig, WindowBackdrop, sanitize_positive_f32};
+use super::renderer::{RendererConfig, WindowBackdrop, sanitize_pixel_size};
 use anyhow::{Context, Result};
 use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
@@ -116,8 +116,8 @@ pub struct WindowConfig {
 impl WindowConfig {
     fn sanitized(mut self) -> Self {
         let default = Self::default();
-        self.width = sanitize_positive_f32(self.width, default.width);
-        self.height = sanitize_positive_f32(self.height, default.height);
+        self.width = sanitize_pixel_size(self.width, default.width);
+        self.height = sanitize_pixel_size(self.height, default.height);
 
         self
     }
@@ -153,8 +153,8 @@ impl FontConfig {
             self.family = default.family;
         }
 
-        self.size = sanitize_positive_f32(self.size, default.size);
-        self.line_height = sanitize_positive_f32(self.line_height, default.line_height);
+        self.size = sanitize_pixel_size(self.size, default.size);
+        self.line_height = sanitize_pixel_size(self.line_height, default.line_height);
 
         self
     }
@@ -305,7 +305,7 @@ mod tests {
             font: super::FontConfig {
                 family: " ".to_string(),
                 size: -1.0,
-                line_height: 0.0,
+                line_height: 1e-30,
             },
             tracing: super::TracingConfig {
                 filter: String::new(),
