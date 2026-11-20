@@ -924,4 +924,32 @@ mod tests {
 
         assert_eq!(snapshot.cursor_color, None);
     }
+
+    #[test]
+    fn cursor_up_stops_at_top_margin_without_origin_mode() {
+        let mut state = terminal(8, 6);
+        state.apply_terminal_output(b"\x1b[3;5r\x1b[4;1H\x1b[9A");
+        assert_eq!(state.snapshot().cursor_row, 2);
+    }
+
+    #[test]
+    fn cursor_down_stops_at_bottom_margin_without_origin_mode() {
+        let mut state = terminal(8, 6);
+        state.apply_terminal_output(b"\x1b[3;5r\x1b[3;1H\x1b[9B");
+        assert_eq!(state.snapshot().cursor_row, 4);
+    }
+
+    #[test]
+    fn cursor_up_above_scroll_region_stops_at_screen_top() {
+        let mut state = terminal(8, 6);
+        state.apply_terminal_output(b"\x1b[3;5r\x1b[2;1H\x1b[9A");
+        assert_eq!(state.snapshot().cursor_row, 0);
+    }
+
+    #[test]
+    fn erase_line_cancels_pending_wrap() {
+        let mut state = terminal(4, 3);
+        state.apply_terminal_output(b"abcd\x1b[KX");
+        assert_eq!(line_text(&state.snapshot().lines[0]), "abcX");
+    }
 }

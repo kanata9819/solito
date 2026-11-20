@@ -115,6 +115,8 @@ impl Screen {
             EraseMode::ToEnd => (col, cols),
         };
         self.erase_line_range(row, start, end);
+        // Like xterm, erasing cancels a wrap pending at the right edge.
+        self.screen_buffer.pending_wrap = false;
     }
 
     pub(super) fn move_cursor_to(&mut self, position: CursorPosition) {
@@ -378,42 +380,29 @@ impl Screen {
     }
 
     fn move_cursor_up(&mut self, amount: usize) {
-        let next_row = if self.screen_buffer.origin_mode {
-            let (top, _) = self.scroll_region_bounds();
-            self.screen_buffer
-                .cursor
-                .get_current_row()
-                .saturating_sub(amount)
-                .max(top)
-        } else {
-            self.screen_buffer
-                .cursor
-                .get_current_row()
-                .saturating_sub(amount)
-                .max(self.screen_buffer.get_viewport_top())
-        };
-
-        self.screen_buffer.cursor.move_to_row(next_row);
+        // CUU stops at the top margin when the cursor starts inside the scroll region,
+        // whether or not origin mode is set; above the region it stops at the screen top.
+        let viewport_top = self.screen_buffer.get_viewport_top();
+        let row = self.screen_buffer.cursor.get_current_row();
+        let margin = viewport_top + self.screen_buffer.scroll_region.0;
+        let limit = if row >= margin { margin } else { viewport_top };
+        self.screen_buffer
+            .cursor
+            .move_to_row(row.saturating_sub(amount).max(limit));
         self.screen_buffer.pending_wrap = false;
     }
 
     fn move_cursor_down(&mut self, amount: usize) {
-        let next_row = if self.screen_buffer.origin_mode {
-            let (_, bottom) = self.scroll_region_bounds();
-            self.screen_buffer
-                .cursor
-                .get_current_row()
-                .saturating_add(amount)
-                .min(bottom)
-        } else {
-            let bottom = self.screen_buffer.get_viewport_top() + self.screen_buffer.rows() - 1;
-            self.screen_buffer
-                .cursor
-                .get_current_row()
-                .saturating_add(amount)
-                .min(bottom)
-        };
-        self.screen_buffer.cursor.move_to_row(next_row);
+        // CUD stops at the bottom margin when the cursor starts inside the scroll region,
+        // whether or not origin mode is set; below the region it stops at the screen bottom.
+        let viewport_top = self.screen_buffer.get_viewport_top();
+        let row = self.screen_buffer.cursor.get_current_row();
+        let margin = viewport_top + self.screen_buffer.scroll_region.1;
+        let screen_bottom = viewport_top + self.screen_buffer.rows() - 1;
+        let limit = if row <= margin { margin } else { screen_bottom };
+        self.screen_buffer
+            .cursor
+            .move_to_row(row.saturating_add(amount).min(limit));
         self.screen_buffer.pending_wrap = false;
         self.screen_buffer.ensure_cursor_line();
     }
@@ -624,6 +613,7 @@ impl Screen {
             };
             self.erase_line_range(row, start, end);
         }
+        self.screen_buffer.pending_wrap = false;
     }
 
     fn delete_characters(&mut self, amount: usize) {
