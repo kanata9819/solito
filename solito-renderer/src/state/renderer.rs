@@ -107,6 +107,12 @@ impl Renderer {
         self.terminal_view.cell_at(x, y, self.terminal_size())
     }
 
+    /// Returns the row under the mouse, including its position in scrollback history.
+    pub fn terminal_history_row_at(&self, x: f64, y: f64) -> Option<usize> {
+        let (_, row) = self.terminal_cell_at(x, y)?;
+        self.terminal_view.history_row_at(row)
+    }
+
     pub fn terminal_size_for(&self, window_size: PhysicalSize<u32>) -> TerminalSize {
         TerminalSize::new(
             self.terminal_view.visible_cols(window_size.width),

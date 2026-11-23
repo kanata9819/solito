@@ -60,7 +60,7 @@ impl TerminalView {
     }
 
     pub(crate) fn copy_mode_rects(&mut self) -> Vec<RectSpec> {
-        if !self.copy_mode.active {
+        if !self.copy_mode.active && self.copy_mode.selection.is_none() {
             return Vec::new();
         }
 
@@ -105,7 +105,10 @@ impl TerminalView {
             }
         }
 
-        if copy_mode.cursor.row >= visible_start && copy_mode.cursor.row < visible_end {
+        if copy_mode.active
+            && copy_mode.cursor.row >= visible_start
+            && copy_mode.cursor.row < visible_end
+        {
             let visible_row = copy_mode.cursor.row - visible_start;
             let cursor_col = copy_mode
                 .cursor
@@ -180,6 +183,37 @@ impl TerminalView {
 mod tests {
     use super::*;
     use solito_terminal::{TerminalSize, TerminalState};
+
+    #[test]
+    fn mouse_selection_draws_without_a_copy_cursor() {
+        let mut terminal = TerminalState::new(TerminalSize::new(5, 2));
+        terminal.apply_terminal_output(b"one\r\ntwo");
+        let cursor = CopyModePosition::new(1, 0);
+        let copy_mode = CopyModeSnapshot {
+            selection: Some(CopyModeSelection {
+                anchor: CopyModePosition::new(0, 0),
+                cursor,
+                kind: CopyModeSelectionKind::Line,
+            }),
+            cursor,
+            ..Default::default()
+        };
+
+        let rects = TerminalView::copy_mode_rects_for(
+            &copy_mode,
+            &terminal.snapshot().lines,
+            0,
+            2,
+            10.0,
+            20.0,
+        );
+        assert_eq!(rects.len(), 2);
+        assert!(
+            rects
+                .iter()
+                .all(|rect| rect.color == TerminalView::COPY_MODE_SELECTION_COLOR)
+        );
+    }
 
     #[test]
     fn copy_cursor_and_highlight_cover_both_columns_of_a_wide_character() {

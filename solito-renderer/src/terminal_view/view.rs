@@ -141,6 +141,11 @@ impl TerminalView {
         )
     }
 
+    pub(crate) fn history_row_at(&self, visible_row: usize) -> Option<usize> {
+        let (start, end) = self.viewport.visible_range(self.snapshot.lines.len());
+        (visible_row < end - start).then(|| self.snapshot.history_start + start + visible_row)
+    }
+
     fn cell_at_position(
         x: f64,
         y: f64,
@@ -301,6 +306,8 @@ mod tests {
         assert!(!view.update_text_buffer());
         assert_eq!(view.glyphs.text_buffer.lines[0].text(), "second");
         assert_eq!(view.glyphs.text_buffer.lines[2].text(), "last");
+        assert_eq!(view.history_row_at(0), Some(1));
+        assert_eq!(view.history_row_at(3), None);
         view.set_snapshot(terminal.snapshot());
         assert!(!view.update_text_buffer());
         view.resize(900, 158, terminal.snapshot());
@@ -313,6 +320,7 @@ mod tests {
         view.scroll(0.0, 1.0);
         assert!(view.update_text_buffer());
         assert_eq!(view.glyphs.text_buffer.lines[0].text(), "first");
+        assert_eq!(view.history_row_at(0), Some(0));
         let scrolled_layout = |view: &TerminalView| {
             view.glyphs
                 .text_buffer

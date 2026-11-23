@@ -263,19 +263,22 @@ impl SolitoApplication {
     }
 
     fn leave_copy_mode(&mut self) {
-        if !self.copy_mode.is_active() {
+        self.mouse.selecting_lines = false;
+        let was_active = self.copy_mode.is_active();
+        if !self.copy_mode.exit() {
             return;
         }
 
-        self.copy_mode.exit();
-        if let Some(window) = &self.window {
+        if was_active && let Some(window) = &self.window {
             window.set_ime_allowed(true);
         }
         if let Some(renderer) = &mut self.renderer {
             renderer.set_copy_mode(Default::default());
             self.needs_redraw = true;
         }
-        self.update_window_title();
+        if was_active {
+            self.update_window_title();
+        }
     }
 
     fn clear_ime(&mut self) {
@@ -429,6 +432,9 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                     ),
                 }
                 self.needs_redraw = true;
+                if self.mouse.selecting_lines {
+                    self.select_mouse_line(true);
+                }
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.update_tab_hover(Some(position));
@@ -437,13 +443,13 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                 {
                     window.set_cursor_visible(true);
                 }
-                self.report_mouse_motion(position)
+                self.handle_mouse_motion(position);
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 if self.activate_clicked_tab(state, button) {
                     return;
                 }
-                self.report_mouse_button(state, button)
+                self.handle_mouse_button(state, button);
             }
             WindowEvent::CursorLeft { .. } => {
                 self.mouse.position = None;

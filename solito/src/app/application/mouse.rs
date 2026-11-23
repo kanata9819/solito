@@ -9,6 +9,7 @@ use winit::{
 #[derive(Default)]
 pub(super) struct MouseInputState {
     pub(super) position: Option<PhysicalPosition<f64>>,
+    pub(super) selecting_lines: bool,
     cell: Option<(usize, usize)>,
     buttons: [bool; 3],
     scroll: [f64; 2],
@@ -84,6 +85,28 @@ impl SolitoApplication {
             .terminal_cell_at(position.x, position.y)
     }
 
+    pub(super) fn select_mouse_line(&mut self, extend: bool) -> bool {
+        let Some(history_row) = self.mouse.position.and_then(|position| {
+            self.renderer
+                .as_ref()?
+                .terminal_history_row_at(position.x, position.y)
+        }) else {
+            return false;
+        };
+        let Some(snapshot) = self.tabs.active_snapshot() else {
+            return false;
+        };
+
+        if self.copy_mode.select_line(&snapshot, history_row, extend) {
+            if self.terminal_dirty {
+                self.refresh_active_terminal();
+            } else {
+                self.refresh_copy_mode(&snapshot);
+            }
+        }
+        true
+    }
+
     fn send_mouse(&self, mode: MouseMode, code: u8, released: bool, (col, row): (usize, usize)) {
         let modifiers = (u8::from(self.modifiers.shift_key()) * 4)
             | (u8::from(self.modifiers.alt_key()) * 8)
@@ -96,9 +119,16 @@ impl SolitoApplication {
         }
     }
 
-    pub(super) fn report_mouse_motion(&mut self, position: PhysicalPosition<f64>) {
+    pub(super) fn handle_mouse_motion(&mut self, position: PhysicalPosition<f64>) {
         let mode = self.mouse_mode();
         self.mouse.position = Some(position);
+        if self.mouse.selecting_lines {
+            self.select_mouse_line(true);
+            return;
+        }
+        if mode.tracking == 0 {
+            return;
+        }
         let cell = self.mouse_cell();
         if cell != self.mouse.cell
             && let Some(cell) = cell
@@ -114,8 +144,13 @@ impl SolitoApplication {
         }
     }
 
-    pub(super) fn report_mouse_button(&mut self, state: ElementState, button: MouseButton) {
+    pub(super) fn handle_mouse_button(&mut self, state: ElementState, button: MouseButton) {
         let mode = self.mouse_mode();
+        if button == MouseButton::Left && mode.tracking == 0 {
+            self.mouse.selecting_lines =
+                state == ElementState::Pressed && self.select_mouse_line(false);
+            return;
+        }
         let button = match button {
             MouseButton::Left => 0,
             MouseButton::Middle => 1,
