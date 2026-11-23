@@ -34,6 +34,14 @@ impl CopyMode {
         self.snapshot.active
     }
 
+    pub(super) fn has_selection(&self) -> bool {
+        self.snapshot.selection.is_some()
+    }
+
+    pub(super) fn clear_selection(&mut self) -> bool {
+        self.snapshot.selection.take().is_some()
+    }
+
     pub(super) fn enter(&mut self, screen: &ScreenSnapshot) {
         self.history_start = screen.history_start;
         self.snapshot = CopyModeSnapshot {
@@ -74,32 +82,24 @@ impl CopyMode {
         self.toggle_selection(screen, CopyModeSelectionKind::Line);
     }
 
-    pub(super) fn select_line(
+    pub(super) fn select_cells(
         &mut self,
         screen: &ScreenSnapshot,
-        history_row: usize,
-        extend: bool,
+        history_anchor: CopyModePosition,
+        history_cursor: CopyModePosition,
     ) -> bool {
         let previous = self.snapshot;
         self.update_snapshot(screen);
-        if let Some(row) = history_row.checked_sub(screen.history_start)
-            && row < screen.lines.len()
+        if let Some(anchor) = position_in_snapshot(screen, history_anchor)
+            && let Some(cursor) = position_in_snapshot(screen, history_cursor)
         {
-            let cursor = CopyModePosition::new(row, 0);
-            if !extend {
-                self.history_start = screen.history_start;
-                self.snapshot.cursor = cursor;
-                self.snapshot.selection = Some(CopyModeSelection {
-                    anchor: cursor,
-                    cursor,
-                    kind: CopyModeSelectionKind::Line,
-                });
-            } else if let Some(selection) = self.snapshot.selection.as_mut()
-                && selection.kind == CopyModeSelectionKind::Line
-            {
-                self.snapshot.cursor = cursor;
-                selection.cursor = cursor;
-            }
+            self.history_start = screen.history_start;
+            self.snapshot.cursor = cursor;
+            self.snapshot.selection = Some(CopyModeSelection {
+                anchor,
+                cursor,
+                kind: CopyModeSelectionKind::Cell,
+            });
         }
         self.snapshot != previous
     }
@@ -151,6 +151,15 @@ impl CopyMode {
 
         self.snapshot
     }
+}
+
+fn position_in_snapshot(
+    screen: &ScreenSnapshot,
+    position: CopyModePosition,
+) -> Option<CopyModePosition> {
+    let row = position.row.checked_sub(screen.history_start)?;
+    (row < screen.lines.len())
+        .then(|| movement::clamp_position(screen, CopyModePosition::new(row, position.col)))
 }
 
 #[cfg(test)]
@@ -253,27 +262,26 @@ mod tests {
     }
 
     #[test]
-    fn mouse_selects_whole_rows_in_either_direction_without_entering_copy_mode() {
-        let mut screen = screen(&["first", "日本語", "last"], 2, 0);
+    fn mouse_selects_characters_in_either_direction_without_entering_copy_mode() {
+        let mut terminal = TerminalState::new(TerminalSize::new(10, 2));
+        terminal.apply_terminal_output("first\r\na日b".as_bytes());
+        let mut screen = terminal.snapshot();
         screen.history_start = 20;
         let mut copy_mode = CopyMode::default();
+        let first = CopyModePosition::new(20, 3);
+        let wide = CopyModePosition::new(21, 1);
+        let continuation = CopyModePosition::new(21, 2);
 
-        assert!(copy_mode.select_line(&screen, 21, false));
-        assert_eq!(copy_mode.selected_text(&screen).as_deref(), Some("日本語"));
+        assert!(copy_mode.select_cells(&screen, wide, continuation));
+        assert_eq!(copy_mode.selected_text(&screen).as_deref(), Some("日"));
         assert!(!copy_mode.is_active());
 
-        assert!(copy_mode.select_line(&screen, 20, true));
-        assert_eq!(
-            copy_mode.selected_text(&screen).as_deref(),
-            Some("first\n日本語")
-        );
-        assert!(copy_mode.select_line(&screen, 22, true));
-        assert_eq!(
-            copy_mode.selected_text(&screen).as_deref(),
-            Some("日本語\nlast")
-        );
+        for (anchor, cursor) in [(first, continuation), (continuation, first)] {
+            assert!(copy_mode.select_cells(&screen, anchor, cursor));
+            assert_eq!(copy_mode.selected_text(&screen).as_deref(), Some("st\na日"));
+        }
 
-        assert!(copy_mode.exit());
+        assert!(copy_mode.clear_selection());
         assert_eq!(copy_mode.selected_text(&screen), None);
     }
 
@@ -281,21 +289,20 @@ mod tests {
     fn mouse_drag_tracks_history_rows_until_its_anchor_expires() {
         let mut screen = screen(&["old", "first", "second", "third"], 0, 0);
         let mut copy_mode = CopyMode::default();
-        assert!(copy_mode.select_line(&screen, 1, false));
+        let anchor = CopyModePosition::new(1, 1);
+        let cursor = CopyModePosition::new(2, 0);
+        assert!(copy_mode.select_cells(&screen, anchor, anchor));
 
         screen.lines.remove(0);
         screen.history_start = 1;
-        assert!(copy_mode.select_line(&screen, 2, true));
-        assert_eq!(
-            copy_mode.selected_text(&screen).as_deref(),
-            Some("first\nsecond")
-        );
+        assert!(copy_mode.select_cells(&screen, anchor, cursor));
+        assert_eq!(copy_mode.selected_text(&screen).as_deref(), Some("irst\ns"));
 
         screen.lines.remove(0);
         screen.history_start = 2;
-        assert!(copy_mode.select_line(&screen, 3, true));
+        assert!(copy_mode.select_cells(&screen, anchor, cursor));
         assert_eq!(copy_mode.selected_text(&screen), None);
-        assert!(!copy_mode.select_line(&screen, 1, false));
+        assert!(!copy_mode.select_cells(&screen, anchor, anchor));
     }
 
     #[test]

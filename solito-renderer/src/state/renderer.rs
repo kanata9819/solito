@@ -1,4 +1,4 @@
-use crate::terminal_view::{CopyModeSnapshot, TabBarSnapshot};
+use crate::terminal_view::{CopyModePosition, CopyModeSnapshot, TabBarSnapshot};
 use anyhow::Result;
 use solito_terminal::{ScreenSnapshot, TerminalSize};
 use std::sync::Arc;
@@ -107,10 +107,13 @@ impl Renderer {
         self.terminal_view.cell_at(x, y, self.terminal_size())
     }
 
-    /// Returns the row under the mouse, including its position in scrollback history.
-    pub fn terminal_history_row_at(&self, x: f64, y: f64) -> Option<usize> {
-        let (_, row) = self.terminal_cell_at(x, y)?;
-        self.terminal_view.history_row_at(row)
+    /// Returns the cell under the mouse with its row in scrollback coordinates.
+    pub fn terminal_history_cell_at(&self, x: f64, y: f64) -> Option<CopyModePosition> {
+        let (col, row) = self.terminal_cell_at(x, y)?;
+        Some(CopyModePosition::new(
+            self.terminal_view.history_row_at(row)?,
+            col,
+        ))
     }
 
     pub fn terminal_size_for(&self, window_size: PhysicalSize<u32>) -> TerminalSize {

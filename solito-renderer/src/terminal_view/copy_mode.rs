@@ -191,9 +191,9 @@ mod tests {
         let cursor = CopyModePosition::new(1, 0);
         let copy_mode = CopyModeSnapshot {
             selection: Some(CopyModeSelection {
-                anchor: CopyModePosition::new(0, 0),
+                anchor: CopyModePosition::new(0, 1),
                 cursor,
-                kind: CopyModeSelectionKind::Line,
+                kind: CopyModeSelectionKind::Cell,
             }),
             cursor,
             ..Default::default()
@@ -208,6 +208,8 @@ mod tests {
             20.0,
         );
         assert_eq!(rects.len(), 2);
+        assert_eq!(rects[0].width, 20.0);
+        assert_eq!(rects[1].width, 10.0);
         assert!(
             rects
                 .iter()

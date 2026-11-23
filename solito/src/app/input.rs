@@ -16,6 +16,7 @@ pub(super) enum AppCommand {
     NextTab,
     PreviousTab,
     CopySelection,
+    CopySelectionOrInterrupt,
     PasteFromClipboard,
 }
 
@@ -148,6 +149,9 @@ fn shortcut_command(logical_key: &Key<SmolStr>, modifiers: ModifiersState) -> Op
         }
     } else if modifiers.control_key() {
         match logical_key {
+            Key::Character(character) if character.eq_ignore_ascii_case("c") => {
+                Some(AppCommand::CopySelectionOrInterrupt)
+            }
             Key::Character(character) if character.eq_ignore_ascii_case("v") => {
                 Some(AppCommand::PasteFromClipboard)
             }
@@ -274,7 +278,7 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_c_becomes_interrupt_byte() {
+    fn ctrl_c_copies_selection_or_interrupts() {
         let command = handle_key(
             None,
             &Key::Character(SmolStr::new("c")),
@@ -285,7 +289,7 @@ mod tests {
             false,
         );
 
-        assert_eq!(command, AppCommand::SendTerminalInput(b"\x03".to_vec()));
+        assert_eq!(command, AppCommand::CopySelectionOrInterrupt);
     }
 
     #[test]

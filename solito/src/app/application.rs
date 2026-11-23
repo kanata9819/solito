@@ -263,7 +263,7 @@ impl SolitoApplication {
     }
 
     fn leave_copy_mode(&mut self) {
-        self.mouse.selecting_lines = false;
+        self.mouse.selection_drag = None;
         let was_active = self.copy_mode.is_active();
         if !self.copy_mode.exit() {
             return;
@@ -432,9 +432,7 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
                     ),
                 }
                 self.needs_redraw = true;
-                if self.mouse.selecting_lines {
-                    self.select_mouse_line(true);
-                }
+                self.update_mouse_selection();
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.update_tab_hover(Some(position));
@@ -603,16 +601,24 @@ mod tests {
                 );
                 assert!(app.ime.is_composing());
                 app.window_event(event_loop, window.id(), WindowEvent::Focused(true));
-                for (text, key, expected) in [
+                for (text, key, modifiers, expected) in [
                     (
                         Some(winit::keyboard::SmolStr::new("a")),
                         winit::keyboard::Key::Character("a".into()),
+                        ModifiersState::empty(),
                         b"a".to_vec(),
                     ),
                     (
                         None,
                         winit::keyboard::Key::Named(winit::keyboard::NamedKey::Enter),
+                        ModifiersState::empty(),
                         b"\r".to_vec(),
+                    ),
+                    (
+                        None,
+                        winit::keyboard::Key::Character("c".into()),
+                        ModifiersState::CONTROL,
+                        b"\x03".to_vec(),
                     ),
                 ] {
                     let command = input::handle_key(
@@ -620,7 +626,7 @@ mod tests {
                         &key,
                         ElementState::Pressed,
                         false,
-                        app.modifiers,
+                        modifiers,
                         app.copy_mode.is_active(),
                         app.ime.is_composing(),
                     );

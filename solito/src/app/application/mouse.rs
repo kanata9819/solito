@@ -1,5 +1,6 @@
 use super::SolitoApplication;
 use crate::session::runtime::SessionInput;
+use solito_renderer::CopyModePosition;
 use solito_terminal::MouseMode;
 use winit::{
     dpi::PhysicalPosition,
@@ -9,11 +10,27 @@ use winit::{
 #[derive(Default)]
 pub(super) struct MouseInputState {
     pub(super) position: Option<PhysicalPosition<f64>>,
-    pub(super) selecting_lines: bool,
+    pub(super) selection_drag: Option<SelectionDrag>,
     cell: Option<(usize, usize)>,
     buttons: [bool; 3],
     scroll: [f64; 2],
     context: Option<(usize, MouseMode, bool)>,
+}
+
+pub(super) struct SelectionDrag {
+    anchor: CopyModePosition,
+    origin: PhysicalPosition<f64>,
+    started: bool,
+}
+
+impl SelectionDrag {
+    fn update(&mut self, position: PhysicalPosition<f64>) -> bool {
+        const DRAG_THRESHOLD: f64 = 3.0;
+        let dx = (position.x - self.origin.x).abs();
+        let dy = (position.y - self.origin.y).abs();
+        self.started |= dx.max(dy) >= DRAG_THRESHOLD;
+        self.started
+    }
 }
 
 impl SolitoApplication {
@@ -85,26 +102,46 @@ impl SolitoApplication {
             .terminal_cell_at(position.x, position.y)
     }
 
-    pub(super) fn select_mouse_line(&mut self, extend: bool) -> bool {
-        let Some(history_row) = self.mouse.position.and_then(|position| {
-            self.renderer
-                .as_ref()?
-                .terminal_history_row_at(position.x, position.y)
-        }) else {
-            return false;
-        };
-        let Some(snapshot) = self.tabs.active_snapshot() else {
-            return false;
-        };
+    fn mouse_history_cell(&self, position: PhysicalPosition<f64>) -> Option<CopyModePosition> {
+        self.renderer
+            .as_ref()?
+            .terminal_history_cell_at(position.x, position.y)
+    }
 
-        if self.copy_mode.select_line(&snapshot, history_row, extend) {
+    fn begin_mouse_selection(&mut self) {
+        self.mouse.selection_drag = self.mouse.position.and_then(|origin| {
+            Some(SelectionDrag {
+                anchor: self.mouse_history_cell(origin)?,
+                origin,
+                started: false,
+            })
+        });
+        if self.copy_mode.clear_selection()
+            && let Some(snapshot) = self.tabs.active_snapshot()
+        {
+            self.refresh_copy_mode(&snapshot);
+        }
+    }
+
+    pub(super) fn update_mouse_selection(&mut self) {
+        let (Some(position), Some(drag)) = (self.mouse.position, &mut self.mouse.selection_drag)
+        else {
+            return;
+        };
+        if !drag.update(position) {
+            return;
+        }
+        let anchor = drag.anchor;
+        if let Some(cursor) = self.mouse_history_cell(position)
+            && let Some(snapshot) = self.tabs.active_snapshot()
+            && self.copy_mode.select_cells(&snapshot, anchor, cursor)
+        {
             if self.terminal_dirty {
                 self.refresh_active_terminal();
             } else {
                 self.refresh_copy_mode(&snapshot);
             }
         }
-        true
     }
 
     fn send_mouse(&self, mode: MouseMode, code: u8, released: bool, (col, row): (usize, usize)) {
@@ -122,11 +159,8 @@ impl SolitoApplication {
     pub(super) fn handle_mouse_motion(&mut self, position: PhysicalPosition<f64>) {
         let mode = self.mouse_mode();
         self.mouse.position = Some(position);
-        if self.mouse.selecting_lines {
-            self.select_mouse_line(true);
-            return;
-        }
         if mode.tracking == 0 {
+            self.update_mouse_selection();
             return;
         }
         let cell = self.mouse_cell();
@@ -147,8 +181,10 @@ impl SolitoApplication {
     pub(super) fn handle_mouse_button(&mut self, state: ElementState, button: MouseButton) {
         let mode = self.mouse_mode();
         if button == MouseButton::Left && mode.tracking == 0 {
-            self.mouse.selecting_lines =
-                state == ElementState::Pressed && self.select_mouse_line(false);
+            match state {
+                ElementState::Pressed => self.begin_mouse_selection(),
+                ElementState::Released => self.mouse.selection_drag = None,
+            }
             return;
         }
         let button = match button {
@@ -218,6 +254,22 @@ fn scroll_steps(remainder: &mut f64, delta: f64) -> i32 {
 
 #[cfg(test)]
 mod tests {
+    use super::{CopyModePosition, PhysicalPosition, SelectionDrag};
+
+    #[test]
+    fn mouse_drag_ignores_click_jitter_and_can_return_to_its_anchor() {
+        let origin = PhysicalPosition::new(50.0, 50.0);
+        let mut drag = SelectionDrag {
+            anchor: CopyModePosition::new(0, 0),
+            origin,
+            started: false,
+        };
+        assert!(!drag.update(origin));
+        assert!(!drag.update(PhysicalPosition::new(51.0, 49.0)));
+        assert!(drag.update(PhysicalPosition::new(53.0, 50.0)));
+        assert!(drag.update(origin));
+    }
+
     #[test]
     fn extreme_wheel_deltas_do_not_leave_unbounded_work_pending() {
         let mut remainder = 0.0;

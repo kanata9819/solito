@@ -13,9 +13,10 @@ font metrics so shell font settings keep their usual meaning.
 
 Japanese IME input is supported: composing text appears at the terminal cursor, conversion candidates follow the active clause, and only committed text is sent to the shell. IME is disabled in keyboard copy mode so its navigation keys remain available.
 
-Left-click a terminal row or drag across several rows to select them, then press
-`Ctrl+Shift+C` to copy. If the terminal app handles the mouse, press `Ctrl+Shift+Q`
-to enter copy mode, select the rows, then press `y` to copy and exit.
+Drag over terminal text to select characters, then press `Ctrl+C` to copy.
+Click to clear the selection. Without a selection, `Ctrl+C` goes to the shell.
+If the terminal app handles the mouse, press `Ctrl+Shift+Q` to enter copy mode,
+then drag over text and press `Ctrl+C` or `y` to copy and exit.
 
 There's still work to do on terminal compatibility. Neovim has been particularly good at finding bugs.
 

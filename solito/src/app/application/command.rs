@@ -27,13 +27,7 @@ impl SolitoApplication {
     ) -> AppResult {
         match command {
             AppCommand::Noop => {}
-            AppCommand::SendTerminalInput(bytes) => {
-                if let Some(input_tx) = self.tabs.active_input_tx() {
-                    input_tx.send(SessionInput::write(bytes))?;
-                    self.leave_copy_mode();
-                    self.scroll_terminal_to_bottom();
-                }
-            }
+            AppCommand::SendTerminalInput(bytes) => self.send_terminal_input(bytes)?,
             AppCommand::EnterCopyMode => {
                 if let Some(snapshot) = self.tabs.active_snapshot() {
                     self.clear_ime();
@@ -78,16 +72,30 @@ impl SolitoApplication {
                 self.leave_copy_mode();
                 self.activate_previous_tab();
             }
-            AppCommand::CopySelection => {
+            AppCommand::CopySelection | AppCommand::CopySelectionOrInterrupt => {
                 if let Some(snapshot) = self.tabs.active_snapshot()
                     && let Some(text) = self.copy_mode.selected_text(&snapshot)
                 {
                     self.clipboard()?.set_text(text)?;
                 }
+                if command == AppCommand::CopySelectionOrInterrupt
+                    && !self.copy_mode.has_selection()
+                {
+                    self.send_terminal_input(b"\x03".to_vec())?;
+                }
             }
             AppCommand::PasteFromClipboard => self.paste_from_clipboard()?,
         }
 
+        Ok(())
+    }
+
+    fn send_terminal_input(&mut self, bytes: Vec<u8>) -> AppResult {
+        if let Some(input_tx) = self.tabs.active_input_tx() {
+            input_tx.send(SessionInput::write(bytes))?;
+            self.leave_copy_mode();
+            self.scroll_terminal_to_bottom();
+        }
         Ok(())
     }
 
@@ -137,12 +145,8 @@ impl SolitoApplication {
             return Ok(());
         };
 
-        if !text.is_empty()
-            && let Some(input_tx) = self.tabs.active_input_tx()
-        {
-            input_tx.send(SessionInput::write(text.into_bytes()))?;
-            self.leave_copy_mode();
-            self.scroll_terminal_to_bottom();
+        if !text.is_empty() {
+            self.send_terminal_input(text.into_bytes())?;
         }
 
         Ok(())
