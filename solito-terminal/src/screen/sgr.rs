@@ -131,23 +131,24 @@ fn apply_extended_color(color: &mut Option<[u8; 4]>, params: &[u16]) -> usize {
 }
 
 fn ansi_16_color(index: usize) -> [u8; 4] {
+    // Solito Midnight: vivid hues tuned for the deep blue-black background.
     const COLORS: [[u8; 4]; 16] = [
-        [12, 12, 12, 255],
-        [197, 15, 31, 255],
-        [19, 161, 14, 255],
-        [193, 156, 0, 255],
-        [0, 55, 218, 255],
-        [136, 23, 152, 255],
-        [58, 150, 221, 255],
-        [204, 204, 204, 255],
-        [118, 118, 118, 255],
-        [231, 72, 86, 255],
-        [22, 198, 12, 255],
-        [249, 241, 165, 255],
-        [59, 120, 255, 255],
-        [180, 0, 158, 255],
-        [97, 214, 214, 255],
-        [242, 242, 242, 255],
+        [21, 25, 36, 255],
+        [255, 92, 122, 255],
+        [94, 230, 160, 255],
+        [255, 203, 107, 255],
+        [97, 153, 255, 255],
+        [199, 128, 255, 255],
+        [64, 216, 255, 255],
+        [200, 208, 224, 255],
+        [104, 116, 144, 255],
+        [255, 130, 152, 255],
+        [134, 245, 190, 255],
+        [255, 226, 150, 255],
+        [140, 184, 255, 255],
+        [222, 166, 255, 255],
+        [140, 236, 255, 255],
+        [245, 248, 255, 255],
     ];
 
     COLORS[index.min(15)]
@@ -197,7 +198,7 @@ mod tests {
         let mut style = CellStyle::default();
 
         apply(&mut style, &semicolons(&[31]));
-        assert_eq!(style.fg_rgba, Some([197, 15, 31, 255]));
+        assert_eq!(style.fg_rgba, Some([255, 92, 122, 255]));
 
         apply(&mut style, &semicolons(&[39]));
         assert_eq!(style.fg_rgba, None);
@@ -248,7 +249,7 @@ mod tests {
         apply(&mut style, &[vec![38, 5, 196], vec![44]]);
 
         assert_eq!(style.fg_rgba, Some([255, 0, 0, 255]));
-        assert_eq!(style.bg_rgba, Some([0, 55, 218, 255]));
+        assert_eq!(style.bg_rgba, Some([97, 153, 255, 255]));
     }
 
     #[test]
@@ -258,6 +259,6 @@ mod tests {
 
         apply(&mut style, &[vec![4, 3], vec![58, 2, 0, 1, 2, 3]]);
 
-        assert_eq!(style.fg_rgba, Some([197, 15, 31, 255]));
+        assert_eq!(style.fg_rgba, Some([255, 92, 122, 255]));
     }
 }

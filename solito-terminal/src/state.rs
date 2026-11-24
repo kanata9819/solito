@@ -513,7 +513,7 @@ mod tests {
 
         assert_eq!(
             snapshot.lines[0][0].foreground_rgba(),
-            Some([197, 15, 31, 255])
+            Some([255, 92, 122, 255])
         );
         assert_eq!(snapshot.lines[0][1].foreground_rgba(), None);
     }
@@ -590,7 +590,7 @@ mod tests {
             state.apply_terminal_output(b"X");
             assert_eq!(
                 state.snapshot().lines[2][3].foreground_rgba(),
-                Some([197, 15, 31, 255])
+                Some([255, 92, 122, 255])
             );
         }
     }
@@ -668,12 +668,12 @@ mod tests {
         assert_eq!(
             colors,
             vec![
-                Some([0, 55, 218, 255]),
-                Some([59, 120, 255, 255]),
+                Some([97, 153, 255, 255]),
+                Some([140, 184, 255, 255]),
                 Some([255, 0, 0, 255]),
                 Some([12, 34, 56, 255]),
                 None,
-                Some([0, 55, 218, 255]),
+                Some([97, 153, 255, 255]),
                 None
             ]
         );
@@ -900,7 +900,7 @@ mod tests {
         assert_eq!(snapshot.lines[0][0].foreground_rgba(), None);
         assert_eq!(
             snapshot.lines[0][1].foreground_rgba(),
-            Some([197, 15, 31, 255])
+            Some([255, 92, 122, 255])
         );
         assert_eq!(snapshot.lines[0][2].foreground_rgba(), None);
     }

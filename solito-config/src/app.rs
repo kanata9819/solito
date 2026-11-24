@@ -286,7 +286,7 @@ mod tests {
         assert!(encoded.contains("backdrop = \"acrylic\""));
         assert!(encoded.contains("acrylic_tint = ["));
         assert_eq!(config.window.backdrop, WindowBackdrop::Acrylic);
-        assert_eq!(config.window.acrylic_tint, [18, 18, 18, 190]);
+        assert_eq!(config.window.acrylic_tint, [10, 13, 20, 200]);
     }
 
     #[test]
@@ -299,7 +299,7 @@ mod tests {
                 width: 0.0,
                 height: f32::NAN,
                 backdrop: WindowBackdrop::Acrylic,
-                acrylic_tint: [18, 18, 18, 190],
+                acrylic_tint: [10, 13, 20, 200],
                 hide_cursor: false,
             },
             font: super::FontConfig {

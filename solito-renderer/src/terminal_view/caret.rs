@@ -1,9 +1,13 @@
-use crate::util::color::{ThemeColor, rgba_to_f32, srgb_to_linear_rgba};
+use crate::{
+    pipeline::rect::RectSpec,
+    util::color::{ThemeColor, target_rgba, with_alpha},
+};
 
 use super::TerminalView;
 
 impl TerminalView {
-    pub(super) const DEFAULT_CARET_COLOR: [f32; 4] = ThemeColor::WHITE_ALPHA;
+    pub(super) const DEFAULT_CARET_COLOR: [u8; 4] = ThemeColor::ACCENT;
+    const CARET_GLOW: f32 = 8.0;
 
     pub(super) fn shell_caret_visible(&self) -> bool {
         self.snapshot.cursor_visible && !self.ime_preedit.is_active() && !self.copy_mode.active
@@ -40,10 +44,33 @@ impl TerminalView {
     }
 
     pub(crate) fn caret_color(&self, srgb_target: bool) -> [f32; 4] {
-        match self.snapshot.cursor_color {
-            Some(color) if srgb_target => srgb_to_linear_rgba(color),
-            Some(color) => rgba_to_f32(color),
-            None => Self::DEFAULT_CARET_COLOR,
+        target_rgba(
+            self.snapshot
+                .cursor_color
+                .unwrap_or(Self::DEFAULT_CARET_COLOR),
+            srgb_target,
+        )
+    }
+
+    /// The block caret plus a soft halo in its own color.
+    pub(crate) fn caret_rects(&mut self, srgb_target: bool) -> Vec<RectSpec> {
+        let (x, y, w, h) = self.caret_rect();
+        if w <= 0.0 || h <= 0.0 {
+            return Vec::new();
         }
+        let color = self.caret_color(srgb_target);
+        let glow = Self::CARET_GLOW;
+        vec![
+            RectSpec::rounded(
+                x - glow,
+                y - glow,
+                w + glow * 2.0,
+                h + glow * 2.0,
+                with_alpha(color, 0.28),
+                glow + 2.0,
+            )
+            .soft(glow),
+            RectSpec::rounded(x, y, w, h, color, 2.0),
+        ]
     }
 }

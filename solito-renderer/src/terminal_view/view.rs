@@ -436,7 +436,7 @@ mod tests {
 
     #[test]
     fn caret_color_defaults_to_white() {
-        assert_eq!(TerminalView::DEFAULT_CARET_COLOR, ThemeColor::WHITE_ALPHA);
+        assert_eq!(TerminalView::DEFAULT_CARET_COLOR, ThemeColor::ACCENT);
     }
 
     #[test]

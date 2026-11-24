@@ -210,6 +210,8 @@ fn verify_text_rasterization(renderer: &mut Renderer, output: &Path) {
                     "\x1b[32mNushell repository\x1b[0m\r\n",
                     "\x1b[35mhttps://www.nushell.sh\x1b[0m\r\n",
                     "日本語の文字描画\r\n",
+                    // Keep the caret halo off the glyphs measured above.
+                    "\r\n",
                     "\x1b]12;#2880f0\x07",
                 )
                 .as_bytes(),
@@ -252,17 +254,18 @@ fn render_appearance_previews() {
             let mut renderer = pollster::block_on(Renderer::new(window, config)).unwrap();
             let mut terminal = TerminalState::new(renderer.terminal_size());
             terminal.apply_terminal_output(concat!(
-                "\x1b[38;2;124;174;166m~\x1b[0m  \x1b[38;2;145;157;164mC:\\dev\\solito\x1b[0m\r\n",
-                "\x1b[38;2;124;174;166m>\x1b[0m cargo test --workspace\r\n\r\n",
-                "   \x1b[38;2;145;157;164mCompiling\x1b[0m solito v0.2.0\r\n",
-                "    \x1b[38;2;124;174;166mFinished\x1b[0m test profile in 1.42s\r\n\r\n",
+                "\x1b[36m~\x1b[0m  \x1b[90mC:\\dev\\solito\x1b[0m  \x1b[35mmaster\x1b[0m\r\n",
+                "\x1b[36m>\x1b[0m cargo test --workspace\r\n\r\n",
+                "   \x1b[32mCompiling\x1b[0m solito v0.3.0\r\n",
+                "    \x1b[32mFinished\x1b[0m test profile in \x1b[33m1.42s\x1b[0m\r\n\r\n",
                 "running 48 tests\r\n",
-                "test terminal::wide_characters ... \x1b[38;2;124;174;166mok\x1b[0m\r\n",
-                "test terminal::scroll_regions  ... \x1b[38;2;124;174;166mok\x1b[0m\r\n",
-                "test terminal::resize_cursor   ... \x1b[38;2;124;174;166mok\x1b[0m\r\n\r\n",
-                "\x1b[38;2;124;174;166mtest result: ok.\x1b[0m 48 passed; 0 failed\r\n\r\n",
-                "\x1b[38;2;145;157;164m日本語の表示も、そのまま。\x1b[0m\r\n\r\n",
-                "\x1b[38;2;124;174;166m>\x1b[0m "
+                "test terminal::wide_characters ... \x1b[32mok\x1b[0m\r\n",
+                "test terminal::scroll_regions  ... \x1b[32mok\x1b[0m\r\n",
+                "test terminal::resize_cursor   ... \x1b[31mFAILED\x1b[0m\r\n\r\n",
+                "\x1b[40m  \x1b[41m  \x1b[42m  \x1b[43m  \x1b[44m  \x1b[45m  \x1b[46m  \x1b[47m  \x1b[0m\r\n",
+                "\x1b[100m  \x1b[101m  \x1b[102m  \x1b[103m  \x1b[104m  \x1b[105m  \x1b[106m  \x1b[107m  \x1b[0m\r\n\r\n",
+                "\x1b[90m日本語の表示も、そのまま。\x1b[0m\r\n\r\n",
+                "\x1b[36m>\x1b[0m "
             ).as_bytes());
             renderer.set_terminal_snapshot(terminal.snapshot());
             renderer.set_tab_bar(TabBarSnapshot::new(
