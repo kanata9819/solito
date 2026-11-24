@@ -32,7 +32,7 @@ impl RendererConfig {
     pub const DEFAULT_FONT_SIZE: f32 = 20.0;
     pub const DEFAULT_LINE_HEIGHT: f32 = 30.0;
     pub const DEFAULT_WINDOW_BACKDROP: WindowBackdrop = WindowBackdrop::Acrylic;
-    pub const DEFAULT_WINDOW_ACRYLIC_TINT: (u8, u8, u8, u8) = (10, 13, 20, 200);
+    pub const DEFAULT_WINDOW_ACRYLIC_TINT: (u8, u8, u8, u8) = (18, 18, 18, 190);
 
     pub fn sanitized(mut self) -> Self {
         if self.font_family.trim().is_empty() {

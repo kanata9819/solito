@@ -8,10 +8,8 @@ It has tabs, a keyboard copy mode, and settings for the font and window backdrop
 
 The compact tab strip stays visible with a single tab. Click a tab to switch;
 keyboard switching also reveals the active tab when the window is narrow.
-The Midnight theme pairs a deep blue-black background with a cyan-to-violet
-neon accent: the active tab glows, the caret has a soft halo, and the 16 ANSI
-colors are tuned for the dark background. UI and terminal font metrics stay
-separate, so shell font settings keep their usual meaning.
+The charcoal interface uses a muted teal accent, with separate UI and terminal
+font metrics so shell font settings keep their usual meaning.
 
 Japanese IME input is supported: composing text appears at the terminal cursor, conversion candidates follow the active clause, and only committed text is sent to the shell. IME is disabled in keyboard copy mode so its navigation keys remain available.
 

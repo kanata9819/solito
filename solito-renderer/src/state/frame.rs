@@ -8,7 +8,7 @@ use wgpu::{
 use winit::dpi::PhysicalSize;
 
 use super::renderer::Renderer;
-use crate::{pass, terminal_view::TerminalView, util::color::ThemeColor};
+use crate::{pass, pipeline::rect, terminal_view::TerminalView, util::color::ThemeColor};
 
 #[cfg(all(test, target_os = "windows"))]
 mod preview;
@@ -70,7 +70,16 @@ impl Renderer {
         rects.extend(self.terminal_view.copy_mode_rects());
         rects.extend(self.terminal_view.ime_rects(srgb_target));
 
-        rects.extend(self.terminal_view.caret_rects(srgb_target));
+        let (caret_x, caret_y, caret_w, caret_h) = self.terminal_view.caret_rect();
+        if caret_w > 0.0 && caret_h > 0.0 {
+            rects.push(rect::RectSpec::new(
+                caret_x,
+                caret_y,
+                caret_w,
+                caret_h,
+                self.terminal_view.caret_color(srgb_target),
+            ));
+        }
 
         self.render_resources
             .rect_pipeline

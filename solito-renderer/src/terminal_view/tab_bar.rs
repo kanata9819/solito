@@ -4,7 +4,7 @@ use glyphon::{
 
 use crate::{
     pipeline::rect::RectSpec,
-    util::color::{ThemeColor, target_rgba, with_alpha},
+    util::color::{ThemeColor, rgba_to_f32, srgb_to_linear_rgba},
 };
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -33,8 +33,6 @@ struct TabPlacement {
 struct TabLabel {
     placement: TabPlacement,
     buffer: Buffer,
-    /// Shaped width of the leading tab number, used to place its badge.
-    number_width: f32,
 }
 
 pub(crate) struct TabBar {
@@ -150,17 +148,7 @@ impl TabBar {
                 }
                 name.pop();
             }
-            let digits = (placement.index + 1).to_string().len();
-            let number_width = buffer
-                .layout_runs()
-                .next()
-                .and_then(|run| run.glyphs.get(digits - 1).map(|g| g.x + g.w))
-                .unwrap_or(0.0);
-            TabLabel {
-                placement,
-                buffer,
-                number_width,
-            }
+            TabLabel { placement, buffer }
         })
         .collect();
         self.dirty = true;
@@ -225,7 +213,13 @@ impl TabBar {
     }
 
     pub(crate) fn rects(&self, srgb: bool) -> Vec<RectSpec> {
-        let color = |rgba| target_rgba(rgba, srgb);
+        let color = |rgba| {
+            if srgb {
+                srgb_to_linear_rgba(rgba)
+            } else {
+                rgba_to_f32(rgba)
+            }
+        };
         let mut rects = vec![
             RectSpec::new(
                 0.0,
@@ -242,23 +236,20 @@ impl TabBar {
                 color(ThemeColor::BORDER),
             ),
         ];
-        let (accent, accent_end) = (color(ThemeColor::ACCENT), color(ThemeColor::ACCENT_END));
         for label in &self.labels {
             let p = label.placement;
             let active = p.index == self.snapshot.active_index;
-            if active {
-                // A one-pixel gradient rim lights the active tab from its accent edge.
-                let rim = if self.focused {
-                    (with_alpha(accent, 0.55), with_alpha(accent_end, 0.30))
-                } else {
-                    (color(ThemeColor::BORDER), color(ThemeColor::BORDER))
-                };
-                rects.push(
-                    RectSpec::rounded(p.x, Self::TOP, p.width, Self::BUTTON_HEIGHT, rim.0, 7.0)
-                        .gradient(rim.1),
-                );
-            }
             if active || self.hovered == Some(p.index) {
+                if active {
+                    rects.push(RectSpec::rounded(
+                        p.x,
+                        Self::TOP,
+                        p.width,
+                        Self::BUTTON_HEIGHT,
+                        color(ThemeColor::BORDER),
+                        6.0,
+                    ));
+                }
                 let inset = if active { 1.0 } else { 0.0 };
                 rects.push(RectSpec::rounded(
                     p.x + inset,
@@ -270,50 +261,20 @@ impl TabBar {
                     } else {
                         ThemeColor::TAB_HOVER
                     }),
-                    6.0,
+                    5.0,
                 ));
             }
-            if !active {
-                continue;
-            }
-            let line_x = p.x + 10.0;
-            let line_w = (p.width - 20.0).max(0.0);
-            let line_y = Self::HEIGHT - 2.0;
-            if self.focused {
-                // Glow first, so the crisp line sits on top of its own light.
-                rects.push(
-                    RectSpec::rounded(
-                        line_x - 6.0,
-                        line_y - 6.0,
-                        line_w + 12.0,
-                        14.0,
-                        with_alpha(accent, 0.45),
-                        7.0,
-                    )
-                    .gradient(with_alpha(accent_end, 0.45))
-                    .soft(7.0),
-                );
-                if label.number_width > 0.0 {
-                    rects.push(RectSpec::rounded(
-                        p.x + Self::TEXT_INSET - 6.0,
-                        Self::TOP + 6.0,
-                        label.number_width + 12.0,
-                        Self::BUTTON_HEIGHT - 12.0,
-                        with_alpha(accent, 0.18),
-                        5.0,
-                    ));
-                }
-                rects.push(
-                    RectSpec::rounded(line_x, line_y, line_w, 2.0, accent, 1.0)
-                        .gradient(accent_end),
-                );
-            } else {
+            if active {
                 rects.push(RectSpec::rounded(
-                    line_x,
-                    line_y,
-                    line_w,
+                    p.x + Self::TEXT_INSET,
+                    Self::HEIGHT - 4.0,
+                    22.0_f32.min((p.width - Self::TEXT_INSET * 2.0).max(0.0)),
                     2.0,
-                    color(ThemeColor::TEXT_DIM),
+                    color(if self.focused {
+                        ThemeColor::ACCENT
+                    } else {
+                        ThemeColor::TEXT_DIM
+                    }),
                     1.0,
                 ));
             }

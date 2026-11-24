@@ -18,10 +18,6 @@ pub(crate) struct RectSpec {
     pub(crate) height: f32,
     pub(crate) color: [f32; 4],
     pub(crate) radius: f32,
-    /// Color at the right edge; equal to `color` for solid rects.
-    pub(crate) color_end: [f32; 4],
-    /// Width of the inward fade in pixels; zero keeps a crisp antialiased edge.
-    pub(crate) softness: f32,
 }
 
 impl RectSpec {
@@ -44,21 +40,7 @@ impl RectSpec {
             height,
             color,
             radius,
-            color_end: color,
-            softness: 0.0,
         }
-    }
-
-    /// Fade horizontally from `color` to `end`.
-    pub(crate) fn gradient(mut self, end: [f32; 4]) -> Self {
-        self.color_end = end;
-        self
-    }
-
-    /// Fade the edges over `pixels`, which turns the rect into a glow.
-    pub(crate) fn soft(mut self, pixels: f32) -> Self {
-        self.softness = pixels;
-        self
     }
 }
 
@@ -68,10 +50,8 @@ struct RectInstance {
     pos: [f32; 2],
     size: [f32; 2],
     color: [f32; 4],
-    color_end: [f32; 4],
     radius: f32,
-    softness: f32,
-    _pad: [f32; 2],
+    _pad: [f32; 3],
 }
 
 impl From<RectSpec> for RectInstance {
@@ -80,22 +60,14 @@ impl From<RectSpec> for RectInstance {
             pos: [rect.x, rect.y],
             size: [rect.width, rect.height],
             color: rect.color,
-            color_end: rect.color_end,
             radius: rect.radius,
-            softness: rect.softness,
-            _pad: [0.0; 2],
+            _pad: [0.0; 3],
         }
     }
 }
 
-const RECT_INSTANCE_ATTRIBUTES: [wgpu::VertexAttribute; 6] = wgpu::vertex_attr_array![
-    0 => Float32x2,
-    1 => Float32x2,
-    2 => Float32x4,
-    3 => Float32x4,
-    4 => Float32,
-    5 => Float32,
-];
+const RECT_INSTANCE_ATTRIBUTES: [wgpu::VertexAttribute; 4] =
+    wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32x4, 3 => Float32];
 
 impl RectPipeline {
     pub(crate) fn new(
