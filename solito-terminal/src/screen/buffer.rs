@@ -52,36 +52,53 @@ impl ScreenCell {
 
 /// A shared row. Snapshots clone the Arc; writing copies only a shared row.
 #[derive(Clone, Debug, Default)]
-pub struct ScreenLine(std::sync::Arc<Vec<ScreenCell>>);
+pub struct ScreenLine {
+    cells: std::sync::Arc<Vec<ScreenCell>>,
+    /// Auto-wrap continued this row onto the next one. Resizing rejoins such
+    /// rows, as ConPTY does with its own buffer.
+    wrapped: bool,
+}
 
 impl ScreenLine {
     pub fn shares_storage_with(&self, other: &Self) -> bool {
-        std::sync::Arc::ptr_eq(&self.0, &other.0)
+        std::sync::Arc::ptr_eq(&self.cells, &other.cells)
+    }
+
+    pub fn is_wrapped(&self) -> bool {
+        self.wrapped
+    }
+
+    pub(super) fn set_wrapped(&mut self, wrapped: bool) {
+        self.wrapped = wrapped;
     }
 }
 
 impl std::ops::Deref for ScreenLine {
     type Target = Vec<ScreenCell>;
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.cells
     }
 }
 
 impl std::ops::DerefMut for ScreenLine {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        std::sync::Arc::make_mut(&mut self.0)
+        std::sync::Arc::make_mut(&mut self.cells)
     }
 }
 
 impl PartialEq for ScreenLine {
     fn eq(&self, other: &Self) -> bool {
-        self.shares_storage_with(other) || self.0 == other.0
+        self.wrapped == other.wrapped
+            && (self.shares_storage_with(other) || self.cells == other.cells)
     }
 }
 impl Eq for ScreenLine {}
 impl From<Vec<ScreenCell>> for ScreenLine {
     fn from(cells: Vec<ScreenCell>) -> Self {
-        Self(std::sync::Arc::new(cells))
+        Self {
+            cells: std::sync::Arc::new(cells),
+            wrapped: false,
+        }
     }
 }
 impl FromIterator<ScreenCell> for ScreenLine {
@@ -138,10 +155,123 @@ impl ScreenBuffer {
         }
     }
 
-    pub(super) fn resize(&mut self, size: TerminalSize) {
+    /// `reflow` rewraps soft-wrapped rows to the new width and keeps the top
+    /// row anchored, matching how ConPTY resizes its own buffer. Without it,
+    /// rows are clipped, which suits the alternate screen that apps redraw.
+    pub(super) fn resize(&mut self, size: TerminalSize, reflow: bool) {
         if self.cols == size.cols && self.rows == size.rows {
             return;
         }
+        if reflow {
+            self.resize_with_reflow(size);
+        } else {
+            self.resize_clipped(size);
+        }
+    }
+
+    fn resize_with_reflow(&mut self, size: TerminalSize) {
+        let old_top = self.get_viewport_top();
+        let (mut top, cursor) = if self.cols == size.cols {
+            let cursor = (self.cursor.get_current_row(), self.cursor.get_current_col());
+            (old_top, cursor)
+        } else {
+            self.rewrap(size.cols, old_top)
+        };
+        let (cursor_row, cursor_col) = cursor;
+        // ConPTY grows downward from a fixed top row. It scrolls only to keep
+        // the cursor and any text below it visible, such as the rest of a
+        // right-aligned prompt that the narrower width split in two.
+        let last_text = (cursor_row..self.lines.len())
+            .rev()
+            .find(|&row| !self.lines[row].is_empty())
+            .unwrap_or(cursor_row);
+        top = top
+            .max((last_text + 1).saturating_sub(size.rows))
+            .min(cursor_row);
+        let target = top + size.rows;
+        while self.lines.len() > target {
+            self.lines.remove(self.lines.len() - 1);
+        }
+        if top > 0 {
+            while self.lines.len() < target {
+                self.lines.push_back(ScreenLine::default());
+            }
+        }
+        self.cursor.move_to_row(cursor_row);
+        self.cursor.move_to_col(cursor_col);
+        self.apply_size(size);
+    }
+
+    /// Rejoin soft-wrapped rows and split them at `cols`. Returns the row now
+    /// holding the start of `old_top` and the new cursor position.
+    fn rewrap(&mut self, cols: usize, old_top: usize) -> (usize, (usize, usize)) {
+        let old_cols = self.cols;
+        let cursor_row = self.cursor.get_current_row();
+        let cursor_col = self.cursor.get_current_col();
+        let blank = ScreenCell::blank(CellStyle::default());
+        let mut out: Vec<ScreenLine> = Vec::with_capacity(self.lines.len());
+        let mut new_top = None;
+        let mut new_cursor = None;
+        let mut row = 0;
+        while row < self.lines.len() {
+            let start = row;
+            while row + 1 < self.lines.len() && self.lines[row].is_wrapped() {
+                row += 1;
+            }
+            let end = row;
+            row += 1;
+            let holds_cursor = (start..=end).contains(&cursor_row);
+            if start == end && !holds_cursor && self.lines[start].len() <= cols {
+                // Most rows fit as they are and keep sharing their storage.
+                if start == old_top {
+                    new_top = Some(out.len());
+                }
+                let mut line = self.lines[start].clone();
+                line.set_wrapped(false);
+                out.push(line);
+                continue;
+            }
+            let mut cells = Vec::new();
+            let mut top_offset = None;
+            let mut cursor_offset = None;
+            for source in start..=end {
+                if source == old_top {
+                    top_offset = Some(cells.len());
+                }
+                if source == cursor_row {
+                    cursor_offset = Some(cells.len() + cursor_col);
+                }
+                let row_start = cells.len();
+                cells.extend_from_slice(&self.lines[source]);
+                // A wide glyph that did not fit left one empty cell; it is not text.
+                let wide_pushed =
+                    self.lines.get(source + 1).is_some_and(|next| {
+                        next.get(1).is_some_and(|cell| cell.is_wide_continuation)
+                    }) && self.lines[source].len() + 1 == old_cols;
+                if source < end && !wide_pushed {
+                    cells.resize(row_start + old_cols, blank);
+                }
+            }
+            while cells.last() == Some(&blank) {
+                cells.pop();
+            }
+            let first = out.len();
+            let positions = split_cells(cells, cols, &mut out);
+            if let Some(offset) = top_offset {
+                new_top = Some(first + positions.locate(offset, cols).0);
+            }
+            if let Some(offset) = cursor_offset {
+                let (row, col) = positions.locate(offset, cols);
+                new_cursor = Some((first + row, col));
+            }
+        }
+        self.lines = out.into();
+        let last = self.lines.len().saturating_sub(1);
+        let cursor = new_cursor.unwrap_or((cursor_row.min(last), cursor_col.min(cols - 1)));
+        (new_top.unwrap_or(0), cursor)
+    }
+
+    fn resize_clipped(&mut self, size: TerminalSize) {
         // Remove rows below the cursor before pushing its row into scrollback.
         let top = self.get_viewport_top();
         while self.lines.len() > top + size.rows
@@ -149,6 +279,23 @@ impl ScreenBuffer {
         {
             self.lines.remove(self.lines.len() - 1);
         }
+        let top = self.lines.len().saturating_sub(size.rows);
+        for row in top..self.lines.len() {
+            if self.lines[row].len() > size.cols {
+                let line = &mut self.lines[row];
+                line.truncate(size.cols);
+                if let Some(last) = line.last_mut()
+                    && last.ch.width() == Some(2)
+                {
+                    *last = ScreenCell::blank(CellStyle::default());
+                }
+            }
+        }
+        self.apply_size(size);
+    }
+
+    /// Adopt the new grid after rows have been rearranged for it.
+    fn apply_size(&mut self, size: TerminalSize) {
         let full_height = self.scroll_region == (0, self.rows - 1);
         self.cols = size.cols;
         self.rows = size.rows;
@@ -160,18 +307,6 @@ impl ScreenBuffer {
                 .scroll_region
                 .1
                 .clamp(self.scroll_region.0, size.rows - 1);
-        }
-        // shortcut: clip visible rows; track soft wraps before adding resize reflow.
-        for row in self.get_viewport_top()..self.lines.len() {
-            if self.lines[row].len() > size.cols {
-                let line = &mut self.lines[row];
-                line.truncate(size.cols);
-                if let Some(last) = line.last_mut()
-                    && last.ch.width() == Some(2)
-                {
-                    *last = ScreenCell::blank(CellStyle::default());
-                }
-            }
         }
         // Preserve existing stops, including ones explicitly cleared by the application.
         let old_cols = self.tab_stops.len();
@@ -242,6 +377,55 @@ impl ScreenBuffer {
     pub(super) fn get_viewport_top(&self) -> usize {
         self.lines.len().saturating_sub(self.rows)
     }
+}
+
+/// Where split rows begin, for mapping offsets in a joined row.
+struct SplitRows {
+    starts: Vec<usize>,
+    content: usize,
+}
+
+impl SplitRows {
+    /// Row and column of `offset`. Offsets past the text, like a cursor after
+    /// a prompt, stay on the last row at the matching column.
+    fn locate(&self, offset: usize, cols: usize) -> (usize, usize) {
+        if offset < self.content {
+            let row = self.starts.partition_point(|&start| start <= offset) - 1;
+            return (row, offset - self.starts[row]);
+        }
+        let row = self.starts.len() - 1;
+        let col = self.content - self.starts[row] + (offset - self.content);
+        (row, col.min(cols - 1))
+    }
+}
+
+/// Split one joined row into rows of `cols` cells, marking all but the last as wrapped.
+/// A wide glyph that would straddle the edge moves to the next row, as when printed.
+fn split_cells(cells: Vec<ScreenCell>, cols: usize, out: &mut Vec<ScreenLine>) -> SplitRows {
+    let content = cells.len();
+    let mut starts = vec![0];
+    let mut current = Vec::with_capacity(cols.min(content));
+    let mut index = 0;
+    while index < content {
+        let width = if cells
+            .get(index + 1)
+            .is_some_and(|cell| cell.is_wide_continuation)
+        {
+            2
+        } else {
+            1
+        };
+        if current.len() + width > cols && !current.is_empty() {
+            let mut line = ScreenLine::from(std::mem::take(&mut current));
+            line.set_wrapped(true);
+            out.push(line);
+            starts.push(index);
+        }
+        current.extend_from_slice(&cells[index..index + width]);
+        index += width;
+    }
+    out.push(ScreenLine::from(current));
+    SplitRows { starts, content }
 }
 
 fn default_tab_stops(cols: usize) -> Vec<bool> {

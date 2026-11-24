@@ -99,3 +99,92 @@ fn nvim_resize_keeps_text_and_cursor_aligned() {
         }
     }
 }
+
+#[test]
+#[ignore = "requires Nushell on PATH and a native PTY"]
+fn nushell_output_survives_dragging_the_window_narrow_and_back() {
+    // ConPTY rewraps its buffer on every resize and reports its cursor. Dragging
+    // a window sends many sizes; the default right prompt fills its row exactly.
+    let pair = portable_pty::native_pty_system()
+        .openpty(PtySize {
+            rows: 20,
+            cols: 80,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .unwrap();
+    let mut command = CommandBuilder::new("nu");
+    command.args(["--no-config-file", "--interactive"]);
+    let _child = ChildGuard(pair.slave.spawn_command(command).unwrap());
+    drop(pair.slave);
+    let mut reader = pair.master.try_clone_reader().unwrap();
+    let mut writer = pair.master.take_writer().unwrap();
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut bytes = [0; 16384];
+        while let Ok(n) = reader.read(&mut bytes) {
+            if n == 0 || tx.send(bytes[..n].to_vec()).is_err() {
+                break;
+            }
+        }
+    });
+    let mut terminal = TerminalState::new(TerminalSize::new(80, 20));
+    let pump = |terminal: &mut TerminalState, writer: &mut dyn Write, duration: Duration| {
+        let deadline = Instant::now() + duration;
+        while let Some(wait) = deadline.checked_duration_since(Instant::now()) {
+            if let Ok(bytes) = rx.recv_timeout(wait.min(Duration::from_millis(20))) {
+                terminal.apply_terminal_output(&bytes);
+                let responses = terminal.take_responses();
+                if !responses.is_empty() {
+                    writer.write_all(&responses).unwrap();
+                    writer.flush().unwrap();
+                }
+            }
+        }
+    };
+    pump(&mut terminal, &mut writer, Duration::from_secs(3));
+    writer
+        .write_all(
+            b"0..30 | each {|i| $'line ($i) ' + ('' | fill -c '-' -w 50)} | str join (char nl)\r",
+        )
+        .unwrap();
+    writer.flush().unwrap();
+    pump(&mut terminal, &mut writer, Duration::from_secs(2));
+
+    let narrowing = (40..80)
+        .rev()
+        .step_by(2)
+        .map(|cols| (cols, 20 - (80 - cols) / 5));
+    let widening = (42..101)
+        .step_by(3)
+        .map(|cols| (cols, 12 + (cols - 40) / 5));
+    for (cols, rows) in narrowing.chain(widening) {
+        terminal.resize(TerminalSize::new(cols, rows));
+        pair.master
+            .resize(PtySize {
+                rows: rows as u16,
+                cols: cols as u16,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .unwrap();
+        pump(&mut terminal, &mut writer, Duration::from_millis(8));
+    }
+    pump(&mut terminal, &mut writer, Duration::from_millis(1500));
+
+    let snapshot = terminal.snapshot();
+    let text: Vec<String> = snapshot
+        .lines
+        .iter()
+        .map(|line| line.iter().map(|cell| cell.ch).collect::<String>())
+        .collect();
+    let first = text
+        .iter()
+        .position(|line| line.starts_with("line 0 "))
+        .expect("command output reached the terminal");
+    for (offset, line) in text[first..=first + 30].iter().enumerate() {
+        let expected = format!("line {offset} {}", "-".repeat(50));
+        assert_eq!(line.trim_end(), expected, "row {}", first + offset);
+    }
+    assert_eq!(snapshot.cursor_row, first + 31, "prompt follows the output");
+}

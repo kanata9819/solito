@@ -236,20 +236,73 @@ mod tests {
     }
 
     #[test]
-    fn resize_does_not_restore_erased_text_from_outside_narrowed_screen() {
-        for text in ["ABCDEFGH", "ABC界XYZ"] {
-            let mut state = terminal(8, 3);
-            state.apply_terminal_output(text.as_bytes());
-            let before = state.snapshot();
-            state.resize(TerminalSize::new(4, 3));
-            let narrow = state.snapshot();
-            assert!(narrow.lines[0].len() <= 4);
-            assert_ne!(narrow.lines[0][3].ch, '界');
-            state.apply_terminal_output(b"\r\x1b[Kok");
-            state.resize(TerminalSize::new(8, 3));
-            assert_eq!(line_text(&state.snapshot().lines[0]).trim_end(), "ok");
-            assert_eq!(line_text(&before.lines[0]), text);
-        }
+    fn resize_rewraps_soft_wrapped_rows_and_moves_the_cursor_with_its_text() {
+        let mut state = terminal(8, 4);
+        state.apply_terminal_output(b"ABCDEFGHIJ");
+        let rows = |state: &TerminalState| {
+            let snapshot = state.snapshot();
+            let text = snapshot
+                .lines
+                .iter()
+                .map(|line| line_text(line))
+                .collect::<Vec<_>>();
+            (text, (snapshot.cursor_row, snapshot.cursor_col))
+        };
+        assert_eq!(rows(&state), (vec!["ABCDEFGH".into(), "IJ".into()], (1, 2)));
+        state.resize(TerminalSize::new(12, 4));
+        assert_eq!(rows(&state), (vec!["ABCDEFGHIJ".into()], (0, 10)));
+        state.resize(TerminalSize::new(4, 4));
+        assert_eq!(
+            rows(&state),
+            (vec!["ABCD".into(), "EFGH".into(), "IJ".into()], (2, 2))
+        );
+        state.apply_terminal_output(b"K");
+        state.resize(TerminalSize::new(8, 4));
+        assert_eq!(
+            rows(&state),
+            (vec!["ABCDEFGH".into(), "IJK".into()], (1, 3))
+        );
+    }
+
+    #[test]
+    fn rewrapping_moves_wide_glyphs_whole_and_rejoins_them_without_gaps() {
+        let mut state = terminal(8, 3);
+        state.apply_terminal_output("ABC界XYZ".as_bytes());
+        state.resize(TerminalSize::new(4, 3));
+        let narrow = state.snapshot();
+        let text: Vec<_> = narrow.lines.iter().map(|line| line_text(line)).collect();
+        assert_eq!(text, ["ABC", "界XY", "Z"]);
+        state.resize(TerminalSize::new(8, 3));
+        assert_eq!(line_text(&state.snapshot().lines[0]), "ABC界XYZ");
+    }
+
+    #[test]
+    fn erasing_a_continued_row_ends_it_before_the_next_resize() {
+        let mut state = terminal(4, 3);
+        state.apply_terminal_output(b"ABCDEF\x1b[1;3H\x1b[Kok");
+        state.resize(TerminalSize::new(8, 3));
+        let text: Vec<_> = state
+            .snapshot()
+            .lines
+            .iter()
+            .map(|line| line_text(line))
+            .collect();
+        assert_eq!(text, ["ABok", "EF"]);
+    }
+
+    #[test]
+    fn growing_keeps_the_top_row_and_adds_blank_rows_below() {
+        // ConPTY keeps its cursor row when the window grows; scrollback must not slide in.
+        let mut state = terminal(8, 3);
+        state.apply_terminal_output(b"1\r\n2\r\n3\r\n4\r\n5> ");
+        let before = state.snapshot();
+        let top = before.lines.len() - 3;
+        state.resize(TerminalSize::new(8, 5));
+        let snapshot = state.snapshot();
+        assert_eq!(snapshot.lines.len() - 5, top);
+        assert_eq!(snapshot.cursor_row, before.cursor_row);
+        state.apply_terminal_output(b"\x1b[3;1HX");
+        assert_eq!(line_text(&state.snapshot().lines[top + 2]), "X> ");
     }
 
     #[test]
@@ -259,12 +312,9 @@ mod tests {
         state.resize(TerminalSize::new(4, 2));
         state.apply_terminal_output(b"\x1b[?1049l\x1b8X");
         let snapshot = state.snapshot();
-        assert_eq!(snapshot.lines.len(), 4);
-        assert_eq!(line_text(&snapshot.lines[0]), "history!");
-        assert_eq!(line_text(&snapshot.lines[1]), "A");
-        assert_eq!(line_text(&snapshot.lines[2]), "B");
-        assert_eq!(line_text(&snapshot.lines[3]), "CX");
-        assert_eq!((snapshot.cursor_row, snapshot.cursor_col), (3, 2));
+        let text: Vec<_> = snapshot.lines.iter().map(|line| line_text(line)).collect();
+        assert_eq!(text, ["hist", "ory!", "A", "B", "CX"]);
+        assert_eq!((snapshot.cursor_row, snapshot.cursor_col), (4, 2));
     }
 
     #[test]

@@ -40,10 +40,13 @@ impl Screen {
     }
 
     pub(crate) fn resize(&mut self, size: TerminalSize) {
-        self.screen_buffer.resize(size);
+        // ConPTY reflows its main buffer; full-screen apps redraw the alternate one.
+        let alternate = self.primary_screen.is_some();
+        self.screen_buffer.resize(size, !alternate);
         if let Some(primary_screen) = &mut self.primary_screen {
-            primary_screen.resize(size);
+            primary_screen.resize(size, true);
         }
+        self.limit_history();
     }
 
     /// Erase cells without moving the cursor or changing the active drawing style.
@@ -91,6 +94,16 @@ impl Screen {
 
     fn erase_line_range(&mut self, row: usize, start: usize, end: usize) {
         self.erase_cells(row, start, end);
+        // Erasing through the right edge ends the row; it no longer continues below.
+        if end >= self.screen_buffer.cols()
+            && self
+                .screen_buffer
+                .lines
+                .get(row)
+                .is_some_and(ScreenLine::is_wrapped)
+        {
+            self.screen_buffer.lines[row].set_wrapped(false);
+        }
         // Keep the sparse representation: trailing default blanks are implicit.
         let Some(line) = self.screen_buffer.lines.get(row) else {
             return;
@@ -266,7 +279,7 @@ impl Screen {
             if self.screen_buffer.auto_wrap {
                 // If the previous character reached the right edge,
                 // finalize line wrap (auto-wrap) at the next print timing.
-                self.advance_to_next_line();
+                self.wrap_to_next_line();
             } else {
                 self.screen_buffer.pending_wrap = false;
             }
@@ -282,7 +295,7 @@ impl Screen {
                 if !self.screen_buffer.auto_wrap {
                     return;
                 }
-                self.advance_to_next_line();
+                self.wrap_to_next_line();
             }
         }
 
@@ -688,6 +701,14 @@ impl Screen {
         // A resize can invalidate the right edge where the wrap was saved.
         buffer.pending_wrap = saved.pending_wrap && saved.col == buffer.cols() - 1;
         buffer.ensure_cursor_line();
+    }
+
+    /// Auto-wrap: the current row continues on the next one.
+    fn wrap_to_next_line(&mut self) {
+        self.screen_buffer.ensure_cursor_line();
+        let row = self.screen_buffer.cursor.get_current_row();
+        self.screen_buffer.lines[row].set_wrapped(true);
+        self.advance_to_next_line();
     }
 
     fn advance_to_next_line(&mut self) {
