@@ -66,6 +66,24 @@ impl From<RectSpec> for RectInstance {
     }
 }
 
+fn update_instances(instances: &mut Vec<RectInstance>, rects: &[RectSpec]) -> usize {
+    let first_changed = instances
+        .iter()
+        .zip(rects)
+        .position(|(instance, rect)| {
+            bytemuck::bytes_of(instance) != bytemuck::bytes_of(&RectInstance::from(*rect))
+        })
+        .unwrap_or(instances.len().min(rects.len()));
+    instances.truncate(first_changed);
+    instances.extend(
+        rects[first_changed..]
+            .iter()
+            .copied()
+            .map(RectInstance::from),
+    );
+    first_changed
+}
+
 const RECT_INSTANCE_ATTRIBUTES: [wgpu::VertexAttribute; 4] =
     wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32x4, 3 => Float32];
 
@@ -209,12 +227,7 @@ impl RectPipeline {
         queue: &wgpu::Queue,
         rects: &[RectSpec],
     ) {
-        self.instances.clear();
-        self.instances
-            .extend(rects.iter().copied().map(RectInstance::from));
-        if rects.is_empty() {
-            return;
-        }
+        let mut first_changed = update_instances(&mut self.instances, rects);
         // Grow geometrically; ordinary frames reuse the same GPU allocation.
         if rects.len() > self.instance_capacity {
             self.instance_capacity = rects.len().next_power_of_two();
@@ -224,11 +237,17 @@ impl RectPipeline {
                 usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             }));
+            // The new GPU buffer needs the full instance list, including the unchanged prefix.
+            first_changed = 0;
+        }
+        let changed = &self.instances[first_changed..];
+        if changed.is_empty() {
+            return;
         }
         queue.write_buffer(
             self.instance_buffer.as_ref().unwrap(),
-            0,
-            bytemuck::cast_slice(&self.instances),
+            (first_changed * size_of::<RectInstance>()) as u64,
+            bytemuck::cast_slice(changed),
         );
     }
 
@@ -246,5 +265,28 @@ impl RectPipeline {
         pass.set_bind_group(0, &self.bind_group, &[]);
         pass.set_vertex_buffer(0, instance_buffer.slice(..));
         pass.draw(VERTICES_COUNT, 0..self.instances.len() as u32);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rectangle_updates_keep_the_unchanged_prefix() {
+        let mut rects = [RectSpec::new(0.0, 0.0, 10.0, 10.0, [1.0; 4]); 3];
+        let mut instances = Vec::new();
+        assert_eq!(update_instances(&mut instances, &rects), 0);
+        assert_eq!(update_instances(&mut instances, &rects), 3);
+
+        rects[2].x = 12.0;
+        assert_eq!(update_instances(&mut instances, &rects), 2);
+        assert_eq!(instances[2].pos, [12.0, 0.0]);
+
+        assert_eq!(update_instances(&mut instances, &rects[..2]), 2);
+        assert_eq!(instances.len(), 2);
+        assert_eq!(update_instances(&mut instances, &rects), 2);
+        assert_eq!(update_instances(&mut instances, &[]), 0);
+        assert!(instances.is_empty());
     }
 }
