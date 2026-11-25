@@ -116,6 +116,7 @@ pub(super) struct ScreenBuffer {
     pub(super) auto_wrap: bool,
     pub(super) cursor_visible: bool,
     pub(super) tab_stops: Vec<bool>,
+    erase_line: ScreenLine,
 }
 
 impl ScreenBuffer {
@@ -135,6 +136,7 @@ impl ScreenBuffer {
             auto_wrap: true,
             cursor_visible: true,
             tab_stops: default_tab_stops(size.cols),
+            erase_line: ScreenLine::default(),
         }
     }
 
@@ -216,6 +218,26 @@ impl ScreenBuffer {
 
     pub(super) fn cols(&self) -> usize {
         self.cols
+    }
+
+    /// Share one blank row across erases and scrolling until its width or background changes.
+    pub(super) fn erase_blank_line(&mut self) -> ScreenLine {
+        let background = self.style.bg_rgba;
+        let width = if background.is_some() { self.cols } else { 0 };
+        if self.erase_line.len() != width
+            || self
+                .erase_line
+                .first()
+                .and_then(ScreenCell::background_rgba)
+                != background
+        {
+            let blank = ScreenCell::blank(CellStyle {
+                bg_rgba: background,
+                ..CellStyle::default()
+            });
+            self.erase_line = vec![blank; width].into();
+        }
+        self.erase_line.clone()
     }
 
     pub(super) fn rows(&self) -> usize {
