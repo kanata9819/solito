@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 pub struct ThemeColor;
 impl ThemeColor {
     pub const BACKGROUND: [u8; 4] = [20, 24, 27, 255];
@@ -30,21 +32,45 @@ pub fn rgba_to_f32([r, g, b, a]: [u8; 4]) -> [f32; 4] {
 
 /// Convert terminal sRGB colors to linear RGB for an sRGB render target.
 /// Alpha represents coverage and must not undergo gamma conversion.
-pub fn srgb_to_linear_rgba(color: [u8; 4]) -> [f32; 4] {
-    let [r, g, b, a] = rgba_to_f32(color);
-    let linear = |channel: f32| {
-        if channel <= 0.04045 {
-            channel / 12.92
-        } else {
-            ((channel + 0.055) / 1.055).powf(2.4)
-        }
-    };
-    [linear(r), linear(g), linear(b), a]
+pub fn srgb_to_linear_rgba([r, g, b, a]: [u8; 4]) -> [f32; 4] {
+    static LINEAR_CHANNELS: LazyLock<[f32; 256]> = LazyLock::new(|| {
+        std::array::from_fn(|value| {
+            let channel = value as f32 / 255.0;
+            if channel <= 0.04045 {
+                channel / 12.92
+            } else {
+                ((channel + 0.055) / 1.055).powf(2.4)
+            }
+        })
+    });
+    let channels = &*LINEAR_CHANNELS;
+    [
+        channels[usize::from(r)],
+        channels[usize::from(g)],
+        channels[usize::from(b)],
+        f32::from(a) / 255.0,
+    ]
 }
 
 #[cfg(test)]
 mod tests {
     use super::srgb_to_linear_rgba;
+
+    #[test]
+    fn every_channel_matches_the_srgb_transfer_function() {
+        for value in 0..=u8::MAX {
+            let normalized = f32::from(value) / 255.0;
+            let expected = if value <= 10 {
+                normalized / 12.92
+            } else {
+                ((normalized + 0.055) / 1.055).powf(2.4)
+            };
+            assert_eq!(
+                srgb_to_linear_rgba([value; 4]),
+                [expected, expected, expected, normalized],
+            );
+        }
+    }
 
     #[test]
     fn dark_background_round_trips_through_srgb_target() {
