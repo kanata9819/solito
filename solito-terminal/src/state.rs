@@ -166,6 +166,33 @@ mod tests {
     }
 
     #[test]
+    fn full_erase_shares_rows_until_they_are_edited_and_tracks_color_and_width() {
+        let mut state = terminal(8, 3);
+        state.apply_terminal_output(b"\x1b[48;2;12;34;56m\x1b[2J");
+        let erased = state.snapshot();
+        assert!(erased.lines[0].shares_storage_with(&erased.lines[1]));
+
+        state.apply_terminal_output(b"A");
+        let edited = state.snapshot();
+        assert_eq!(erased.lines[0][0].ch, ' ');
+        assert_eq!(edited.lines[0][0].ch, 'A');
+        assert!(erased.lines[1].shares_storage_with(&edited.lines[1]));
+
+        state.resize(TerminalSize::new(5, 3));
+        state.apply_terminal_output(b"\x1b[48;2;65;43;21m\x1b[2J");
+        let resized = state.snapshot();
+        assert!(resized.lines[0].shares_storage_with(&resized.lines[2]));
+        assert_eq!(resized.lines[0].len(), 5);
+        assert_eq!(
+            resized.lines[0][4].background_rgba(),
+            Some([65, 43, 21, 255])
+        );
+
+        state.apply_terminal_output(b"\x1b[49m\x1b[2J");
+        assert!(state.snapshot().lines.iter().all(|line| line.is_empty()));
+    }
+
+    #[test]
     fn overwriting_wide_cells_clears_both_halves() {
         for (input, expected) in [
             ("界Z\x1b[1;1Hx", "x Z"),

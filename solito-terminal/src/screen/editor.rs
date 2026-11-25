@@ -475,7 +475,7 @@ impl Screen {
 
     fn scroll_up(&mut self, amount: usize) {
         let (top, bottom) = self.scroll_region_bounds();
-        let blank = self.erase_blank_line();
+        let blank = self.screen_buffer.erase_blank_line();
         self.screen_buffer
             .lines
             .scroll_up(top..bottom + 1, amount, blank);
@@ -484,26 +484,11 @@ impl Screen {
 
     fn scroll_down(&mut self, amount: usize) {
         let (top, bottom) = self.scroll_region_bounds();
-        let blank = self.erase_blank_line();
+        let blank = self.screen_buffer.erase_blank_line();
         self.screen_buffer
             .lines
             .scroll_down(top..bottom + 1, amount, blank);
         self.screen_buffer.pending_wrap = false;
-    }
-
-    fn erase_blank_line(&self) -> ScreenLine {
-        let bg_rgba = self.screen_buffer.style.bg_rgba;
-        if bg_rgba.is_none() {
-            return ScreenLine::default();
-        }
-        vec![
-            ScreenCell::blank(CellStyle {
-                bg_rgba,
-                ..Default::default()
-            });
-            self.screen_buffer.cols()
-        ]
-        .into()
     }
 
     fn insert_blank_characters(&mut self, amount: usize) {
@@ -529,7 +514,7 @@ impl Screen {
         if !(top..=bottom).contains(&row) {
             return;
         }
-        let blank = self.erase_blank_line();
+        let blank = self.screen_buffer.erase_blank_line();
         self.screen_buffer
             .lines
             .scroll_down(row..bottom + 1, amount, blank);
@@ -542,7 +527,7 @@ impl Screen {
         if !(top..=bottom).contains(&row) {
             return;
         }
-        let blank = self.erase_blank_line();
+        let blank = self.screen_buffer.erase_blank_line();
         self.screen_buffer
             .lines
             .scroll_up(row..bottom + 1, amount, blank);
@@ -602,6 +587,7 @@ impl Screen {
         let cursor_row = self.screen_buffer.cursor.get_current_row();
         let col = self.screen_buffer.cursor.get_current_col();
         let cols = self.screen_buffer.cols();
+        let mut blank_line = None;
         for row in top..bottom {
             let (start, end) = match mode {
                 EraseMode::All => (0, cols),
@@ -611,7 +597,20 @@ impl Screen {
                 EraseMode::ToEnd if row > cursor_row => (0, cols),
                 _ => continue,
             };
-            self.erase_line_range(row, start, end);
+            if start == 0 && end == cols {
+                let blank = blank_line.get_or_insert_with(|| self.screen_buffer.erase_blank_line());
+                let lines = &mut self.screen_buffer.lines;
+                if let Some(existing) = lines.get(row) {
+                    if existing != blank {
+                        lines[row] = blank.clone();
+                    }
+                } else {
+                    debug_assert_eq!(row, lines.len());
+                    lines.push_back(blank.clone());
+                }
+            } else {
+                self.erase_line_range(row, start, end);
+            }
         }
         self.screen_buffer.pending_wrap = false;
     }
@@ -711,7 +710,7 @@ impl Screen {
         } else {
             self.screen_buffer.cursor.move_down();
             if cursor_row == screen_bottom {
-                let blank = self.erase_blank_line();
+                let blank = self.screen_buffer.erase_blank_line();
                 self.screen_buffer.lines.push_back(blank);
             }
         }
