@@ -183,7 +183,7 @@ impl Screen {
             CsiMessage::SaveCursor => self.save_cursor_position(),
             CsiMessage::RestoreCursor => self.restore_cursor_position(),
             CsiMessage::SelectGraphicRendition(params) => {
-                sgr::apply(&mut self.screen_buffer.style, &params)
+                self.apply_sgr(params.iter().map(Vec::as_slice))
             }
             CsiMessage::SetMode { private, modes } => self.set_modes(private, &modes),
             CsiMessage::ResetMode { private, modes } => self.reset_modes(private, &modes),
@@ -204,6 +204,10 @@ impl Screen {
             CsiMessage::DeviceStatusReport(5) => self.responses.extend_from_slice(b"\x1b[0n"),
             CsiMessage::Unknown { .. } | CsiMessage::DeviceStatusReport(_) => {}
         }
+    }
+
+    pub(super) fn apply_sgr<'a>(&mut self, groups: impl Iterator<Item = &'a [u16]>) {
+        sgr::apply(&mut self.screen_buffer.style, groups);
     }
 
     pub(super) fn apply_osc(&mut self, message: &OscMessage) {
