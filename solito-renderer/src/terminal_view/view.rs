@@ -146,6 +146,10 @@ impl TerminalView {
         (visible_row < end - start).then(|| self.snapshot.history_start + start + visible_row)
     }
 
+    pub(crate) fn screen_generation(&self) -> u64 {
+        self.snapshot.screen_generation
+    }
+
     fn cell_at_position(
         x: f64,
         y: f64,

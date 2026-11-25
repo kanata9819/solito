@@ -73,6 +73,14 @@ fn main() {
         500_000,
         false,
     );
+    let sgr = "\x1b[31mR\x1b[38;2;100;150;200mG\x1b[48:5:236mB\x1b[m".repeat(120);
+    measure(
+        "frequent color changes",
+        b"",
+        [sgr.as_bytes(); 2],
+        2_000,
+        false,
+    );
     let scroll_setup = format!("\x1b[?1049h{repaint}\x1b[1;40r");
     measure(
         "scroll 20 rows + snapshot",

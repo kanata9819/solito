@@ -18,7 +18,11 @@ impl Perform for Screen {
     }
 
     fn csi_dispatch(&mut self, params: &Params, intermediates: &[u8], ignore: bool, action: char) {
-        self.apply_csi(decode_csi(params, intermediates, ignore, action));
+        if action == 'm' && intermediates.is_empty() && !ignore {
+            self.apply_sgr(params.iter());
+        } else {
+            self.apply_csi(decode_csi(params, intermediates, ignore, action));
+        }
     }
 
     fn esc_dispatch(&mut self, intermediates: &[u8], ignore: bool, byte: u8) {

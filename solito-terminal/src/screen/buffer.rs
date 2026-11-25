@@ -54,22 +54,17 @@ impl ScreenCell {
 #[derive(Clone, Debug, Default)]
 pub struct ScreenLine {
     cells: std::sync::Arc<Vec<ScreenCell>>,
-    /// Auto-wrap continued this row onto the next one. Resizing rejoins such
-    /// rows, as ConPTY does with its own buffer.
-    wrapped: bool,
+    /// This row continues the previous row after a soft wrap.
+    pub(super) wrapped_from_previous: bool,
 }
 
 impl ScreenLine {
+    pub fn wrapped_from_previous(&self) -> bool {
+        self.wrapped_from_previous
+    }
+
     pub fn shares_storage_with(&self, other: &Self) -> bool {
         std::sync::Arc::ptr_eq(&self.cells, &other.cells)
-    }
-
-    pub fn is_wrapped(&self) -> bool {
-        self.wrapped
-    }
-
-    pub(super) fn set_wrapped(&mut self, wrapped: bool) {
-        self.wrapped = wrapped;
     }
 }
 
@@ -88,7 +83,7 @@ impl std::ops::DerefMut for ScreenLine {
 
 impl PartialEq for ScreenLine {
     fn eq(&self, other: &Self) -> bool {
-        self.wrapped == other.wrapped
+        self.wrapped_from_previous == other.wrapped_from_previous
             && (self.shares_storage_with(other) || self.cells == other.cells)
     }
 }
@@ -97,7 +92,7 @@ impl From<Vec<ScreenCell>> for ScreenLine {
     fn from(cells: Vec<ScreenCell>) -> Self {
         Self {
             cells: std::sync::Arc::new(cells),
-            wrapped: false,
+            wrapped_from_previous: false,
         }
     }
 }
@@ -110,6 +105,8 @@ impl FromIterator<ScreenCell> for ScreenLine {
 #[derive(Clone, Debug, Default)]
 pub struct ScreenSnapshot {
     pub lines: ScreenLines,
+    /// Changes when the terminal switches screens, resets, or reflows the active buffer.
+    pub screen_generation: u64,
     pub history_start: usize,
     pub cursor_row: usize,
     pub cursor_col: usize,
@@ -133,6 +130,7 @@ pub(super) struct ScreenBuffer {
     pub(super) auto_wrap: bool,
     pub(super) cursor_visible: bool,
     pub(super) tab_stops: Vec<bool>,
+    erase_line: ScreenLine,
 }
 
 impl ScreenBuffer {
@@ -152,6 +150,7 @@ impl ScreenBuffer {
             auto_wrap: true,
             cursor_visible: true,
             tab_stops: default_tab_stops(size.cols),
+            erase_line: ScreenLine::default(),
         }
     }
 
@@ -215,7 +214,11 @@ impl ScreenBuffer {
         let mut row = 0;
         while row < self.lines.len() {
             let start = row;
-            while row + 1 < self.lines.len() && self.lines[row].is_wrapped() {
+            while self
+                .lines
+                .get(row + 1)
+                .is_some_and(ScreenLine::wrapped_from_previous)
+            {
                 row += 1;
             }
             let end = row;
@@ -227,7 +230,7 @@ impl ScreenBuffer {
                     new_top = Some(out.len());
                 }
                 let mut line = self.lines[start].clone();
-                line.set_wrapped(false);
+                line.wrapped_from_previous = false;
                 out.push(line);
                 continue;
             }
@@ -309,11 +312,8 @@ impl ScreenBuffer {
                 .clamp(self.scroll_region.0, size.rows - 1);
         }
         // Preserve existing stops, including ones explicitly cleared by the application.
-        let old_cols = self.tab_stops.len();
-        self.tab_stops.resize(size.cols, false);
-        for col in old_cols..size.cols {
-            self.tab_stops[col] = col % 8 == 0;
-        }
+        self.tab_stops
+            .extend((self.tab_stops.len()..size.cols).map(|col| col % 8 == 0));
         self.cursor
             .move_to_col(self.cursor.get_current_col().min(size.cols - 1));
         let top = self.get_viewport_top();
@@ -338,9 +338,10 @@ impl ScreenBuffer {
         self.cursor.discard_rows(remove);
     }
 
-    pub(super) fn snapshot(&self) -> ScreenSnapshot {
+    pub(super) fn snapshot(&self, screen_generation: u64) -> ScreenSnapshot {
         ScreenSnapshot {
             lines: self.lines.clone(),
+            screen_generation,
             history_start: self.history_start,
             cursor_row: self.cursor.get_current_row(),
             cursor_col: self.cursor.get_current_col(),
@@ -351,6 +352,26 @@ impl ScreenBuffer {
 
     pub(super) fn cols(&self) -> usize {
         self.cols
+    }
+
+    /// Share one blank row across erases and scrolling until its width or background changes.
+    pub(super) fn erase_blank_line(&mut self) -> ScreenLine {
+        let background = self.style.bg_rgba;
+        let width = if background.is_some() { self.cols } else { 0 };
+        if self.erase_line.len() != width
+            || self
+                .erase_line
+                .first()
+                .and_then(ScreenCell::background_rgba)
+                != background
+        {
+            let blank = ScreenCell::blank(CellStyle {
+                bg_rgba: background,
+                ..CellStyle::default()
+            });
+            self.erase_line = vec![blank; width].into();
+        }
+        self.erase_line.clone()
     }
 
     pub(super) fn rows(&self) -> usize {
@@ -399,7 +420,7 @@ impl SplitRows {
     }
 }
 
-/// Split one joined row into rows of `cols` cells, marking all but the last as wrapped.
+/// Split one joined row into rows of `cols` cells, marking each continuation.
 /// A wide glyph that would straddle the edge moves to the next row, as when printed.
 fn split_cells(cells: Vec<ScreenCell>, cols: usize, out: &mut Vec<ScreenLine>) -> SplitRows {
     let content = cells.len();
@@ -416,15 +437,19 @@ fn split_cells(cells: Vec<ScreenCell>, cols: usize, out: &mut Vec<ScreenLine>) -
             1
         };
         if current.len() + width > cols && !current.is_empty() {
-            let mut line = ScreenLine::from(std::mem::take(&mut current));
-            line.set_wrapped(true);
-            out.push(line);
+            out.push(ScreenLine {
+                wrapped_from_previous: starts.len() > 1,
+                ..ScreenLine::from(std::mem::take(&mut current))
+            });
             starts.push(index);
         }
         current.extend_from_slice(&cells[index..index + width]);
         index += width;
     }
-    out.push(ScreenLine::from(current));
+    out.push(ScreenLine {
+        wrapped_from_previous: starts.len() > 1,
+        ..ScreenLine::from(current)
+    });
     SplitRows { starts, content }
 }
 

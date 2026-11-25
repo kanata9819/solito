@@ -10,6 +10,7 @@ pub(crate) struct Screen {
     pub(crate) mouse_mode: crate::MouseMode,
     screen_buffer: ScreenBuffer,
     primary_screen: Option<ScreenBuffer>,
+    screen_generation: u64,
     last_printed: Option<char>,
 }
 
@@ -21,6 +22,7 @@ impl Screen {
             mouse_mode: Default::default(),
             screen_buffer,
             primary_screen: None,
+            screen_generation: 0,
             last_printed: None,
         }
     }
@@ -42,6 +44,10 @@ impl Screen {
     pub(crate) fn resize(&mut self, size: TerminalSize) {
         // ConPTY reflows its main buffer; full-screen apps redraw the alternate one.
         let alternate = self.primary_screen.is_some();
+        if !alternate && self.screen_buffer.cols() != size.cols {
+            // Existing selection coordinates no longer identify the same cells.
+            self.screen_generation += 1;
+        }
         self.screen_buffer.resize(size, !alternate);
         if let Some(primary_screen) = &mut self.primary_screen {
             primary_screen.resize(size, true);
@@ -95,14 +101,12 @@ impl Screen {
     fn erase_line_range(&mut self, row: usize, start: usize, end: usize) {
         self.erase_cells(row, start, end);
         // Erasing through the right edge ends the row; it no longer continues below.
-        if end >= self.screen_buffer.cols()
-            && self
-                .screen_buffer
-                .lines
-                .get(row)
-                .is_some_and(ScreenLine::is_wrapped)
-        {
-            self.screen_buffer.lines[row].set_wrapped(false);
+        if end >= self.screen_buffer.cols() {
+            let lines = &mut self.screen_buffer.lines;
+            lines.break_wrap_before(row + 1);
+            if start == 0 {
+                lines.break_wrap_before(row);
+            }
         }
         // Keep the sparse representation: trailing default blanks are implicit.
         let Some(line) = self.screen_buffer.lines.get(row) else {
@@ -196,7 +200,7 @@ impl Screen {
             CsiMessage::SaveCursor => self.save_cursor_position(),
             CsiMessage::RestoreCursor => self.restore_cursor_position(),
             CsiMessage::SelectGraphicRendition(params) => {
-                sgr::apply(&mut self.screen_buffer.style, &params)
+                self.apply_sgr(params.iter().map(Vec::as_slice))
             }
             CsiMessage::SetMode { private, modes } => self.set_modes(private, &modes),
             CsiMessage::ResetMode { private, modes } => self.reset_modes(private, &modes),
@@ -219,6 +223,10 @@ impl Screen {
         }
     }
 
+    pub(super) fn apply_sgr<'a>(&mut self, groups: impl Iterator<Item = &'a [u16]>) {
+        sgr::apply(&mut self.screen_buffer.style, groups);
+    }
+
     pub(super) fn apply_osc(&mut self, message: &OscMessage) {
         match message {
             OscMessage::SetCursorColor(color) => self.screen_buffer.cursor_color = Some(*color),
@@ -234,8 +242,8 @@ impl Screen {
         match message {
             EscMessage::SaveCursor => self.save_cursor_position(),
             EscMessage::RestoreCursor => self.restore_cursor_position(),
-            EscMessage::Index => self.index(),
-            EscMessage::NextLine => self.advance_to_next_line(),
+            EscMessage::Index => self.index(false),
+            EscMessage::NextLine => self.advance_to_next_line(false),
             EscMessage::ReverseIndex => self.reverse_index(),
             EscMessage::Reset => self.reset(),
             EscMessage::Unknown { .. } => {}
@@ -244,7 +252,7 @@ impl Screen {
 
     pub(super) fn apply_execute(&mut self, byte: u8) {
         match byte {
-            b'\n' | 0x0b | 0x0c => self.index(),
+            b'\n' | 0x0b | 0x0c => self.index(false),
             b'\r' => self.carriage_return(),
             0x08 => self.backspace(),
             b'\t' => self.tab_forward(1),
@@ -279,7 +287,7 @@ impl Screen {
             if self.screen_buffer.auto_wrap {
                 // If the previous character reached the right edge,
                 // finalize line wrap (auto-wrap) at the next print timing.
-                self.wrap_to_next_line();
+                self.advance_to_next_line(true);
             } else {
                 self.screen_buffer.pending_wrap = false;
             }
@@ -295,7 +303,7 @@ impl Screen {
                 if !self.screen_buffer.auto_wrap {
                     return;
                 }
-                self.wrap_to_next_line();
+                self.advance_to_next_line(true);
             }
         }
 
@@ -389,7 +397,7 @@ impl Screen {
     }
 
     pub(crate) fn snapshot(&self) -> ScreenSnapshot {
-        self.screen_buffer.snapshot()
+        self.screen_buffer.snapshot(self.screen_generation)
     }
 
     fn move_cursor_up(&mut self, amount: usize) {
@@ -488,7 +496,7 @@ impl Screen {
 
     fn scroll_up(&mut self, amount: usize) {
         let (top, bottom) = self.scroll_region_bounds();
-        let blank = self.erase_blank_line();
+        let blank = self.screen_buffer.erase_blank_line();
         self.screen_buffer
             .lines
             .scroll_up(top..bottom + 1, amount, blank);
@@ -497,26 +505,11 @@ impl Screen {
 
     fn scroll_down(&mut self, amount: usize) {
         let (top, bottom) = self.scroll_region_bounds();
-        let blank = self.erase_blank_line();
+        let blank = self.screen_buffer.erase_blank_line();
         self.screen_buffer
             .lines
             .scroll_down(top..bottom + 1, amount, blank);
         self.screen_buffer.pending_wrap = false;
-    }
-
-    fn erase_blank_line(&self) -> ScreenLine {
-        let bg_rgba = self.screen_buffer.style.bg_rgba;
-        if bg_rgba.is_none() {
-            return ScreenLine::default();
-        }
-        vec![
-            ScreenCell::blank(CellStyle {
-                bg_rgba,
-                ..Default::default()
-            });
-            self.screen_buffer.cols()
-        ]
-        .into()
     }
 
     fn insert_blank_characters(&mut self, amount: usize) {
@@ -542,7 +535,7 @@ impl Screen {
         if !(top..=bottom).contains(&row) {
             return;
         }
-        let blank = self.erase_blank_line();
+        let blank = self.screen_buffer.erase_blank_line();
         self.screen_buffer
             .lines
             .scroll_down(row..bottom + 1, amount, blank);
@@ -555,7 +548,7 @@ impl Screen {
         if !(top..=bottom).contains(&row) {
             return;
         }
-        let blank = self.erase_blank_line();
+        let blank = self.screen_buffer.erase_blank_line();
         self.screen_buffer
             .lines
             .scroll_up(row..bottom + 1, amount, blank);
@@ -570,6 +563,7 @@ impl Screen {
                 .tab_stops
                 .iter()
                 .enumerate()
+                .take(self.screen_buffer.cols())
                 .skip(col.saturating_add(1))
                 .find_map(|(index, stop)| stop.then_some(index))
                 .unwrap_or(self.screen_buffer.cols().saturating_sub(1));
@@ -615,6 +609,7 @@ impl Screen {
         let cursor_row = self.screen_buffer.cursor.get_current_row();
         let col = self.screen_buffer.cursor.get_current_col();
         let cols = self.screen_buffer.cols();
+        let mut blank_line = None;
         for row in top..bottom {
             let (start, end) = match mode {
                 EraseMode::All => (0, cols),
@@ -624,7 +619,21 @@ impl Screen {
                 EraseMode::ToEnd if row > cursor_row => (0, cols),
                 _ => continue,
             };
-            self.erase_line_range(row, start, end);
+            if start == 0 && end == cols {
+                let blank = blank_line.get_or_insert_with(|| self.screen_buffer.erase_blank_line());
+                let lines = &mut self.screen_buffer.lines;
+                if let Some(existing) = lines.get(row) {
+                    if existing != blank {
+                        lines[row] = blank.clone();
+                    }
+                } else {
+                    debug_assert_eq!(row, lines.len());
+                    lines.push_back(blank.clone());
+                }
+                lines.break_wrap_before(row + 1);
+            } else {
+                self.erase_line_range(row, start, end);
+            }
         }
         self.screen_buffer.pending_wrap = false;
     }
@@ -703,41 +712,39 @@ impl Screen {
         buffer.ensure_cursor_line();
     }
 
-    /// Auto-wrap: the current row continues on the next one.
-    fn wrap_to_next_line(&mut self) {
-        self.screen_buffer.ensure_cursor_line();
-        let row = self.screen_buffer.cursor.get_current_row();
-        self.screen_buffer.lines[row].set_wrapped(true);
-        self.advance_to_next_line();
-    }
-
-    fn advance_to_next_line(&mut self) {
-        // Wrapping combines vertical movement with a return to column zero.
-        self.index();
+    fn advance_to_next_line(&mut self, wrapped: bool) {
+        self.index(wrapped);
         self.carriage_return();
     }
 
-    fn index(&mut self) {
+    fn index(&mut self, wrapped: bool) {
         let cursor_row = self.screen_buffer.cursor.get_current_row();
         let screen_bottom = self.screen_buffer.get_viewport_top() + self.screen_buffer.rows() - 1;
-        if self.screen_buffer.scroll_region != (0, self.screen_buffer.rows() - 1) {
+        let advances = if self.screen_buffer.scroll_region != (0, self.screen_buffer.rows() - 1) {
             let (top, bottom) = self.scroll_region_bounds();
             if (top..=bottom).contains(&cursor_row) && cursor_row == bottom {
                 self.scroll_up(1);
+                top < bottom
             } else {
                 self.screen_buffer
                     .cursor
                     .move_to_row((cursor_row + 1).min(screen_bottom));
+                cursor_row < screen_bottom
             }
         } else {
             self.screen_buffer.cursor.move_down();
             if cursor_row == screen_bottom {
-                let blank = self.erase_blank_line();
+                let blank = self.screen_buffer.erase_blank_line();
                 self.screen_buffer.lines.push_back(blank);
             }
-        }
+            true
+        };
         self.screen_buffer.pending_wrap = false;
         self.screen_buffer.ensure_cursor_line();
+        if wrapped && advances {
+            let row = self.screen_buffer.cursor.get_current_row();
+            self.screen_buffer.lines[row].wrapped_from_previous = true;
+        }
     }
 
     fn reverse_index(&mut self) {
@@ -772,6 +779,7 @@ impl Screen {
         self.screen_buffer = ScreenBuffer::new(size);
         self.primary_screen = None;
         self.last_printed = None;
+        self.screen_generation += 1;
     }
 
     fn set_modes(&mut self, private: bool, modes: &[u16]) {
@@ -834,11 +842,13 @@ impl Screen {
             ScreenBuffer::new(size),
         ));
         self.last_printed = None;
+        self.screen_generation += 1;
     }
 
     fn leave_alternate_screen(&mut self, restore_cursor: bool) {
         if let Some(primary_screen) = self.primary_screen.take() {
             self.screen_buffer = primary_screen;
+            self.screen_generation += 1;
             if restore_cursor {
                 self.restore_cursor_position();
             }

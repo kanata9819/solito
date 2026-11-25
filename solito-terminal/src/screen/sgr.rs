@@ -16,13 +16,15 @@ const FOREGROUND_BRIGHT_OFFSET: u16 = 8;
 
 /// Applies SGR parameters. Each entry is one `;`-separated parameter with its
 /// `:`-separated subparameters, so `38;2;R;G;B` and `38:2::R:G:B` both work.
-pub(super) fn apply(style: &mut CellStyle, params: &[Vec<u16>]) {
-    let mut index = 0;
+pub(super) fn apply<'a>(style: &mut CellStyle, groups: impl Iterator<Item = &'a [u16]>) {
+    let mut groups = groups.peekable();
+    if groups.peek().is_none() {
+        apply_code(style, RESET);
+        return;
+    }
 
-    while index < params.len() {
-        let group = &params[index];
+    while let Some(group) = groups.next() {
         let Some(&code) = group.first() else {
-            index += 1;
             continue;
         };
 
@@ -34,27 +36,37 @@ pub(super) fn apply(style: &mut CellStyle, params: &[Vec<u16>]) {
                 UNDERLINE_COLOR_EXTENDED => {}
                 _ => apply_code(style, code),
             }
-            index += 1;
             continue;
         }
 
         match code {
             FOREGROUND_EXTENDED | BACKGROUND_EXTENDED | UNDERLINE_COLOR_EXTENDED => {
-                let rest: Vec<u16> = params[index..]
-                    .iter()
-                    .take(5)
-                    .map(|param| param.first().copied().unwrap_or(0))
-                    .collect();
-                let consumed = match code {
-                    FOREGROUND_EXTENDED => apply_extended_color(&mut style.fg_rgba, &rest),
-                    BACKGROUND_EXTENDED => apply_extended_color(&mut style.bg_rgba, &rest),
-                    _ => extended_color_param_count(&rest),
-                };
-                index += consumed;
+                // For an unsupported color mode, leave the next group to be processed as SGR.
+                let mode = groups.peek().and_then(|group| group.first()).copied();
+                if matches!(mode, Some(2 | 5)) {
+                    groups.next();
+                    let mut next = || {
+                        groups
+                            .next()
+                            .map(|group| group.first().copied().unwrap_or(0))
+                    };
+                    let rgba = if mode == Some(5) {
+                        next().map(|index| ansi_256_color(usize::from(index)))
+                    } else {
+                        let mut channel = || next().unwrap_or(0).min(255) as u8;
+                        Some([channel(), channel(), channel(), 255])
+                    };
+                    if let Some(rgba) = rgba {
+                        match code {
+                            FOREGROUND_EXTENDED => style.fg_rgba = Some(rgba),
+                            BACKGROUND_EXTENDED => style.bg_rgba = Some(rgba),
+                            _ => {}
+                        }
+                    }
+                }
             }
             _ => {
                 apply_code(style, code);
-                index += 1;
             }
         }
     }
@@ -102,31 +114,6 @@ fn apply_colon_color(color: &mut Option<[u8; 4]>, group: &[u16]) {
             *color = Some([channel(rgb[0]), channel(rgb[1]), channel(rgb[2]), 255]);
         }
         _ => {}
-    }
-}
-
-fn extended_color_param_count(params: &[u16]) -> usize {
-    match params.get(1).copied() {
-        Some(5) => 3,
-        Some(2) => 5,
-        _ => 1,
-    }
-}
-
-fn apply_extended_color(color: &mut Option<[u8; 4]>, params: &[u16]) -> usize {
-    match params.get(1).copied() {
-        Some(5) => {
-            if let Some(index) = params.get(2).copied() {
-                *color = Some(ansi_256_color(usize::from(index)));
-            }
-            3
-        }
-        Some(2) => {
-            let channel = |index| params.get(index).copied().unwrap_or(0).min(255) as u8;
-            *color = Some([channel(2), channel(3), channel(4), 255]);
-            5
-        }
-        _ => 1,
     }
 }
 
@@ -188,18 +175,18 @@ fn cube_component(level: usize) -> u8 {
 mod tests {
     use super::{CellStyle, apply};
 
-    fn semicolons(params: &[u16]) -> Vec<Vec<u16>> {
-        params.iter().map(|&param| vec![param]).collect()
+    fn semicolons(params: &[u16]) -> impl Iterator<Item = &[u16]> {
+        params.iter().map(std::slice::from_ref)
     }
 
     #[test]
     fn applies_ansi_and_resets_foreground() {
         let mut style = CellStyle::default();
 
-        apply(&mut style, &semicolons(&[31]));
+        apply(&mut style, semicolons(&[31]));
         assert_eq!(style.fg_rgba, Some([197, 15, 31, 255]));
 
-        apply(&mut style, &semicolons(&[39]));
+        apply(&mut style, semicolons(&[39]));
         assert_eq!(style.fg_rgba, None);
     }
 
@@ -207,7 +194,7 @@ mod tests {
     fn applies_indexed_foreground() {
         let mut style = CellStyle::default();
 
-        apply(&mut style, &semicolons(&[38, 5, 196]));
+        apply(&mut style, semicolons(&[38, 5, 196]));
 
         assert_eq!(style.fg_rgba, Some([255, 0, 0, 255]));
     }
@@ -216,7 +203,7 @@ mod tests {
     fn applies_true_color_foreground() {
         let mut style = CellStyle::default();
 
-        apply(&mut style, &semicolons(&[38, 2, 12, 34, 56]));
+        apply(&mut style, semicolons(&[38, 2, 12, 34, 56]));
 
         assert_eq!(style.fg_rgba, Some([12, 34, 56, 255]));
     }
@@ -226,7 +213,7 @@ mod tests {
         let mut style = CellStyle::default();
 
         // `ESC[2;38:2::255:0:0m`: the empty color-space id must not reset.
-        apply(&mut style, &[vec![2], vec![38, 2, 0, 255, 0, 0]]);
+        apply(&mut style, [&[2][..], &[38, 2, 0, 255, 0, 0]].into_iter());
 
         assert_eq!(style.fg_rgba, Some([255, 0, 0, 255]));
         assert!(style.faint);
@@ -236,7 +223,7 @@ mod tests {
     fn applies_colon_true_color_without_color_space() {
         let mut style = CellStyle::default();
 
-        apply(&mut style, &[vec![48, 2, 12, 34, 56]]);
+        apply(&mut style, [&[48, 2, 12, 34, 56][..]].into_iter());
 
         assert_eq!(style.bg_rgba, Some([12, 34, 56, 255]));
     }
@@ -245,7 +232,7 @@ mod tests {
     fn applies_colon_indexed_color_and_continues() {
         let mut style = CellStyle::default();
 
-        apply(&mut style, &[vec![38, 5, 196], vec![44]]);
+        apply(&mut style, [&[38, 5, 196][..], &[44]].into_iter());
 
         assert_eq!(style.fg_rgba, Some([255, 0, 0, 255]));
         assert_eq!(style.bg_rgba, Some([0, 55, 218, 255]));
@@ -254,10 +241,25 @@ mod tests {
     #[test]
     fn colon_underline_style_does_not_change_colors() {
         let mut style = CellStyle::default();
-        apply(&mut style, &semicolons(&[31]));
+        apply(&mut style, semicolons(&[31]));
 
-        apply(&mut style, &[vec![4, 3], vec![58, 2, 0, 1, 2, 3]]);
+        apply(&mut style, [&[4, 3][..], &[58, 2, 0, 1, 2, 3]].into_iter());
 
         assert_eq!(style.fg_rgba, Some([197, 15, 31, 255]));
+    }
+
+    #[test]
+    fn terminal_consumes_extended_color_groups_and_handles_empty_reset() {
+        use crate::{TerminalSize, TerminalState};
+
+        let mut terminal = TerminalState::new(TerminalSize::new(8, 2));
+        terminal.apply_terminal_output(b"\x1b[38;31mR\x1b[58;2;31;32;33mU\x1b[48:5:236mB\x1b[mN");
+        let screen = terminal.snapshot();
+        let line = &screen.lines[0];
+        assert_eq!(line[0].foreground_rgba(), Some([197, 15, 31, 255]));
+        assert_eq!(line[1].foreground_rgba(), line[0].foreground_rgba());
+        assert_eq!(line[2].background_rgba(), Some([48, 48, 48, 255]));
+        assert_eq!(line[3].foreground_rgba(), None);
+        assert_eq!(line[3].background_rgba(), None);
     }
 }
