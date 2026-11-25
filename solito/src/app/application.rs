@@ -509,6 +509,7 @@ impl ApplicationHandler<AppEvent> for SolitoApplication {
 #[cfg(all(test, target_os = "windows"))]
 mod tests {
     use super::*;
+    use solito_renderer::CopyModePosition;
     use solito_terminal::TerminalState;
     use winit::{event_loop::EventLoop, platform::windows::EventLoopBuilderExtWindows};
 
@@ -639,6 +640,23 @@ mod tests {
                         "keyboard input must reach the terminal after focus returns"
                     );
                 }
+
+                let snapshot = app.tabs.active_snapshot().unwrap();
+                let first_blank_row = snapshot.history_start + 2;
+                assert!(app.copy_mode.select_cells(
+                    &snapshot,
+                    CopyModePosition::new(first_blank_row, 1),
+                    CopyModePosition::new(first_blank_row, 5),
+                ));
+                app.handle_keyboard_command(
+                    input::AppCommand::CopySelectionOrInterrupt,
+                    event_loop,
+                )
+                .unwrap();
+                assert!(matches!(
+                    input_rx.try_recv(),
+                    Ok(crate::session::runtime::SessionInput::Write(bytes)) if bytes == b"\x03"
+                ));
 
                 app.window_event(
                     event_loop,

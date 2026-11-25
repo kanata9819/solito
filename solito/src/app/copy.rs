@@ -26,6 +26,7 @@ pub(super) enum CopyModeMove {
 #[derive(Default)]
 pub(super) struct CopyMode {
     snapshot: CopyModeSnapshot,
+    screen_generation: u64,
     history_start: usize,
 }
 
@@ -34,15 +35,12 @@ impl CopyMode {
         self.snapshot.active
     }
 
-    pub(super) fn has_selection(&self) -> bool {
-        self.snapshot.selection.is_some()
-    }
-
     pub(super) fn clear_selection(&mut self) -> bool {
         self.snapshot.selection.take().is_some()
     }
 
     pub(super) fn enter(&mut self, screen: &ScreenSnapshot) {
+        self.screen_generation = screen.screen_generation;
         self.history_start = screen.history_start;
         self.snapshot = CopyModeSnapshot {
             active: true,
@@ -93,8 +91,9 @@ impl CopyMode {
         if let Some(anchor) = position_in_snapshot(screen, history_anchor)
             && let Some(cursor) = position_in_snapshot(screen, history_cursor)
         {
+            self.screen_generation = screen.screen_generation;
             self.history_start = screen.history_start;
-            self.snapshot.cursor = cursor;
+            self.snapshot.cursor = movement::clamp_position(screen, cursor);
             self.snapshot.selection = Some(CopyModeSelection {
                 anchor,
                 cursor,
@@ -130,6 +129,14 @@ impl CopyMode {
         if !self.snapshot.active && self.snapshot.selection.is_none() {
             return CopyModeSnapshot::default();
         }
+        if self.screen_generation != screen.screen_generation {
+            if self.snapshot.active {
+                self.enter(screen);
+            } else {
+                self.exit();
+            }
+            return self.snapshot;
+        }
 
         let removed = screen.history_start.saturating_sub(self.history_start);
         self.history_start = screen.history_start;
@@ -140,13 +147,14 @@ impl CopyMode {
                 self.snapshot.selection = None;
             } else {
                 selection.anchor.row -= removed;
+                selection.cursor.row -= removed;
             }
         }
         self.snapshot.cursor = movement::clamp_position(screen, self.snapshot.cursor);
 
         if let Some(selection) = self.snapshot.selection.as_mut() {
-            selection.anchor = movement::clamp_position(screen, selection.anchor);
-            selection.cursor = self.snapshot.cursor;
+            selection.anchor = selection_position(screen, selection.anchor);
+            selection.cursor = selection_position(screen, selection.cursor);
         }
 
         self.snapshot
@@ -159,7 +167,13 @@ fn position_in_snapshot(
 ) -> Option<CopyModePosition> {
     let row = position.row.checked_sub(screen.history_start)?;
     (row < screen.lines.len())
-        .then(|| movement::clamp_position(screen, CopyModePosition::new(row, position.col)))
+        .then(|| selection_position(screen, CopyModePosition::new(row, position.col)))
+}
+
+fn selection_position(screen: &ScreenSnapshot, position: CopyModePosition) -> CopyModePosition {
+    let row = position.row.min(screen.lines.len().saturating_sub(1));
+    // Keep mouse columns past the stored text, but select wide glyphs as a unit.
+    CopyModePosition::new(row, movement::leading_col(screen, row, position.col))
 }
 
 #[cfg(test)]
@@ -186,7 +200,7 @@ mod tests {
             cursor_col,
             cursor_color: None,
             cursor_visible: true,
-            history_start: 0,
+            ..Default::default()
         }
     }
 
@@ -303,6 +317,73 @@ mod tests {
         assert!(copy_mode.select_cells(&screen, anchor, cursor));
         assert_eq!(copy_mode.selected_text(&screen), None);
         assert!(!copy_mode.select_cells(&screen, anchor, anchor));
+    }
+
+    #[test]
+    fn selection_expires_when_switching_screens_or_resetting() {
+        let mut terminal = TerminalState::new(TerminalSize::new(10, 2));
+        terminal.apply_terminal_output(b"main\x1b[?1049halt");
+        let mut mode = CopyMode::default();
+        let start = CopyModePosition::new(0, 0);
+        let end = CopyModePosition::new(0, 2);
+        assert!(mode.select_cells(&terminal.snapshot(), start, end));
+        assert_eq!(
+            mode.selected_text(&terminal.snapshot()).as_deref(),
+            Some("alt")
+        );
+
+        terminal.apply_terminal_output(b"\x1b[?1049l");
+        assert_eq!(mode.selected_text(&terminal.snapshot()), None);
+        assert!(
+            mode.update_snapshot(&terminal.snapshot())
+                .selection
+                .is_none()
+        );
+
+        mode.enter(&terminal.snapshot());
+        assert!(mode.select_cells(&terminal.snapshot(), start, end));
+        terminal.apply_terminal_output(b"\x1bcnew");
+        assert_eq!(mode.selected_text(&terminal.snapshot()), None);
+        assert!(mode.is_active());
+    }
+
+    #[test]
+    fn copies_soft_wrapped_scrollback_without_adding_a_hard_break() {
+        let mut terminal = TerminalState::new(TerminalSize::new(4, 2));
+        terminal.apply_terminal_output(b"ABCDEF\r\nGH");
+        let screen = terminal.snapshot();
+        let mut mode = CopyMode::default();
+        let start = CopyModePosition::new(0, 1);
+        let end = CopyModePosition::new(2, 0);
+        assert!(mode.select_cells(&screen, end, start));
+        assert_eq!(mode.selected_text(&screen).as_deref(), Some("BCDEF\nG"));
+
+        mode.enter(&screen);
+        mode.toggle_line_selection(&screen);
+        mode.move_cursor(&screen, CopyModeMove::FirstLine);
+        assert_eq!(mode.selected_text(&screen).as_deref(), Some("ABCDEF\nGH"));
+    }
+
+    #[test]
+    fn mouse_selection_in_blank_cells_does_not_include_text_to_its_left() {
+        let mut terminal = TerminalState::new(TerminalSize::new(12, 3));
+        terminal.apply_terminal_output(b"ABC\r\n\r\nDEF");
+        let screen = terminal.snapshot();
+        let mut mode = CopyMode::default();
+        for row in 0..=1 {
+            assert!(mode.select_cells(
+                &screen,
+                CopyModePosition::new(row, 5),
+                CopyModePosition::new(row, 8),
+            ));
+            assert_eq!(mode.selected_text(&screen), None);
+        }
+        assert!(mode.select_cells(
+            &screen,
+            CopyModePosition::new(0, 5),
+            CopyModePosition::new(2, 0),
+        ));
+        assert_eq!(mode.selected_text(&screen).as_deref(), Some("\n\nD"));
     }
 
     #[test]

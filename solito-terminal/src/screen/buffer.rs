@@ -52,36 +52,47 @@ impl ScreenCell {
 
 /// A shared row. Snapshots clone the Arc; writing copies only a shared row.
 #[derive(Clone, Debug, Default)]
-pub struct ScreenLine(std::sync::Arc<Vec<ScreenCell>>);
+pub struct ScreenLine {
+    cells: std::sync::Arc<Vec<ScreenCell>>,
+    pub(super) wrapped_from_previous: bool,
+}
 
 impl ScreenLine {
+    pub fn wrapped_from_previous(&self) -> bool {
+        self.wrapped_from_previous
+    }
+
     pub fn shares_storage_with(&self, other: &Self) -> bool {
-        std::sync::Arc::ptr_eq(&self.0, &other.0)
+        std::sync::Arc::ptr_eq(&self.cells, &other.cells)
     }
 }
 
 impl std::ops::Deref for ScreenLine {
     type Target = Vec<ScreenCell>;
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.cells
     }
 }
 
 impl std::ops::DerefMut for ScreenLine {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        std::sync::Arc::make_mut(&mut self.0)
+        std::sync::Arc::make_mut(&mut self.cells)
     }
 }
 
 impl PartialEq for ScreenLine {
     fn eq(&self, other: &Self) -> bool {
-        self.shares_storage_with(other) || self.0 == other.0
+        self.wrapped_from_previous == other.wrapped_from_previous
+            && (self.shares_storage_with(other) || self.cells == other.cells)
     }
 }
 impl Eq for ScreenLine {}
 impl From<Vec<ScreenCell>> for ScreenLine {
     fn from(cells: Vec<ScreenCell>) -> Self {
-        Self(std::sync::Arc::new(cells))
+        Self {
+            cells: std::sync::Arc::new(cells),
+            wrapped_from_previous: false,
+        }
     }
 }
 impl FromIterator<ScreenCell> for ScreenLine {
@@ -93,6 +104,8 @@ impl FromIterator<ScreenCell> for ScreenLine {
 #[derive(Clone, Debug, Default)]
 pub struct ScreenSnapshot {
     pub lines: ScreenLines,
+    /// Changes whenever the terminal switches screens or resets.
+    pub screen_generation: u64,
     pub history_start: usize,
     pub cursor_row: usize,
     pub cursor_col: usize,
@@ -176,11 +189,8 @@ impl ScreenBuffer {
             }
         }
         // Preserve existing stops, including ones explicitly cleared by the application.
-        let old_cols = self.tab_stops.len();
-        self.tab_stops.resize(size.cols, false);
-        for col in old_cols..size.cols {
-            self.tab_stops[col] = col % 8 == 0;
-        }
+        self.tab_stops
+            .extend((self.tab_stops.len()..size.cols).map(|col| col % 8 == 0));
         self.cursor
             .move_to_col(self.cursor.get_current_col().min(size.cols - 1));
         let top = self.get_viewport_top();
@@ -205,9 +215,10 @@ impl ScreenBuffer {
         self.cursor.discard_rows(remove);
     }
 
-    pub(super) fn snapshot(&self) -> ScreenSnapshot {
+    pub(super) fn snapshot(&self, screen_generation: u64) -> ScreenSnapshot {
         ScreenSnapshot {
             lines: self.lines.clone(),
+            screen_generation,
             history_start: self.history_start,
             cursor_row: self.cursor.get_current_row(),
             cursor_col: self.cursor.get_current_col(),

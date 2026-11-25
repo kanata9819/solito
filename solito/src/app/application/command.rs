@@ -77,10 +77,7 @@ impl SolitoApplication {
                     && let Some(text) = self.copy_mode.selected_text(&snapshot)
                 {
                     self.clipboard()?.set_text(text)?;
-                }
-                if command == AppCommand::CopySelectionOrInterrupt
-                    && !self.copy_mode.has_selection()
-                {
+                } else if command == AppCommand::CopySelectionOrInterrupt {
                     self.send_terminal_input(b"\x03".to_vec())?;
                 }
             }

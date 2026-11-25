@@ -150,6 +150,8 @@ impl ScreenLines {
         for row in range.end - amount..range.end {
             self[row] = blank.clone();
         }
+        self.break_wrap_before(range.start);
+        self.break_wrap_before(range.end);
     }
 
     pub(super) fn scroll_down(&mut self, range: Range<usize>, amount: usize, blank: ScreenLine) {
@@ -162,6 +164,16 @@ impl ScreenLines {
         }
         for row in range.start..range.start + amount {
             self[row] = blank.clone();
+        }
+        if range.start + amount < range.end {
+            self.break_wrap_before(range.start + amount);
+        }
+        self.break_wrap_before(range.end);
+    }
+
+    pub(super) fn break_wrap_before(&mut self, row: usize) {
+        if self.get(row).is_some_and(ScreenLine::wrapped_from_previous) {
+            self[row].wrapped_from_previous = false;
         }
     }
 }

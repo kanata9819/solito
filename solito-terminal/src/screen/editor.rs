@@ -10,6 +10,7 @@ pub(crate) struct Screen {
     pub(crate) mouse_mode: crate::MouseMode,
     screen_buffer: ScreenBuffer,
     primary_screen: Option<ScreenBuffer>,
+    screen_generation: u64,
     last_printed: Option<char>,
 }
 
@@ -21,6 +22,7 @@ impl Screen {
             mouse_mode: Default::default(),
             screen_buffer,
             primary_screen: None,
+            screen_generation: 0,
             last_printed: None,
         }
     }
@@ -91,6 +93,9 @@ impl Screen {
 
     fn erase_line_range(&mut self, row: usize, start: usize, end: usize) {
         self.erase_cells(row, start, end);
+        if start == 0 && end == self.screen_buffer.cols() {
+            self.screen_buffer.lines.break_wrap_before(row);
+        }
         // Keep the sparse representation: trailing default blanks are implicit.
         let Some(line) = self.screen_buffer.lines.get(row) else {
             return;
@@ -225,8 +230,8 @@ impl Screen {
         match message {
             EscMessage::SaveCursor => self.save_cursor_position(),
             EscMessage::RestoreCursor => self.restore_cursor_position(),
-            EscMessage::Index => self.index(),
-            EscMessage::NextLine => self.advance_to_next_line(),
+            EscMessage::Index => self.index(false),
+            EscMessage::NextLine => self.advance_to_next_line(false),
             EscMessage::ReverseIndex => self.reverse_index(),
             EscMessage::Reset => self.reset(),
             EscMessage::Unknown { .. } => {}
@@ -235,7 +240,7 @@ impl Screen {
 
     pub(super) fn apply_execute(&mut self, byte: u8) {
         match byte {
-            b'\n' | 0x0b | 0x0c => self.index(),
+            b'\n' | 0x0b | 0x0c => self.index(false),
             b'\r' => self.carriage_return(),
             0x08 => self.backspace(),
             b'\t' => self.tab_forward(1),
@@ -270,7 +275,7 @@ impl Screen {
             if self.screen_buffer.auto_wrap {
                 // If the previous character reached the right edge,
                 // finalize line wrap (auto-wrap) at the next print timing.
-                self.advance_to_next_line();
+                self.advance_to_next_line(true);
             } else {
                 self.screen_buffer.pending_wrap = false;
             }
@@ -286,7 +291,7 @@ impl Screen {
                 if !self.screen_buffer.auto_wrap {
                     return;
                 }
-                self.advance_to_next_line();
+                self.advance_to_next_line(true);
             }
         }
 
@@ -380,7 +385,7 @@ impl Screen {
     }
 
     pub(crate) fn snapshot(&self) -> ScreenSnapshot {
-        self.screen_buffer.snapshot()
+        self.screen_buffer.snapshot(self.screen_generation)
     }
 
     fn move_cursor_up(&mut self, amount: usize) {
@@ -546,6 +551,7 @@ impl Screen {
                 .tab_stops
                 .iter()
                 .enumerate()
+                .take(self.screen_buffer.cols())
                 .skip(col.saturating_add(1))
                 .find_map(|(index, stop)| stop.then_some(index))
                 .unwrap_or(self.screen_buffer.cols().saturating_sub(1));
@@ -693,23 +699,24 @@ impl Screen {
         buffer.ensure_cursor_line();
     }
 
-    fn advance_to_next_line(&mut self) {
-        // Wrapping combines vertical movement with a return to column zero.
-        self.index();
+    fn advance_to_next_line(&mut self, wrapped: bool) {
+        self.index(wrapped);
         self.carriage_return();
     }
 
-    fn index(&mut self) {
+    fn index(&mut self, wrapped: bool) {
         let cursor_row = self.screen_buffer.cursor.get_current_row();
         let screen_bottom = self.screen_buffer.get_viewport_top() + self.screen_buffer.rows() - 1;
-        if self.screen_buffer.scroll_region != (0, self.screen_buffer.rows() - 1) {
+        let advances = if self.screen_buffer.scroll_region != (0, self.screen_buffer.rows() - 1) {
             let (top, bottom) = self.scroll_region_bounds();
             if (top..=bottom).contains(&cursor_row) && cursor_row == bottom {
                 self.scroll_up(1);
+                top < bottom
             } else {
                 self.screen_buffer
                     .cursor
                     .move_to_row((cursor_row + 1).min(screen_bottom));
+                cursor_row < screen_bottom
             }
         } else {
             self.screen_buffer.cursor.move_down();
@@ -717,9 +724,14 @@ impl Screen {
                 let blank = self.screen_buffer.erase_blank_line();
                 self.screen_buffer.lines.push_back(blank);
             }
-        }
+            true
+        };
         self.screen_buffer.pending_wrap = false;
         self.screen_buffer.ensure_cursor_line();
+        if wrapped && advances {
+            let row = self.screen_buffer.cursor.get_current_row();
+            self.screen_buffer.lines[row].wrapped_from_previous = true;
+        }
     }
 
     fn reverse_index(&mut self) {
@@ -754,6 +766,7 @@ impl Screen {
         self.screen_buffer = ScreenBuffer::new(size);
         self.primary_screen = None;
         self.last_printed = None;
+        self.screen_generation += 1;
     }
 
     fn set_modes(&mut self, private: bool, modes: &[u16]) {
@@ -816,11 +829,13 @@ impl Screen {
             ScreenBuffer::new(size),
         ));
         self.last_printed = None;
+        self.screen_generation += 1;
     }
 
     fn leave_alternate_screen(&mut self, restore_cursor: bool) {
         if let Some(primary_screen) = self.primary_screen.take() {
             self.screen_buffer = primary_screen;
+            self.screen_generation += 1;
             if restore_cursor {
                 self.restore_cursor_position();
             }
