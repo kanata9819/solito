@@ -141,7 +141,7 @@ fn is_nonblank(screen: &ScreenSnapshot, row: usize, col: usize) -> bool {
         .is_some_and(|cell| !cell.ch.is_whitespace())
 }
 
-fn leading_col(screen: &ScreenSnapshot, row: usize, col: usize) -> usize {
+pub(super) fn leading_col(screen: &ScreenSnapshot, row: usize, col: usize) -> usize {
     col.saturating_sub(usize::from(is_continuation(screen, row, col)))
 }
 

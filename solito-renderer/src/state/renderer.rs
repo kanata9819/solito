@@ -116,6 +116,10 @@ impl Renderer {
         ))
     }
 
+    pub fn terminal_screen_generation(&self) -> u64 {
+        self.terminal_view.screen_generation()
+    }
+
     pub fn terminal_size_for(&self, window_size: PhysicalSize<u32>) -> TerminalSize {
         TerminalSize::new(
             self.terminal_view.visible_cols(window_size.width),

@@ -628,12 +628,43 @@ mod tests {
     }
 
     #[test]
+    fn narrowing_and_widening_restores_only_enabled_tab_stops() {
+        let mut state = terminal(26, 3);
+        state.apply_terminal_output(b"\x1b[17G\x1b[g");
+
+        state.resize(TerminalSize::new(16, 3));
+        state.apply_terminal_output(b"\r\t\t");
+        assert_eq!(state.snapshot().cursor_col, 15);
+
+        state.resize(TerminalSize::new(26, 3));
+        state.apply_terminal_output(b"\r\t\t");
+        assert_eq!(state.snapshot().cursor_col, 24);
+    }
+
+    #[test]
     fn line_feed_preserves_column_but_wrap_returns_to_start() {
         let mut state = terminal(4, 4);
         state.apply_terminal_output(b"ab\nZ");
         assert_eq!(line_text(&state.snapshot().lines[1]), "  Z");
         state.apply_terminal_output(b"XY");
         assert_eq!(line_text(&state.snapshot().lines[2]), "Y");
+    }
+
+    #[test]
+    fn soft_wrap_survives_scrolling_but_breaks_when_rows_are_separated() {
+        let mut state = terminal(4, 4);
+        state.apply_terminal_output("top\r\n\x1b[2;4r\x1b[4;1Habc日".as_bytes());
+        let wrapped = state.snapshot();
+        assert_eq!(line_text(&wrapped.lines[2]), "abc");
+        assert_eq!(line_text(&wrapped.lines[3]), "日");
+        assert!(wrapped.lines[3].wrapped_from_previous());
+        assert!(!wrapped.lines[2].wrapped_from_previous());
+
+        state.apply_terminal_output(b"\x1b[3;1H\x1b[M");
+        let after = state.snapshot();
+        assert_eq!(line_text(&after.lines[2]), "日");
+        assert!(!after.lines[2].wrapped_from_previous());
+        assert!(wrapped.lines[3].wrapped_from_previous());
     }
 
     #[test]

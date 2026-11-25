@@ -19,6 +19,7 @@ pub(super) struct MouseInputState {
 
 pub(super) struct SelectionDrag {
     anchor: CopyModePosition,
+    screen_generation: u64,
     origin: PhysicalPosition<f64>,
     started: bool,
 }
@@ -102,16 +103,23 @@ impl SolitoApplication {
             .terminal_cell_at(position.x, position.y)
     }
 
-    fn mouse_history_cell(&self, position: PhysicalPosition<f64>) -> Option<CopyModePosition> {
-        self.renderer
-            .as_ref()?
-            .terminal_history_cell_at(position.x, position.y)
+    fn mouse_history_cell(
+        &self,
+        position: PhysicalPosition<f64>,
+    ) -> Option<(u64, CopyModePosition)> {
+        let renderer = self.renderer.as_ref()?;
+        Some((
+            renderer.terminal_screen_generation(),
+            renderer.terminal_history_cell_at(position.x, position.y)?,
+        ))
     }
 
     fn begin_mouse_selection(&mut self) {
         self.mouse.selection_drag = self.mouse.position.and_then(|origin| {
+            let (screen_generation, anchor) = self.mouse_history_cell(origin)?;
             Some(SelectionDrag {
-                anchor: self.mouse_history_cell(origin)?,
+                anchor,
+                screen_generation,
                 origin,
                 started: false,
             })
@@ -132,8 +140,11 @@ impl SolitoApplication {
             return;
         }
         let anchor = drag.anchor;
-        if let Some(cursor) = self.mouse_history_cell(position)
+        let screen_generation = drag.screen_generation;
+        if let Some((cursor_generation, cursor)) = self.mouse_history_cell(position)
+            && screen_generation == cursor_generation
             && let Some(snapshot) = self.tabs.active_snapshot()
+            && screen_generation == snapshot.screen_generation
             && self.copy_mode.select_cells(&snapshot, anchor, cursor)
         {
             if self.terminal_dirty {
@@ -261,6 +272,7 @@ mod tests {
         let origin = PhysicalPosition::new(50.0, 50.0);
         let mut drag = SelectionDrag {
             anchor: CopyModePosition::new(0, 0),
+            screen_generation: 0,
             origin,
             started: false,
         };

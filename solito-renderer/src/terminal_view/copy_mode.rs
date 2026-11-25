@@ -152,14 +152,10 @@ impl TerminalView {
                     return None;
                 }
 
-                let col_count = Self::display_col_count(lines, row);
-                let start_col = if row == start.row {
-                    start.col.min(col_count - 1)
-                } else {
-                    0
-                };
-                let end_col = if row == end.row {
-                    Self::glyph_end_col(lines, row, end.col.min(col_count - 1))
+                let col_count = lines.get(row).map_or(0, |line| line.len());
+                let start_col = if row == start.row { start.col } else { 0 };
+                let end_col = if row == end.row && end.col < col_count {
+                    Self::glyph_end_col(lines, row, end.col)
                 } else {
                     col_count
                 };
@@ -183,6 +179,29 @@ impl TerminalView {
 mod tests {
     use super::*;
     use solito_terminal::{TerminalSize, TerminalState};
+
+    #[test]
+    fn mouse_selection_past_the_end_does_not_highlight_the_last_cell() {
+        let mut terminal = TerminalState::new(TerminalSize::new(12, 2));
+        terminal.apply_terminal_output(b"ABC\r\n");
+        let screen = terminal.snapshot();
+        for row in 0..=1 {
+            let cursor = CopyModePosition::new(row, 8);
+            let copy_mode = CopyModeSnapshot {
+                selection: Some(CopyModeSelection {
+                    anchor: CopyModePosition::new(row, 5),
+                    cursor,
+                    kind: CopyModeSelectionKind::Cell,
+                }),
+                cursor,
+                ..Default::default()
+            };
+            assert!(
+                TerminalView::copy_mode_rects_for(&copy_mode, &screen.lines, 0, 2, 10.0, 20.0)
+                    .is_empty()
+            );
+        }
+    }
 
     #[test]
     fn mouse_selection_draws_without_a_copy_cursor() {
